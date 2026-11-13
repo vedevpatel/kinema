@@ -11,13 +11,14 @@ permissions:
 jobs:
   audit:
     runs-on: ubuntu-latest
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install -e .
-      - run: python scripts/leaderboard.py --limit 50 --out docs
+      - run: pip install -e . hf_transfer
+      - run: HF_HUB_ENABLE_HF_TRANSFER=1 python scripts/leaderboard.py --limit 50 --workers 4 --time-budget 3900 --out docs
       - name: commit site
         run: |
           git config user.name "Ved Patel"

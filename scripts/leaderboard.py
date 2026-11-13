@@ -110,16 +110,33 @@ def download_sample(repo_id: str, cap_bytes: int, dest: Path) -> Path:
     ]
     picked = [n for n, _ in sib if n.startswith("meta/")]
     budget = cap_bytes
-    for name, size in sorted((n, sz) for n, sz in sib if n.startswith("data/")):
+    data_files = sorted((n, sz) for n, sz in sib if n.startswith("data/"))
+    for name, size in data_files:
         if size > budget:
             continue
         picked.append(name)
         budget -= size
+    if not any(n.startswith("data/") for n in picked):
+        if not data_files:
+            raise DatasetError(f"{repo_id}: no data files listed on the Hub")
+        smallest, ssize = min(data_files, key=lambda x: x[1])
+        if ssize > 3 * cap_bytes:
+            raise DatasetError(
+                f"smallest data shard is {ssize / 1e6:.0f} MB, over the sample cap"
+            )
+        picked.append(smallest)
     for name in picked:
         hf_hub_download(
             repo_id, name, repo_type="dataset", local_dir=str(dest)
         )
     return dest
+
+
+def _clean_reason(msg: str) -> str:
+    """Never publish local paths (or anything else environment-specific) to Pages."""
+    import re
+
+    return re.sub(r"/[\w./-]*kinema-leaderboard-[\w-]+/?\S*", "<sample>", msg)
 
 
 def audit_one(repo_id: str, max_episodes: int, cap_bytes: int) -> DatasetReport:
@@ -214,36 +231,72 @@ def main() -> int:
     ap.add_argument("--out", default="docs")
     ap.add_argument("--max-episodes", type=int, default=50)
     ap.add_argument("--size-cap-mb", type=int, default=SIZE_CAP_MB_DEFAULT)
+    ap.add_argument("--time-budget", type=float, default=0, help="stop starting new audits after N seconds")
+    ap.add_argument("--workers", type=int, default=1)
+    ap.add_argument("--worklist", default="", help="cache file for the dataset list")
     args = ap.parse_args()
 
     out = Path(args.out)
     (out / "dataset").mkdir(parents=True, exist_ok=True)
 
-    print(f"listing top {args.limit} lerobot datasets on the Hub...")
-    datasets = find_lerobot_datasets(args.limit)
-    print(f"found {len(datasets)} LeRobot-format datasets")
+    worklist_path = Path(args.worklist) if args.worklist else None
+    if worklist_path and worklist_path.exists():
+        datasets = json.loads(worklist_path.read_text())
+        print(f"loaded {len(datasets)} datasets from worklist cache")
+    else:
+        print(f"listing top {args.limit} lerobot datasets on the Hub...")
+        datasets = find_lerobot_datasets(args.limit)
+        print(f"found {len(datasets)} LeRobot-format datasets")
+        if worklist_path:
+            worklist_path.write_text(json.dumps(datasets))
 
+    # resume: keep entries already audited in a previous run
     entries = []
-    for i, d in enumerate(datasets, 1):
+    data_json = out / "data.json"
+    done_ids: set[str] = set()
+    if data_json.exists():
+        try:
+            prev = json.loads(data_json.read_text()).get("datasets", [])
+            entries = [e for e in prev if e.get("report") or e.get("reason")]
+            done_ids = {e["id"] for e in entries}
+            print(f"resuming: {len(done_ids)} already done")
+        except Exception:
+            entries, done_ids = [], set()
+
+    import time
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    def process(d):
         slug = d["id"].replace("/", "--")
         entry = {**d, "slug": slug}
         if d["data_bytes"] > args.size_cap_mb * 1024 * 1024:
             entry["sampled"] = True
         try:
-            print(f"[{i}/{len(datasets)}] {d['id']} ({d['data_bytes'] / 1e6:.0f} MB)...")
             rep = audit_one(d["id"], args.max_episodes, args.size_cap_mb * 1024 * 1024)
             entry["report"] = report_to_dict(rep)
             (out / "dataset" / f"{slug}.html").write_text(render_dataset_page(rep))
             (out / "dataset" / f"{slug}.json").write_text(json.dumps(entry["report"], indent=2, default=str))
-            print(f"    score {rep.score}/100 ({rep.verdict.name})")
+            print(f"    {d['id']}: score {rep.score}/100 ({rep.verdict.name})", flush=True)
         except DatasetError as e:
-            entry["reason"] = str(e)
-            print(f"    failed: {e}")
+            entry["reason"] = _clean_reason(str(e))
         except Exception as e:  # noqa: BLE001
-            entry["reason"] = f"audit error: {type(e).__name__}: {e}"
-            print(f"    error: {entry['reason']}")
-            traceback.print_exc()
-        entries.append(entry)
+            entry["reason"] = _clean_reason(f"audit error: {type(e).__name__}: {e}")
+        return entry
+
+    started = time.monotonic()
+    todo = [d for d in datasets if d["id"] not in done_ids]
+    with ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
+        pending = {}
+        for d in todo:
+            if args.time_budget and time.monotonic() - started > args.time_budget:
+                break
+            pending[pool.submit(process, d)] = d
+        for fut in as_completed(pending):
+            entries.append(fut.result())
+            generated = f"{dt.datetime.now(dt.timezone.utc):%Y-%m-%d %H:%M UTC}"
+            (out / "data.json").write_text(
+                json.dumps({"generated": generated, "datasets": entries}, indent=2, default=str)
+            )
 
     generated = f"{dt.datetime.now(dt.timezone.utc):%Y-%m-%d %H:%M UTC}"
     (out / "index.html").write_text(render_index(entries, generated))
