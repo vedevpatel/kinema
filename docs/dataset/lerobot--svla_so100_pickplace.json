@@ -5,14 +5,14 @@
   "frames": 19631,
   "fps": 30.0,
   "truncated": false,
-  "score": 76,
+  "score": 92,
   "verdict": "WARN",
   "checks": [
     {
       "id": "stats-drift",
-      "title": "Stats drift (meta/stats.json vs actual data)",
+      "title": "Stats drift (stored normalization stats vs actual data)",
       "verdict": "PASS",
-      "summary": "stats.json matches the data (mean/std/min/max within 1%)",
+      "summary": "data matches meta/stats.json (worst 0% of the FAIL threshold)",
       "skipped": false,
       "skip_reason": "",
       "details": {},
@@ -48,8 +48,8 @@
     {
       "id": "calibration-drift",
       "title": "Calibration drift (action vs state offset on still frames)",
-      "verdict": "WARN",
-      "summary": "worst joint 5: offset 5.7% of its range",
+      "verdict": "PASS",
+      "summary": "max joint offset 0.6% of range (joint 2) over 5 comparable joints; 1 dim(s) not comparable",
       "skipped": false,
       "skip_reason": "",
       "details": {
@@ -59,7 +59,7 @@
           -0.757525778014266,
           -0.1907031884205033,
           -0.0032120543711931207,
-          -1.9993795791477198
+          0.0
         ],
         "range_fraction_per_joint": [
           0.0006707632059273545,
@@ -67,23 +67,21 @@
           0.0062320751722230935,
           0.00222313370836288,
           4.834132386980828e-05,
-          0.05732874790146833
+          0.0
         ],
-        "still_frame_share": 2.9855330854261117
-      },
-      "findings": [
-        {
-          "severity": "WARN",
-          "message": "joint 5: mean action-state offset -1.999 on still frames = 5.7% of its range. Leader/follower calibration has drifted; the policy is learning a shifted target.",
-          "episode_index": null,
-          "details": {
-            "joint": 5,
-            "mean_offset": -1.9993795791477198,
-            "range_fraction": 0.05732874790146833,
-            "still_frames": 14384
-          }
+        "still_frame_share": 0.5534613621313229,
+        "compared_joints": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "excluded_joints": {
+          "5": "gripper"
         }
-      ]
+      },
+      "findings": []
     },
     {
       "id": "idle-segments",
@@ -99,7 +97,7 @@
       "id": "stuck-actuator",
       "title": "Stuck actuators (joints that never move)",
       "verdict": "PASS",
-      "summary": "every joint moves in every episode",
+      "summary": "every joint moves wherever the dataset uses it",
       "skipped": false,
       "skip_reason": "",
       "details": {},
@@ -109,27 +107,19 @@
       "id": "action-saturation",
       "title": "Action saturation (commands clipped at the limits)",
       "verdict": "WARN",
-      "summary": "2 dim(s) saturated",
+      "summary": "1 dim(s) saturated",
       "skipped": false,
       "skip_reason": "",
       "details": {},
       "findings": [
         {
           "severity": "WARN",
-          "message": "action dim 2: 30.4% of commands sit at the min/max limit - clipped commands the policy will imitate",
+          "message": "action dim 2 (main_elbow_flex): 7.7% of commands during motion are pinned at exactly its max (74.6191) - clipped commands the policy will imitate",
           "episode_index": null,
           "details": {
             "dim": 2,
-            "saturated_fraction": 0.3040599052518975
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "action dim 5: 38.7% of commands sit at the min/max limit - clipped commands the policy will imitate",
-          "episode_index": null,
-          "details": {
-            "dim": 5,
-            "saturated_fraction": 0.38658244613111914
+            "saturated_fraction": 0.07664803016512807,
+            "side": "max"
           }
         }
       ]
@@ -158,7 +148,7 @@
       "id": "outlier-episodes",
       "title": "Outlier episodes (duration, jerk, velocity, static, end-pose)",
       "verdict": "INFO",
-      "summary": "2/50 episodes flagged; worst: [10, 31]. Review or drop with: dataset.delete_episodes([10, 31])",
+      "summary": "2/50 episodes flagged; worst: [10, 31]. Review or drop these episodes before training: [10, 31]",
       "skipped": false,
       "skip_reason": "",
       "details": {
@@ -469,31 +459,12 @@
     {
       "id": "deployment-readiness",
       "title": "Deployment readiness (would this dataset serve a policy?)",
-      "verdict": "WARN",
-      "summary": "0 blocker(s), 2 warning(s)",
+      "verdict": "PASS",
+      "summary": "no deployment blockers found",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [
-        {
-          "severity": "WARN",
-          "message": "observation.state: 0.24% of values sit >3 sigma from the stored normalization stats - at inference the policy sees inputs outside the range it trained on (the openpi #906 failure mode)",
-          "episode_index": null,
-          "details": {
-            "feature": "observation.state",
-            "ood_fraction": 0.002377192535615438
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "action: 0.24% of values sit >3 sigma from the stored normalization stats - at inference the policy sees inputs outside the range it trained on (the openpi #906 failure mode)",
-          "episode_index": null,
-          "details": {
-            "feature": "action",
-            "ood_fraction": 0.0023941724822984056
-          }
-        }
-      ]
+      "findings": []
     }
   ]
 }

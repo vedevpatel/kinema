@@ -5,14 +5,14 @@
   "frames": 2300,
   "fps": 10.0,
   "truncated": true,
-  "score": 75,
-  "verdict": "FAIL",
+  "score": 100,
+  "verdict": "INFO",
   "checks": [
     {
       "id": "stats-drift",
-      "title": "Stats drift (meta/stats.json vs actual data)",
+      "title": "Stats drift (stored normalization stats vs actual data)",
       "verdict": "PASS",
-      "summary": "stats.json matches the data (mean/std/min/max within 1%)",
+      "summary": "data matches per-episode stats of the loaded episodes (worst 0% of the FAIL threshold)",
       "skipped": false,
       "skip_reason": "",
       "details": {},
@@ -51,65 +51,75 @@
       "verdict": "SKIP",
       "summary": "",
       "skipped": true,
-      "skip_reason": "observation.state or action column missing",
+      "skip_reason": "state dim 8 != action dim 7 (cannot compare joints)",
       "details": {},
       "findings": []
     },
     {
       "id": "idle-segments",
       "title": "Idle segments (policy learns to do nothing)",
-      "verdict": "SKIP",
-      "summary": "",
-      "skipped": true,
-      "skip_reason": "action column missing",
-      "details": {},
-      "findings": []
-    },
-    {
-      "id": "stuck-actuator",
-      "title": "Stuck actuators (joints that never move)",
-      "verdict": "SKIP",
-      "summary": "",
-      "skipped": true,
-      "skip_reason": "action column missing",
-      "details": {},
-      "findings": []
-    },
-    {
-      "id": "action-saturation",
-      "title": "Action saturation (commands clipped at the limits)",
-      "verdict": "SKIP",
-      "summary": "",
-      "skipped": true,
-      "skip_reason": "action column missing",
-      "details": {},
-      "findings": []
-    },
-    {
-      "id": "nan-and-normalization",
-      "title": "NaN / Inf and normalization hazards",
       "verdict": "PASS",
-      "summary": "no NaN/Inf; all dims have usable variance",
+      "summary": "no idle runs >= 2s at >= 30% of an episode",
       "skipped": false,
       "skip_reason": "",
       "details": {},
       "findings": []
     },
     {
+      "id": "stuck-actuator",
+      "title": "Stuck actuators (joints that never move)",
+      "verdict": "PASS",
+      "summary": "every joint moves wherever the dataset uses it",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "action-saturation",
+      "title": "Action saturation (commands clipped at the limits)",
+      "verdict": "PASS",
+      "summary": "no continuous action dim pinned at a limit above 5% (6 dims checked)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "nan-and-normalization",
+      "title": "NaN / Inf and normalization hazards",
+      "verdict": "INFO",
+      "summary": "",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "observation.state dim 6: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "observation.state",
+            "dim": 6
+          }
+        }
+      ]
+    },
+    {
       "id": "duplicate-and-leakage",
       "title": "Duplicate episodes / train-eval leakage",
-      "verdict": "SKIP",
-      "summary": "",
-      "skipped": true,
-      "skip_reason": "action column missing",
+      "verdict": "PASS",
+      "summary": "no exact or near duplicates",
+      "skipped": false,
+      "skip_reason": "",
       "details": {},
       "findings": []
     },
     {
       "id": "outlier-episodes",
       "title": "Outlier episodes (duration, jerk, velocity, static, end-pose)",
-      "verdict": "PASS",
-      "summary": "no IQR outliers across 40 episodes",
+      "verdict": "INFO",
+      "summary": "10/40 episodes flagged; worst: [1, 2, 6, 7, 8, 13, 18, 22, 28, 32]. Review or drop these episodes before training: [1, 2, 6, 7, 8, 13, 18, 22, 28, 32]",
       "skipped": false,
       "skip_reason": "",
       "details": {
@@ -157,104 +167,104 @@
             "39": 6.5
           },
           "p95_jerk": {
-            "0": 0.0,
-            "1": 0.0,
-            "2": 0.0,
-            "3": 0.0,
-            "4": 0.0,
-            "5": 0.0,
-            "6": 0.0,
-            "7": 0.0,
-            "8": 0.0,
-            "9": 0.0,
-            "10": 0.0,
-            "11": 0.0,
-            "12": 0.0,
-            "13": 0.0,
-            "14": 0.0,
-            "15": 0.0,
-            "16": 0.0,
-            "17": 0.0,
-            "18": 0.0,
-            "19": 0.0,
-            "20": 0.0,
-            "21": 0.0,
-            "22": 0.0,
-            "23": 0.0,
-            "24": 0.0,
-            "25": 0.0,
-            "26": 0.0,
-            "27": 0.0,
-            "28": 0.0,
-            "29": 0.0,
-            "30": 0.0,
-            "31": 0.0,
-            "32": 0.0,
-            "33": 0.0,
-            "34": 0.0,
-            "35": 0.0,
-            "36": 0.0,
-            "37": 0.0,
-            "38": 0.0,
-            "39": 0.0
+            "0": 0.6409952640533447,
+            "1": 2.0,
+            "2": 0.2735790193080902,
+            "3": 1.8594134055078009,
+            "4": 1.8718411296606046,
+            "5": 0.5599392063915752,
+            "6": 0.5546561893075703,
+            "7": 1.8524026632308939,
+            "8": 1.840594261884687,
+            "9": 1.978555780649185,
+            "10": 2.0,
+            "11": 0.447081617033109,
+            "12": 1.9161134466528822,
+            "13": 0.5540555134415626,
+            "14": 0.9494233846664386,
+            "15": 2.0,
+            "16": 0.18404244408011436,
+            "17": 2.0,
+            "18": 0.11956027969717976,
+            "19": 0.5167192490771368,
+            "20": 0.38116829413920633,
+            "21": 0.2148428037762642,
+            "22": 1.8475949462503174,
+            "23": 1.876550826430319,
+            "24": 1.006790754944086,
+            "25": 0.25887303948402396,
+            "26": 0.24524742141366004,
+            "27": 0.8381596133112907,
+            "28": 0.37123793233186,
+            "29": 2.0,
+            "30": 1.8404741689853814,
+            "31": 0.5206717938184762,
+            "32": 0.6262639028020202,
+            "33": 1.9224745735526074,
+            "34": 0.47753266431391234,
+            "35": 0.6606293886899877,
+            "36": 2.0,
+            "37": 0.4455492079257964,
+            "38": 1.8932396467775092,
+            "39": 0.46332497559487806
           },
           "peak_velocity": {
-            "0": 0.0,
-            "1": 0.0,
-            "2": 0.0,
-            "3": 0.0,
-            "4": 0.0,
-            "5": 0.0,
-            "6": 0.0,
-            "7": 0.0,
-            "8": 0.0,
-            "9": 0.0,
-            "10": 0.0,
-            "11": 0.0,
-            "12": 0.0,
-            "13": 0.0,
-            "14": 0.0,
-            "15": 0.0,
-            "16": 0.0,
-            "17": 0.0,
-            "18": 0.0,
-            "19": 0.0,
-            "20": 0.0,
-            "21": 0.0,
-            "22": 0.0,
-            "23": 0.0,
-            "24": 0.0,
-            "25": 0.0,
-            "26": 0.0,
-            "27": 0.0,
-            "28": 0.0,
-            "29": 0.0,
-            "30": 0.0,
-            "31": 0.0,
-            "32": 0.0,
-            "33": 0.0,
-            "34": 0.0,
-            "35": 0.0,
-            "36": 0.0,
-            "37": 0.0,
-            "38": 0.0,
-            "39": 0.0
+            "0": 2.0,
+            "1": 2.0,
+            "2": 2.0,
+            "3": 2.0,
+            "4": 2.0,
+            "5": 2.0,
+            "6": 2.0,
+            "7": 2.0,
+            "8": 2.0,
+            "9": 2.0,
+            "10": 2.0,
+            "11": 2.0,
+            "12": 2.0,
+            "13": 2.0,
+            "14": 2.0,
+            "15": 2.0,
+            "16": 2.0,
+            "17": 2.0,
+            "18": 0.0845828652381897,
+            "19": 2.0,
+            "20": 2.0,
+            "21": 2.0,
+            "22": 2.0,
+            "23": 2.0,
+            "24": 2.0,
+            "25": 2.0,
+            "26": 2.0,
+            "27": 2.0,
+            "28": 2.0,
+            "29": 2.0,
+            "30": 2.0,
+            "31": 2.0,
+            "32": 2.0,
+            "33": 2.0,
+            "34": 2.0,
+            "35": 2.0,
+            "36": 2.0,
+            "37": 2.0,
+            "38": 2.0,
+            "39": 2.0
           },
           "static_fraction": {
             "0": 0.0,
-            "1": 0.0,
-            "2": 0.0,
+            "1": 0.024390243902439025,
+            "2": 0.03125,
             "3": 0.0,
             "4": 0.0,
             "5": 0.0,
-            "6": 0.0,
-            "7": 0.0,
-            "8": 0.0,
+            "6": 0.015625,
+            "7": 0.015625,
+            "8": 0.015625,
             "9": 0.0,
             "10": 0.0,
             "11": 0.0,
             "12": 0.0,
-            "13": 0.0,
+            "13": 0.03125,
             "14": 0.0,
             "15": 0.0,
             "16": 0.0,
@@ -263,17 +273,17 @@
             "19": 0.0,
             "20": 0.0,
             "21": 0.0,
-            "22": 0.0,
+            "22": 0.03125,
             "23": 0.0,
             "24": 0.0,
             "25": 0.0,
             "26": 0.0,
             "27": 0.0,
-            "28": 0.0,
+            "28": 0.03125,
             "29": 0.0,
             "30": 0.0,
             "31": 0.0,
-            "32": 0.0,
+            "32": 0.015625,
             "33": 0.0,
             "34": 0.0,
             "35": 0.0,
@@ -281,11 +291,185 @@
             "37": 0.0,
             "38": 0.0,
             "39": 0.0
+          },
+          "end_pose_deviation": {
+            "0": 0.275324036922148,
+            "1": 0.5390836971173744,
+            "2": 0.21495815029060375,
+            "3": 0.6724853694132481,
+            "4": 0.6455320750591823,
+            "5": 0.9760778228142869,
+            "6": 0.9745210991102949,
+            "7": 0.9830642766362825,
+            "8": 0.4608778633991764,
+            "9": 0.5588316892978156,
+            "10": 0.5272167486660346,
+            "11": 0.5042678327219207,
+            "12": 0.5375254653431678,
+            "13": 0.43598298726149615,
+            "14": 0.46083921456373567,
+            "15": 0.9657253556795724,
+            "16": 0.7391725017614421,
+            "17": 0.9675946244676611,
+            "18": 0.9733030165614708,
+            "19": 0.9813679560455556,
+            "20": 0.22618314626186467,
+            "21": 0.9787493083781456,
+            "22": 0.4607074360043413,
+            "23": 0.9809349208050717,
+            "24": 0.28284839962398894,
+            "25": 0.30383967851166566,
+            "26": 0.43123887634909447,
+            "27": 0.9536153352517047,
+            "28": 0.29620081451696917,
+            "29": 0.4229424947736288,
+            "30": 0.0712007995666562,
+            "31": 0.45536430435194963,
+            "32": 0.9806849759031083,
+            "33": 0.9783907627961344,
+            "34": 0.9824531651495365,
+            "35": 0.98090795106641,
+            "36": 0.21351366226116902,
+            "37": 0.08472901141108691,
+            "38": 0.4988378571419521,
+            "39": 0.6920482107008368
           }
         },
-        "flagged": {}
+        "flagged": {
+          "1": [
+            "static_fraction"
+          ],
+          "2": [
+            "static_fraction"
+          ],
+          "6": [
+            "static_fraction"
+          ],
+          "7": [
+            "static_fraction"
+          ],
+          "8": [
+            "static_fraction"
+          ],
+          "13": [
+            "static_fraction"
+          ],
+          "18": [
+            "peak_velocity"
+          ],
+          "22": [
+            "static_fraction"
+          ],
+          "28": [
+            "static_fraction"
+          ],
+          "32": [
+            "static_fraction"
+          ]
+        }
       },
-      "findings": []
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "episode 1: IQR outlier on static_fraction",
+          "episode_index": 1,
+          "details": {
+            "metrics": [
+              "static_fraction"
+            ]
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 2: IQR outlier on static_fraction",
+          "episode_index": 2,
+          "details": {
+            "metrics": [
+              "static_fraction"
+            ]
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 6: IQR outlier on static_fraction",
+          "episode_index": 6,
+          "details": {
+            "metrics": [
+              "static_fraction"
+            ]
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 7: IQR outlier on static_fraction",
+          "episode_index": 7,
+          "details": {
+            "metrics": [
+              "static_fraction"
+            ]
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 8: IQR outlier on static_fraction",
+          "episode_index": 8,
+          "details": {
+            "metrics": [
+              "static_fraction"
+            ]
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 13: IQR outlier on static_fraction",
+          "episode_index": 13,
+          "details": {
+            "metrics": [
+              "static_fraction"
+            ]
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 18: IQR outlier on peak_velocity",
+          "episode_index": 18,
+          "details": {
+            "metrics": [
+              "peak_velocity"
+            ]
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 22: IQR outlier on static_fraction",
+          "episode_index": 22,
+          "details": {
+            "metrics": [
+              "static_fraction"
+            ]
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 28: IQR outlier on static_fraction",
+          "episode_index": 28,
+          "details": {
+            "metrics": [
+              "static_fraction"
+            ]
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 32: IQR outlier on static_fraction",
+          "episode_index": 32,
+          "details": {
+            "metrics": [
+              "static_fraction"
+            ]
+          }
+        }
+      ]
     },
     {
       "id": "visual-quality",
@@ -300,25 +484,12 @@
     {
       "id": "deployment-readiness",
       "title": "Deployment readiness (would this dataset serve a policy?)",
-      "verdict": "FAIL",
-      "summary": "2 blocker(s), 0 warning(s)",
+      "verdict": "PASS",
+      "summary": "no deployment blockers found",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [
-        {
-          "severity": "FAIL",
-          "message": "observation.state: absent from meta/stats.json - the policy cannot normalize inputs/outputs at inference",
-          "episode_index": null,
-          "details": {}
-        },
-        {
-          "severity": "FAIL",
-          "message": "action: absent from meta/stats.json - the policy cannot normalize inputs/outputs at inference",
-          "episode_index": null,
-          "details": {}
-        }
-      ]
+      "findings": []
     }
   ]
 }

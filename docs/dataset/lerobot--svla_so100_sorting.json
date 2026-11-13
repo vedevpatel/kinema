@@ -5,74 +5,18 @@
   "frames": 34401,
   "fps": 30.0,
   "truncated": true,
-  "score": 27,
-  "verdict": "FAIL",
+  "score": 76,
+  "verdict": "WARN",
   "checks": [
     {
       "id": "stats-drift",
-      "title": "Stats drift (meta/stats.json vs actual data)",
-      "verdict": "FAIL",
-      "summary": "worst relative error 50.0%",
+      "title": "Stats drift (stored normalization stats vs actual data)",
+      "verdict": "PASS",
+      "summary": "data matches per-episode stats of the loaded episodes (worst 0% of the FAIL threshold)",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [
-        {
-          "severity": "WARN",
-          "message": "observation.state.mean: off by 6.1% on dim 0 (stored -3.29329, actual -3.49415). Normalization at training and inference will disagree.",
-          "episode_index": null,
-          "details": {
-            "feature": "observation.state",
-            "stat": "mean",
-            "dim": 0,
-            "rel_err": 0.06099074217333806
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "observation.state.std: off by 1.0% on dim 2 (stored 24.1908, actual 24.4369). Normalization at training and inference will disagree.",
-          "episode_index": null,
-          "details": {
-            "feature": "observation.state",
-            "stat": "std",
-            "dim": 2,
-            "rel_err": 0.010175232127037128
-          }
-        },
-        {
-          "severity": "FAIL",
-          "message": "observation.state.min: off by 50.0% on dim 5 (stored -0.276243, actual -0.138122). Normalization at training and inference will disagree.",
-          "episode_index": null,
-          "details": {
-            "feature": "observation.state",
-            "stat": "min",
-            "dim": 5,
-            "rel_err": 0.5
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "action.mean: off by 6.2% on dim 0 (stored -3.2639, actual -3.46705). Normalization at training and inference will disagree.",
-          "episode_index": null,
-          "details": {
-            "feature": "action",
-            "stat": "mean",
-            "dim": 0,
-            "rel_err": 0.062241513836158016
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "action.std: off by 1.0% on dim 2 (stored 24.6815, actual 24.9355). Normalization at training and inference will disagree.",
-          "episode_index": null,
-          "details": {
-            "feature": "action",
-            "stat": "std",
-            "dim": 2,
-            "rel_err": 0.010292287315134235
-          }
-        }
-      ]
+      "findings": []
     },
     {
       "id": "timestamp-grid",
@@ -104,8 +48,8 @@
     {
       "id": "calibration-drift",
       "title": "Calibration drift (action vs state offset on still frames)",
-      "verdict": "WARN",
-      "summary": "worst joint 5: offset 5.7% of its range",
+      "verdict": "PASS",
+      "summary": "max joint offset 1.3% of range (joint 2) over 5 comparable joints; 1 dim(s) not comparable",
       "skipped": false,
       "skip_reason": "",
       "details": {
@@ -115,7 +59,7 @@
           -1.526782569796232,
           -0.3030197366493476,
           0.011492878401360544,
-          -1.6641830145067213
+          0.0
         ],
         "range_fraction_per_joint": [
           0.00010562295498598722,
@@ -123,23 +67,21 @@
           0.012597094121918794,
           0.003940218543859454,
           0.000135086174047213,
-          0.05723840823755427
+          0.0
         ],
-        "still_frame_share": 2.6287607918374465
-      },
-      "findings": [
-        {
-          "severity": "WARN",
-          "message": "joint 5: mean action-state offset -1.664 on still frames = 5.7% of its range. Leader/follower calibration has drifted; the policy is learning a shifted target.",
-          "episode_index": null,
-          "details": {
-            "joint": 5,
-            "mean_offset": -1.6641830145067213,
-            "range_fraction": 0.05723840823755427,
-            "still_frames": 24263
-          }
+        "still_frame_share": 0.5107118979099444,
+        "compared_joints": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "excluded_joints": {
+          "5": "gripper"
         }
-      ]
+      },
+      "findings": []
     },
     {
       "id": "idle-segments",
@@ -173,110 +115,13 @@
       "findings": [
         {
           "severity": "WARN",
-          "message": "episode 8: joint 0 static for 100% of frames - dead actuator or disabled motor?",
-          "episode_index": 8,
+          "message": "2/50 episodes where no joint moves at all: [8, 23] - aborted or empty recordings that teach the policy to do nothing",
+          "episode_index": null,
           "details": {
-            "joint": 0,
-            "static_fraction": 1.0
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 8: joint 1 static for 100% of frames - dead actuator or disabled motor?",
-          "episode_index": 8,
-          "details": {
-            "joint": 1,
-            "static_fraction": 1.0
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 8: joint 2 static for 100% of frames - dead actuator or disabled motor?",
-          "episode_index": 8,
-          "details": {
-            "joint": 2,
-            "static_fraction": 1.0
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 8: joint 3 static for 100% of frames - dead actuator or disabled motor?",
-          "episode_index": 8,
-          "details": {
-            "joint": 3,
-            "static_fraction": 1.0
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 8: joint 4 static for 100% of frames - dead actuator or disabled motor?",
-          "episode_index": 8,
-          "details": {
-            "joint": 4,
-            "static_fraction": 1.0
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 8: joint 5 static for 100% of frames - dead actuator or disabled motor?",
-          "episode_index": 8,
-          "details": {
-            "joint": 5,
-            "static_fraction": 1.0
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 23: joint 0 static for 100% of frames - dead actuator or disabled motor?",
-          "episode_index": 23,
-          "details": {
-            "joint": 0,
-            "static_fraction": 1.0
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 23: joint 1 static for 100% of frames - dead actuator or disabled motor?",
-          "episode_index": 23,
-          "details": {
-            "joint": 1,
-            "static_fraction": 1.0
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 23: joint 2 static for 100% of frames - dead actuator or disabled motor?",
-          "episode_index": 23,
-          "details": {
-            "joint": 2,
-            "static_fraction": 1.0
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 23: joint 3 static for 100% of frames - dead actuator or disabled motor?",
-          "episode_index": 23,
-          "details": {
-            "joint": 3,
-            "static_fraction": 1.0
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 23: joint 4 static for 100% of frames - dead actuator or disabled motor?",
-          "episode_index": 23,
-          "details": {
-            "joint": 4,
-            "static_fraction": 1.0
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 23: joint 5 static for 100% of frames - dead actuator or disabled motor?",
-          "episode_index": 23,
-          "details": {
-            "joint": 5,
-            "static_fraction": 1.0
+            "episodes": [
+              8,
+              23
+            ]
           }
         }
       ]
@@ -284,31 +129,12 @@
     {
       "id": "action-saturation",
       "title": "Action saturation (commands clipped at the limits)",
-      "verdict": "WARN",
-      "summary": "2 dim(s) saturated",
+      "verdict": "PASS",
+      "summary": "no continuous action dim pinned at a limit above 5% (5 dims checked)",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [
-        {
-          "severity": "WARN",
-          "message": "action dim 2: 13.5% of commands sit at the min/max limit - clipped commands the policy will imitate",
-          "episode_index": null,
-          "details": {
-            "dim": 2,
-            "saturated_fraction": 0.13549024737652976
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "action dim 5: 27.3% of commands sit at the min/max limit - clipped commands the policy will imitate",
-          "episode_index": null,
-          "details": {
-            "dim": 5,
-            "saturated_fraction": 0.27289904363245254
-          }
-        }
-      ]
+      "findings": []
     },
     {
       "id": "nan-and-normalization",
@@ -334,7 +160,7 @@
       "id": "outlier-episodes",
       "title": "Outlier episodes (duration, jerk, velocity, static, end-pose)",
       "verdict": "WARN",
-      "summary": "8/50 episodes flagged; worst: [8, 23, 43, 7, 22, 30, 42, 44]. Review or drop with: dataset.delete_episodes([8, 23, 43, 7, 22, 30, 42, 44])",
+      "summary": "8/50 episodes flagged; worst: [8, 23, 43, 7, 22, 30, 42, 44]. Review or drop these episodes before training: [8, 23, 43, 7, 22, 30, 42, 44]",
       "skipped": false,
       "skip_reason": "",
       "details": {
@@ -737,31 +563,12 @@
     {
       "id": "deployment-readiness",
       "title": "Deployment readiness (would this dataset serve a policy?)",
-      "verdict": "WARN",
-      "summary": "0 blocker(s), 2 warning(s)",
+      "verdict": "PASS",
+      "summary": "no deployment blockers found",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [
-        {
-          "severity": "WARN",
-          "message": "observation.state: 0.16% of values sit >3 sigma from the stored normalization stats - at inference the policy sees inputs outside the range it trained on (the openpi #906 failure mode)",
-          "episode_index": null,
-          "details": {
-            "feature": "observation.state",
-            "ood_fraction": 0.0015648769900099802
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "action: 0.14% of values sit >3 sigma from the stored normalization stats - at inference the policy sees inputs outside the range it trained on (the openpi #906 failure mode)",
-          "episode_index": null,
-          "details": {
-            "feature": "action",
-            "ood_fraction": 0.0014001530963247192
-          }
-        }
-      ]
+      "findings": []
     }
   ]
 }

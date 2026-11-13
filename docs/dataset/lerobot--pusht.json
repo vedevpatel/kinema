@@ -5,107 +5,18 @@
   "frames": 6235,
   "fps": 10.0,
   "truncated": true,
-  "score": 67,
-  "verdict": "FAIL",
+  "score": 92,
+  "verdict": "WARN",
   "checks": [
     {
       "id": "stats-drift",
-      "title": "Stats drift (meta/stats.json vs actual data)",
-      "verdict": "FAIL",
-      "summary": "worst relative error 91.7%",
+      "title": "Stats drift (stored normalization stats vs actual data)",
+      "verdict": "PASS",
+      "summary": "data matches per-episode stats of the loaded episodes (worst 0% of the FAIL threshold)",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [
-        {
-          "severity": "WARN",
-          "message": "observation.state.mean: off by 3.5% on dim 1 (stored 293.311, actual 283.141). Normalization at training and inference will disagree.",
-          "episode_index": null,
-          "details": {
-            "feature": "observation.state",
-            "stat": "mean",
-            "dim": 1,
-            "rel_err": 0.03467448719430123
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "observation.state.std: off by 2.2% on dim 0 (stored 101.855, actual 104.146). Normalization at training and inference will disagree.",
-          "episode_index": null,
-          "details": {
-            "feature": "observation.state",
-            "stat": "std",
-            "dim": 0,
-            "rel_err": 0.022491414604000427
-          }
-        },
-        {
-          "severity": "FAIL",
-          "message": "observation.state.min: off by 75.4% on dim 0 (stored 13.4564, actual 23.5962). Normalization at training and inference will disagree.",
-          "episode_index": null,
-          "details": {
-            "feature": "observation.state",
-            "stat": "min",
-            "dim": 0,
-            "rel_err": 0.753527459760513
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "observation.state.max: off by 3.7% on dim 1 (stored 510.958, actual 491.813). Normalization at training and inference will disagree.",
-          "episode_index": null,
-          "details": {
-            "feature": "observation.state",
-            "stat": "max",
-            "dim": 1,
-            "rel_err": 0.03746947692023947
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "action.mean: off by 3.5% on dim 1 (stored 293.989, actual 283.64). Normalization at training and inference will disagree.",
-          "episode_index": null,
-          "details": {
-            "feature": "action",
-            "stat": "mean",
-            "dim": 1,
-            "rel_err": 0.03520249162106691
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "action.std: off by 1.9% on dim 0 (stored 101.6, actual 103.578). Normalization at training and inference will disagree.",
-          "episode_index": null,
-          "details": {
-            "feature": "action",
-            "stat": "std",
-            "dim": 0,
-            "rel_err": 0.01947063086273754
-          }
-        },
-        {
-          "severity": "FAIL",
-          "message": "action.min: off by 91.7% on dim 0 (stored 12, actual 23). Normalization at training and inference will disagree.",
-          "episode_index": null,
-          "details": {
-            "feature": "action",
-            "stat": "min",
-            "dim": 0,
-            "rel_err": 0.9166666666666666
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "action.max: off by 2.5% on dim 1 (stored 511, actual 498). Normalization at training and inference will disagree.",
-          "episode_index": null,
-          "details": {
-            "feature": "action",
-            "stat": "max",
-            "dim": 1,
-            "rel_err": 0.025440313111545987
-          }
-        }
-      ]
+      "findings": []
     },
     {
       "id": "timestamp-grid",
@@ -138,7 +49,7 @@
       "id": "calibration-drift",
       "title": "Calibration drift (action vs state offset on still frames)",
       "verdict": "PASS",
-      "summary": "max joint offset 0.0% of range (joint 0); measured on 50% of frames",
+      "summary": "max joint offset 0.0% of range (joint 0) over 2 comparable joints",
       "skipped": false,
       "skip_reason": "",
       "details": {
@@ -150,7 +61,12 @@
           0.00022459091697080483,
           3.147554662899441e-05
         ],
-        "still_frame_share": 0.4978348035284683
+        "still_frame_share": 0.24891740176423416,
+        "compared_joints": [
+          0,
+          1
+        ],
+        "excluded_joints": {}
       },
       "findings": []
     },
@@ -168,7 +84,7 @@
       "id": "stuck-actuator",
       "title": "Stuck actuators (joints that never move)",
       "verdict": "PASS",
-      "summary": "every joint moves in every episode",
+      "summary": "every joint moves wherever the dataset uses it",
       "skipped": false,
       "skip_reason": "",
       "details": {},
@@ -178,7 +94,7 @@
       "id": "action-saturation",
       "title": "Action saturation (commands clipped at the limits)",
       "verdict": "PASS",
-      "summary": "no action dim saturated above 5%",
+      "summary": "no continuous action dim pinned at a limit above 5% (2 dims checked)",
       "skipped": false,
       "skip_reason": "",
       "details": {},
@@ -208,7 +124,7 @@
       "id": "outlier-episodes",
       "title": "Outlier episodes (duration, jerk, velocity, static, end-pose)",
       "verdict": "WARN",
-      "summary": "9/50 episodes flagged; worst: [40, 3, 7, 10, 15, 18, 34, 37, 38]. Review or drop with: dataset.delete_episodes([40, 3, 7, 10, 15, 18, 34, 37, 38])",
+      "summary": "9/50 episodes flagged; worst: [40, 3, 7, 10, 15, 18, 34, 37, 38]. Review or drop these episodes before training: [40, 3, 7, 10, 15, 18, 34, 37, 38]",
       "skipped": false,
       "skip_reason": "",
       "details": {
