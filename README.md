@@ -62,9 +62,13 @@ straight into CI as a pre-training gate.
 | `stuck-actuator` | episodes where nothing moves; a joint that moves in most episodes but not in a few; gripper never firing on pick/place | the policy learns to ignore that joint |
 | `action-saturation` | >5% of commands during motion pinned at exactly the min/max of a continuous, non-gripper dim | clipped commands the policy will imitate |
 | `nan-and-normalization` | NaN/Inf, zero-variance dims, std < 1e-6 | one NaN poisons the loss for the whole batch |
-| `duplicate-and-leakage` | exact-copy episodes, near-duplicates | silent metric inflation |
-| `outlier-episodes` | IQR outliers on the harmful side only: duration and end pose within a task, jerk/velocity per dim in std units without grippers. WARN when two independent signals agree or one is far out (Tukey k=3, >=3x median) | a handful of broken episodes dominate the gradient |
-| `visual-quality` | blur (variance of Laplacian) and underexposure (95th-percentile brightness), per camera, sampled inside each episode's segment (v2.1 per-episode and v3 shared MP4s) | bad visuals cost ~30% of training loss ([HF GIGO](https://huggingface.co/blog/robotdata/gigo)). Needs `--video` and the `video` extra |
+| `duplicate-and-leakage` | exact-copy episodes, near-duplicates (exact scan up to 100k episodes with memory-bounded blocks, an even sample with a note above that) | silent metric inflation |
+| `outlier-episodes` | IQR outliers on the harmful side only: duration and end pose within a task, jerk/velocity per dim in std units without grippers or velocity commands (recognised by name or by tracking the state's delta, not its level - a spike beyond a velocity dim's own step scale still counts). WARN when two independent signals agree or one is far out (Tukey k=3, >=3x median, and for end pose >= half the end-pose range) | a handful of broken episodes dominate the gradient |
+| `embedded-images` | image features stored inside the parquet shards instead of MP4 video chunks | bloated shards; every frame decodes on read |
+| `camera-coverage` | episodes with no video for a declared camera (v3 segment metadata, or the v2.1 files with `--video`) | a modality silently drops out for those episodes |
+| `task-strings` | empty task strings, frames pointing at a `task_index` the task table does not define, episode tasks with no table entry | language conditioning trains on `""` or an unrecoverable task |
+| `reward-done` | constant or NaN reward, `done` never True, `done` True mid-episode with frames after it | RL / reward-conditioned training gets labels with no signal |
+| `visual-quality` | blur (variance of Laplacian, frames decimated to ~VGA first so one threshold works at any resolution), underexposure (95th-percentile brightness) and overexposure (pixels clipped at the codec's brightest level), per camera, sampled inside each episode's segment (v2.1 per-episode and v3 shared MP4s) | bad visuals cost ~30% of training loss ([HF GIGO](https://huggingface.co/blog/robotdata/gigo)). Needs `--video` and the `video` extra |
 | `deployment-readiness` | episode length vs action chunk, stats coverage, quantile-norm support, declared shapes, timestamp grid | the openpi #906 failure mode: low loss, failed robot |
 
 ## Deployment readiness

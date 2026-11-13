@@ -12,7 +12,15 @@ commands, so a dim with large units, an open/shut toggle or a base that
 starts and stops does not dominate. Duration and
 end pose are compared within a task: a multi-task dataset legitimately
 ends in different places. An episode is a WARN when independent kinds of
-evidence agree, or when one metric is far out (Tukey k=3).
+evidence agree, or when one metric is far out (Tukey k=3, 3x the median).
+
+Two metrics cannot earn a single-metric WARN on their own:
+- static_fraction: a partly-still episode is idle-segments' job, and on a
+  dataset whose median stillness is ~5%, "4x the median" is a pause, not a
+  glitch (that one path produced most of this check's noise on real data).
+  It still counts toward multi-metric agreement.
+- end_pose_deviation: only when the deviation is also >= half the task's
+  end-pose range - on tight-range tasks 3x the median is centimetres.
 """
 
 from __future__ import annotations
@@ -20,13 +28,14 @@ from __future__ import annotations
 import numpy as np
 
 from kinema.checks.base import Check, CheckConfig, CheckResult, Finding, Severity
-from kinema.stats import action_gripper_dims, velocity_dims
+from kinema.stats import action_gripper_dims, structural_velocity_dims, velocity_dims
 
 # metric -> (which side is harmful, evidence family)
 _METRICS = {
     "duration_s": ("both", "duration"),
     "p95_jerk": ("high", "motion"),
     "peak_velocity": ("high", "motion"),
+    "velocity_spike": ("high", "motion"),
     "static_fraction": ("high", "activity"),
     "end_pose_deviation": ("high", "outcome"),
 }
@@ -82,9 +91,10 @@ def _iqr_flags(values: np.ndarray, k: float, side: str = "both",
     return out
 
 
-def _far_out(values: np.ndarray, side: str, floor: float) -> np.ndarray:
+def _far_out(values: np.ndarray, side: str, floor: float, abs_min: float = 0.0) -> np.ndarray:
     """Beyond Tukey's k=3 fence AND at least 3x (or, two-sided, under 1/3 of)
-    the median: one metric alone only earns a WARN when it is extreme."""
+    the median AND past abs_min in absolute terms: one metric alone only
+    earns a WARN when it is extreme."""
     fenced = _iqr_flags(values, 3.0, side, rel=0.0, floor=floor)
     ok = np.isfinite(values)
     if not fenced.any() or ok.sum() == 0:
@@ -94,7 +104,15 @@ def _far_out(values: np.ndarray, side: str, floor: float) -> np.ndarray:
     extreme = v > 3 * med if med > 0 else v > med + floor
     if side == "both":
         extreme |= v < med / 3
-    return fenced & extreme
+    return fenced & extreme & (np.abs(v) >= abs_min)
+
+
+# metrics that can earn a WARN on their own when far out, and the absolute
+# bar they must also clear. static_fraction is absent on purpose (docstring).
+_FAR_OUT_ABS_MIN = {"end_pose_deviation": 0.5}
+# a partly-still episode is idle-segments' job, not a far-out WARN here;
+# static_fraction still counts toward multi-metric agreement
+_FAR_OUT_ELIGIBLE = frozenset(_METRICS) - {"static_fraction"}
 
 
 def _task_key(ctx, ep: int, rows: np.ndarray):
@@ -122,10 +140,23 @@ class OutlierEpisodesCheck(Check):
             std = np.nanstd(action, axis=0)
             named_grip, inferred_grip = action_gripper_dims(ctx)
             # grippers toggle and velocity commands step on/off by design:
-            # neither belongs in a jerk / peak-velocity outlier score
-            grip = named_grip | inferred_grip | velocity_dims(ctx.action_names, n)
-            motion_dims = [j for j in range(n) if std[j] > 1e-8 and j not in grip
-                           and len(np.unique(action[:, j])) > 10 and not _is_toggle(ctx, j, std[j])]
+            # neither belongs in a jerk / peak-velocity outlier score. A
+            # one-frame SPIKE in a velocity command is still a glitch, so
+            # those dims get their own metric: the episode's largest step in
+            # units of the dim's own p99 step (stepping dims sit near 1).
+            grip = named_grip | inferred_grip
+            vel = (velocity_dims(ctx.action_names, n)
+                   | structural_velocity_dims(ctx)) - grip
+
+            def _cont(j: int) -> bool:
+                return (std[j] > 1e-8 and len(np.unique(action[:, j])) > 10
+                        and not _is_toggle(ctx, j, std[j]))
+
+            vel_dims = [j for j in sorted(vel) if _cont(j)]
+            motion_dims = [j for j in range(n) if _cont(j) and j not in grip and j not in vel]
+            da_all = np.abs(np.diff(action, axis=0))
+            step_scale = (np.nanpercentile(da_all[:, vel_dims], 99, axis=0)
+                          if vel_dims else None)
             scale = np.where(std > 1e-8, std, 1.0)
             eps_idle = np.maximum(1e-8, 0.01 * std)
 
@@ -148,13 +179,18 @@ class OutlierEpisodesCheck(Check):
                 # short episodes sit out the motion metrics (duration still counts)
                 if motion_dims and len(rows) >= _MIN_MOTION_FRAMES:
                     z = da[:, motion_dims] / scale[motion_dims]
-                    vel = np.nanmax(np.abs(z), axis=1)
+                    vel_f = np.nanmax(np.abs(z), axis=1)
                     jerk = np.nanmax(np.abs(np.diff(z, axis=0)), axis=1) if len(z) > 1 else np.zeros(1)
                     vals["p95_jerk"].append(float(np.percentile(jerk, 95)))
-                    vals["peak_velocity"].append(float(vel.max()))
+                    vals["peak_velocity"].append(float(vel_f.max()))
                 else:
                     vals["p95_jerk"].append(np.nan)
                     vals["peak_velocity"].append(np.nan)
+                if vel_dims and step_scale is not None and len(rows) >= 2:
+                    spike = np.abs(da[:, vel_dims]) / np.maximum(step_scale, 1e-8)
+                    vals["velocity_spike"].append(float(np.nanmax(spike)))
+                else:
+                    vals["velocity_spike"].append(np.nan)
             else:
                 for m in ("p95_jerk", "peak_velocity", "static_fraction"):
                     vals[m].append(np.nan)
@@ -191,6 +227,7 @@ class OutlierEpisodesCheck(Check):
             "duration_s": dur_rel,  # relative to the task's median duration
             "p95_jerk": np.asarray(vals["p95_jerk"], dtype=np.float64),
             "peak_velocity": np.asarray(vals["peak_velocity"], dtype=np.float64),
+            "velocity_spike": np.asarray(vals["velocity_spike"], dtype=np.float64),
             "static_fraction": np.asarray(vals["static_fraction"], dtype=np.float64),
             "end_pose_deviation": end_dev,
         }
@@ -200,7 +237,8 @@ class OutlierEpisodesCheck(Check):
             side, _ = _METRICS[name]
             floor = _ABS_FLOOR.get(name, 0.0)
             f = _iqr_flags(v, cfg.outlier_iqr_k, side, floor=floor)
-            f3 = _far_out(v, side, floor)
+            f3 = (_far_out(v, side, floor, _FAR_OUT_ABS_MIN.get(name, 0.0))
+                  if name in _FAR_OUT_ELIGIBLE else np.zeros(len(v), dtype=bool))
             for ep, a, b in zip(eps, f, f3):
                 if a:
                     flags[ep].append(name)

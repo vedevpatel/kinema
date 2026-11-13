@@ -20,6 +20,7 @@ from kinema.fixtures.synth import make_dataset  # noqa: E402
 CHECK = {c.id: c for c in ALL_CHECKS}["visual-quality"]
 FPS, LEN, EPISODES, SIZE = 10, 60, 24, 64
 DARK, BLURRY = set(range(12, 18)), set(range(18, 24))
+OVER = set(range(6, 12))
 
 
 def _frame(ep: int) -> np.ndarray:
@@ -28,6 +29,10 @@ def _frame(ep: int) -> np.ndarray:
     img = np.zeros((SIZE, SIZE), dtype=np.float64)
     yy, xx = np.mgrid[0:32, 0:32]
     img[16:48, 16:48] = np.where(((yy // 8) + (xx // 8)) % 2, 255.0, 60.0)
+    if ep in OVER:
+        # burnt out: almost everything clipped at white, one sharp dark object
+        img[:] = 255.0
+        img[24:40, 24:40] = 20.0
     if ep in DARK:
         img *= 0.2  # genuinely underexposed: nothing gets bright
     if ep in BLURRY:
@@ -76,6 +81,7 @@ def test_v3_segments_attributed_and_graded(v3_video_dataset):
     by_kind = {f.details["kind"]: f for f in res.findings}
     assert set(by_kind["underexposed"].details["episodes"]) == DARK
     assert set(by_kind["blurry"].details["episodes"]) == BLURRY
+    assert set(by_kind["overexposed"].details["episodes"]) == OVER
     assert all(f.severity == Severity.WARN for f in by_kind.values())  # 6/24 = 25% of episodes
 
 

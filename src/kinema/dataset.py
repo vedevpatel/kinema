@@ -28,9 +28,13 @@ ACTION_KEY = "action"
 # column names seen in the wild for the same features (openpi / GR00T-style
 # conversions use "state" / "actions"); resolved to the canonical keys
 _ALIASES = {
-    STATE_KEY: ("observation.state", "state", "observation.states", "observation.proprio"),
-    ACTION_KEY: ("action", "actions"),
+    STATE_KEY: ("observation.state", "state", "observation.states", "observation.proprio",
+                "qpos", "joint_positions", "observation.qpos"),
+    ACTION_KEY: ("action", "actions", "commands", "action_commands"),
 }
+# reward / done are optional extras, loaded when present under any of these
+_REWARD_COLS = ("next.reward", "reward")
+_DONE_COLS = ("next.done", "done", "terminated")
 
 
 def _resolve_keys(info: dict) -> dict[str, str]:
@@ -83,6 +87,8 @@ class DatasetContext:
     state: np.ndarray | None
     action: np.ndarray | None
     task_index: np.ndarray | None
+    reward: np.ndarray | None = None
+    done: np.ndarray | None = None
     truncated: bool = False  # True when --max-episodes limited the load
     # per-episode {feature: {stat: array}} for EVERY catalogued episode
     # (meta is always complete, even when the frame data is sampled)
@@ -477,8 +483,13 @@ def load_dataset(
 
     # Only the columns the checks use: datasets that embed images in the
     # parquet (and wide auxiliary columns) would otherwise be read in full.
+    feats_all = info.get("features") or {}
+    reward_col = next((c for c in _REWARD_COLS if c in feats_all), None)
+    done_col = next((c for c in _DONE_COLS if c in feats_all), None)
     wanted_cols = ["episode_index", "frame_index", "timestamp", "task_index",
-                   keys[STATE_KEY], keys[ACTION_KEY]]
+                   keys[STATE_KEY], keys[ACTION_KEY],
+                   *([reward_col] if reward_col else []),
+                   *([done_col] if done_col else [])]
 
     # Which episodes each row group holds, from the footer statistics alone
     # (no data read). None for a row group whose stats are missing.
@@ -530,6 +541,7 @@ def load_dataset(
         return int(shape[0]) if shape else 0
 
     est_bytes = row_bound * 8 * (4 + _feat_dim(keys[STATE_KEY]) + _feat_dim(keys[ACTION_KEY]))
+    est_bytes += row_bound * ((8 if reward_col else 0) + (8 if done_col else 0))
     spill = est_bytes > _frame_budget() > 0
     spill_dir = tempfile.mkdtemp(prefix="kinema-frames-") if spill else ""
     dtypes: dict[str, type[np.generic]] = {
@@ -537,6 +549,10 @@ def load_dataset(
         "timestamp": np.float64, "task_index": np.int64,
         keys[STATE_KEY]: np.float64, keys[ACTION_KEY]: np.float64,
     }
+    if reward_col:
+        dtypes[reward_col] = np.float64
+    if done_col:
+        dtypes[done_col] = np.float64  # bools stored as 0/1 for memmap simplicity
     chunks: dict[str, list[np.ndarray]] = {}
     maps: dict[str, np.memmap] = {}
     widths: dict[str, int] = {}
@@ -576,6 +592,10 @@ def load_dataset(
         if "timestamp" in t.column_names:
             seen.add("timestamp")
             _put("timestamp", t.column("timestamp").to_numpy().astype(np.float64, copy=False))
+        for extra in (reward_col, done_col):
+            if extra and extra in t.column_names:
+                seen.add(extra)
+                _put(extra, t.column(extra).to_numpy().astype(np.float64, copy=False))
         for canon in (STATE_KEY, ACTION_KEY):
             name = keys[canon]
             if name in t.column_names:
@@ -660,6 +680,16 @@ def load_dataset(
         if "task_index" in seen
         else None
     )
+    reward = (
+        _masked(_take(reward_col))
+        if reward_col and reward_col in seen
+        else None
+    )
+    done = (
+        _masked(_take(done_col)).astype(bool, copy=False)
+        if done_col and done_col in seen
+        else None
+    )
     state = (
         _masked(_take(keys[STATE_KEY]))
         if keys[STATE_KEY] in seen
@@ -685,6 +715,8 @@ def load_dataset(
         state=state,
         action=action,
         task_index=task_index,
+        reward=reward,
+        done=done,
         truncated=truncated,
         episode_stats=episode_stats,
         stats_json=stats_json,

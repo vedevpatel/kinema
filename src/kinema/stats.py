@@ -121,6 +121,46 @@ def velocity_dims(names: list[str] | None, dim: int) -> set[int]:
     return {j for j, n in enumerate(names) if is_velocity(n)}
 
 
+def structural_velocity_dims(ctx, max_episodes: int = 200) -> set[int]:
+    """Velocity/delta commands recognised structurally, for datasets whose
+    action dims are unnamed or generic: the command tracks some state dim's
+    per-frame STEP (an integrator) better than the state LEVEL itself. A
+    position command does the opposite. Same 0.7 correlation bar as
+    calibration's delta probe, plus a margin over the level correlation so
+    a smooth position trajectory does not sneak in."""
+    a, s = ctx.action, ctx.state
+    if a is None or s is None or a.shape[0] != s.shape[0]:
+        return set()
+    xs, ys, ds = [], [], []
+    for ep in ctx.episode_ids()[:max_episodes]:
+        rows = ctx.rows_for(ep)
+        if len(rows) < 3:
+            continue
+        xs.append(a[rows][:-1])
+        ys.append(s[rows][:-1])
+        ds.append(np.diff(s[rows], axis=0))
+    if not xs:
+        return set()
+    x, y, d = np.concatenate(xs), np.concatenate(ys), np.concatenate(ds)
+    ok = np.isfinite(x).all(axis=1) & np.isfinite(y).all(axis=1) & np.isfinite(d).all(axis=1)
+    x, y, d = x[ok], y[ok], d[ok]
+    if x.shape[0] < 20:
+        return set()
+    out = set()
+    for j in range(x.shape[1]):
+        if np.std(x[:, j]) < 1e-8:
+            continue
+        best_step = best_level = 0.0
+        for i in range(y.shape[1]):
+            if np.std(d[:, i]) > 1e-12:
+                best_step = max(best_step, abs(float(np.corrcoef(x[:, j], d[:, i])[0, 1])))
+            if np.std(y[:, i]) > 1e-12:
+                best_level = max(best_level, abs(float(np.corrcoef(x[:, j], y[:, i])[0, 1])))
+        if best_step >= 0.7 and best_step - best_level >= 0.15:
+            out.add(j)
+    return out
+
+
 def gripper_dims(names: list[str] | None, dim: int) -> set[int]:
     if not names or len(names) != dim:
         return set()

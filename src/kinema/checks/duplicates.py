@@ -26,7 +26,8 @@ from kinema.checks.base import Check, CheckConfig, CheckResult, Finding, Severit
 
 _WINDOW = 8
 _NEAR_GRID = 32
-_NEAR_MAX_EPISODES = 10_000
+_NEAR_EXACT_MAX = 100_000  # above this the near-dup scan runs on an even sample
+_NEAR_BLOCK_BYTES = 64 << 20  # distance-matrix budget per block
 _COMMON_WINDOW_EPISODES = 4  # a window in more episodes than this is a shared motion, not a copy
 
 
@@ -168,34 +169,41 @@ class DuplicateCheck(Check):
         else:
             res.findings.extend(partial_found)
 
-        # 3. near-duplicates, vectorized over all episodes
+        # 3. near-duplicates, vectorized over all episodes. Exact up to
+        # _NEAR_EXACT_MAX episodes (blocked matmul sized to _NEAR_BLOCK_BYTES,
+        # so a 90k-episode scan is minutes, not a skipped check); beyond that
+        # an evenly-spaced sample with an INFO note saying so.
         live = std > 1e-8
-        if len(eps) > _NEAR_MAX_EPISODES:
-            res.findings.append(Finding(
-                self.id, Severity.INFO,
-                f"{len(eps)} episodes: near-duplicate scan skipped (> {_NEAR_MAX_EPISODES}); "
-                "exact and partial-copy scans still ran",
-            ))
-        elif len(eps) > 1 and live.any():
+        if len(eps) > 1 and live.any():
+            scan_eps = eps
+            if len(eps) > _NEAR_EXACT_MAX:
+                pos = np.unique(np.round(np.linspace(0, len(eps) - 1, _NEAR_EXACT_MAX)).astype(int))
+                scan_eps = [eps[p] for p in pos]
+                res.findings.append(Finding(
+                    self.id, Severity.INFO,
+                    f"{len(eps)} episodes: near-duplicate scan ran on an evenly-spaced sample "
+                    f"of {len(scan_eps)} (exact up to {_NEAR_EXACT_MAX}); "
+                    "exact and partial-copy scans covered every episode",
+                ))
             mu = np.nanmean(action, axis=0)[live]
             sd = std[live]
             feats = np.stack([
                 ((trajectories[e][np.linspace(0, len(trajectories[e]) - 1, _NEAR_GRID).astype(int)][:, live]
                   - mu) / sd).ravel()
-                for e in eps
+                for e in scan_eps
             ])
             feats = np.nan_to_num(feats)
             thresh = (0.05 ** 2) * feats.shape[1]  # mean squared diff < 0.05^2
             sq = (feats ** 2).sum(axis=1)
-            block = 1024
-            for i0 in range(0, len(eps), block):
+            block = max(64, min(1024, _NEAR_BLOCK_BYTES // (8 * len(scan_eps))))
+            for i0 in range(0, len(scan_eps), block):
                 fi = feats[i0:i0 + block]
                 d2 = sq[i0:i0 + block, None] + sq[None, :] - 2 * fi @ feats.T
                 ii, kk = np.nonzero(d2 < thresh)
                 for a_, b_ in zip(ii + i0, kk):
                     if a_ >= b_:
                         continue
-                    e1, e2 = eps[a_], eps[b_]
+                    e1, e2 = scan_eps[a_], scan_eps[b_]
                     if (e1, e2) in pairs:
                         continue
                     pairs[(e1, e2)] = "near"
