@@ -24,7 +24,7 @@ class ActionSaturationCheck(Check):
             return self.skip("action column missing")
         n = action.shape[1]
         named_grip, inferred_grip = action_gripper_dims(ctx)
-        grip = named_grip | inferred_grip
+        grip = named_grip  # inferred grippers are checked but only reported at INFO
         finite = np.isfinite(action).all(axis=1)
         a = action[finite]
         if len(a) < 20:
@@ -70,13 +70,15 @@ class ActionSaturationCheck(Check):
                         details={"dim": j, "saturated_fraction": f, "side": side},
                     ))
                     continue
+                likely_grip = j in inferred_grip
                 res.findings.append(
                     Finding(
                         self.id,
-                        Severity.WARN,
+                        Severity.INFO if likely_grip else Severity.WARN,
                         f"action dim {j}{name}: {f:.1%} of commands during motion are pinned at "
                         f"exactly its {side} ({(hi if side == 'max' else lo)[j]:.6g}) - clipped "
-                        "commands the policy will imitate",
+                        "commands the policy will imitate"
+                        + (" [dim looks like an unnamed gripper, so not gated]" if likely_grip else ""),
                         details={"dim": j, "saturated_fraction": f, "side": side},
                     )
                 )

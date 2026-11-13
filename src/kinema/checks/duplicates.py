@@ -43,17 +43,27 @@ def _splits(info: dict) -> dict[int, str]:
     return out
 
 
-def _windows(a: np.ndarray, eps: np.ndarray) -> np.ndarray:
-    """Byte keys of every _WINDOW-frame window that contains motion."""
+def _windows(a: np.ndarray, eps: np.ndarray) -> dict[bytes, int]:
+    """Byte key -> start frame, for every _WINDOW-frame window with motion that
+    occurs ONCE in the episode. A motion the episode itself repeats is part of
+    the task by design (retrace-the-pattern benchmarks replay their demo) and
+    says nothing about copies between episodes."""
+    out: dict[bytes, int] = {}
+    repeated: set[bytes] = set()
     if len(a) < _WINDOW:
-        return np.empty(0, dtype=object)
+        return out
     moving = np.r_[False, (np.abs(np.diff(a, axis=0)) > eps).any(axis=1)]
-    keys = []
     raw = np.ascontiguousarray(a)
     for s in range(0, len(a) - _WINDOW + 1):
         if moving[s + 1: s + _WINDOW].sum() >= _WINDOW // 2:
-            keys.append(raw[s: s + _WINDOW].tobytes())
-    return np.asarray(keys, dtype=object)
+            k = raw[s: s + _WINDOW].tobytes()
+            if k in out:
+                repeated.add(k)
+            else:
+                out[k] = s
+    for k in repeated:
+        del out[k]
+    return out
 
 
 class DuplicateCheck(Check):
@@ -93,36 +103,70 @@ class DuplicateCheck(Check):
                 for k in range(i + 1, len(g)):
                     pairs[(g[i], g[k])] = "exact"
 
-        # 2. partial copies: shared windows of motion
+        # 2. partial copies: shared windows of motion. WHERE they sit matters:
+        #    scripted sims replay the same opening motion (aligned, from frame
+        #    0) - a copied beginning or a deterministic start, reported as
+        #    INFO; a shared stretch anywhere else is a splice or a botched
+        #    merge, and even ~17 frames of identical motion is no accident.
         std = np.nanstd(action, axis=0)
         move_eps = np.maximum(1e-8, 0.01 * std)
-        owner: dict[bytes, set[int]] = {}
+        owner: dict[bytes, dict[int, int]] = {}
         n_windows: dict[int, int] = {}
         for ep in eps:
             if ep in exact_eps:
                 continue
-            keys = set(_windows(trajectories[ep], move_eps).tolist())
-            n_windows[ep] = len(keys)
-            for k in keys:
-                owner.setdefault(k, set()).add(ep)
-        shared: dict[tuple[int, int], int] = {}
+            wins = _windows(trajectories[ep], move_eps)
+            n_windows[ep] = len(wins)
+            for k, start in wins.items():
+                owner.setdefault(k, {})[ep] = start
+        partial_found: list[Finding] = []
+        shared: dict[tuple[int, int], list[tuple[int, int]]] = {}
         for owners in owner.values():
             if 2 <= len(owners) <= _COMMON_WINDOW_EPISODES:
                 o = sorted(owners)
                 for i in range(len(o)):
                     for k in range(i + 1, len(o)):
-                        shared[(o[i], o[k])] = shared.get((o[i], o[k]), 0) + 1
-        for (e1, e2), n in sorted(shared.items()):
+                        shared.setdefault((o[i], o[k]), []).append((owners[o[i]], owners[o[k]]))
+        for (e1, e2), pos in sorted(shared.items()):
+            n = len(pos)
             smaller = max(1, min(n_windows.get(e1, 0), n_windows.get(e2, 0)))
-            if n >= 5 and n >= 0.10 * smaller:
-                pairs.setdefault((e1, e2), "partial")
-                res.findings.append(Finding(
-                    self.id, Severity.WARN,
-                    f"episodes {e1} and {e2}: share {n} identical {_WINDOW}-frame stretches of "
-                    f"motion ({n / smaller:.0%} of the shorter) - a partial copy (botched merge "
-                    "or replayed segment)",
-                    details={"episodes": [e1, e2], "kind": "partial", "shared_windows": n},
-                ))
+            share = n / smaller
+            aligned_opening = all(p1 == p2 for p1, p2 in pos) and min(p1 for p1, _ in pos) <= 2
+            if share >= 0.8:
+                sev, what = Severity.WARN, "a near-complete copy"
+            elif aligned_opening and n >= 5:
+                sev, what = Severity.INFO, "an identical opening (scripted start, or a copied beginning)"
+            elif n >= 10 or (n >= 5 and share >= 0.10):
+                # the data cannot tell copied data from a scripted generator
+                # replaying a primitive - say both; neither adds diversity
+                sev, what = Severity.WARN, ("copied data (splice, botched merge) or a scripted "
+                                            "generator replaying a primitive")
+            else:
+                continue
+            pairs.setdefault((e1, e2), "partial")
+            partial_found.append(Finding(
+                self.id, sev,
+                f"episodes {e1} and {e2}: share {n} identical {_WINDOW}-frame stretches of motion "
+                f"({share:.0%} of the shorter) - {what}; those segments add no diversity",
+                details={"episodes": [e1, e2], "kind": "partial", "shared_windows": n,
+                         "aligned_opening": aligned_opening},
+            ))
+        warn_pairs = [f for f in partial_found if f.severity == Severity.WARN]
+        if len(warn_pairs) > 5:
+            # systemic: one dataset-level finding, not one per pair
+            eps_involved = sorted({e for f in warn_pairs for e in f.details["episodes"]})
+            ex = ", ".join(f"{f.details['episodes'][0]}~{f.details['episodes'][1]}" for f in warn_pairs[:6])
+            res.findings.append(Finding(
+                self.id, Severity.WARN,
+                f"{len(warn_pairs)} episode pairs ({len(eps_involved)} episodes) share identical "
+                f"stretches of motion (e.g. {ex}) - copied data, or a scripted generator replaying "
+                "primitives; those segments add no diversity",
+                details={"kind": "partial", "pairs": [f.details["episodes"] for f in warn_pairs],
+                         "episodes": eps_involved},
+            ))
+            res.findings.extend(f for f in partial_found if f.severity != Severity.WARN)
+        else:
+            res.findings.extend(partial_found)
 
         # 3. near-duplicates, vectorized over all episodes
         live = std > 1e-8
@@ -180,9 +224,11 @@ class DuplicateCheck(Check):
             res.summary = "no exact, partial or near duplicates" + (
                 " across or within the declared splits" if multi_split else "")
         else:
+            n_partial = sum(len(f.details.get("pairs", [None])) for f in res.findings
+                            if f.details.get("kind") == "partial")
             res.summary = (
-                f"{kinds.count('exact')} exact group(s), {kinds.count('partial')} partial "
-                f"copies, {kinds.count('near')} near-duplicate pair(s)"
+                f"{kinds.count('exact')} exact group(s), {n_partial} pair(s) sharing motion, "
+                f"{kinds.count('near')} near-duplicate pair(s)"
                 + ("; LEAKAGE across splits" if "leakage" in kinds else "")
             )
         return res

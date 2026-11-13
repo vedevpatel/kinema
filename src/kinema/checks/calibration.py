@@ -155,8 +155,28 @@ class CalibrationDriftCheck(Check):
         var = float(np.var(off))
         r2 = 1.0 - float(np.var(resid)) / var if var > 1e-12 else 1.0
         mean_off = float(np.mean(off))
+        # A scale error is a LINE across the range. Backlash / load reversal
+        # is a STEP (one level each side of a split), which a single line fit
+        # also partly "explains". Fit both; a scale error needs the line to
+        # beat the best step clearly.
+        order = np.argsort(u)
+        us, os_ = u[order], off[order]
+        if len(us) > 20000:
+            pick = np.linspace(0, len(us) - 1, 20000).astype(int)
+            us, os_ = us[pick], os_[pick]
+        line_sse = float(np.sum((os_ - (b0 + b1 * us)) ** 2))
+        csum, csq = np.cumsum(os_), np.cumsum(os_ ** 2)
+        n_ = len(os_)
+        k = np.arange(max(5, n_ // 20), n_ - max(5, n_ // 20))  # split points, 5% margins
+        if len(k):
+            left = csq[k - 1] - csum[k - 1] ** 2 / k
+            right = (csq[-1] - csq[k - 1]) - (csum[-1] - csum[k - 1]) ** 2 / (n_ - k)
+            step_sse = float(np.min(left + right))
+        else:
+            step_sse = line_sse
+        line_vs_step = step_sse / max(line_sse, 1e-12)  # > 1: the line fits better
         info = {"joint": j, "offset_fraction": mean_off, "scale_error": float(b1),
-                "r2": r2, "still_frames": int(len(rows))}
+                "r2": r2, "line_vs_step": line_vs_step, "still_frames": int(len(rows))}
         name = f" ({ctx.action_names[j]})" if ctx.action_names and len(ctx.action_names) == ctx.action.shape[1] else ""
         findings = []
         # constant offset: large mean offset that does not vary across the range
@@ -167,7 +187,8 @@ class CalibrationDriftCheck(Check):
                              "range - leader/follower calibration drift; the policy learns a "
                              "shifted target", {**info, "kind": "offset"}))
         # scale error: offset grows linearly with position, and the line explains it
-        elif abs(b1) > cfg.calib_scale_warn and r2 >= cfg.calib_scale_min_r2:
+        elif abs(b1) > cfg.calib_scale_warn and r2 >= cfg.calib_scale_min_r2 \
+                and line_vs_step >= cfg.calib_scale_line_vs_step:
             sev = Severity.FAIL if abs(b1) > cfg.calib_scale_fail else Severity.WARN
             findings.append((sev, f"joint {j}{name}: command and measurement drift apart across "
                              f"the range ({b1:+.1%} per full range, R^2 {r2:.2f}) - a scale "
@@ -175,9 +196,9 @@ class CalibrationDriftCheck(Check):
                              {**info, "kind": "scale"}))
         elif abs(mean_off) > cfg.calib_warn_range_frac or abs(b1) > cfg.calib_scale_warn:
             findings.append((Severity.INFO, f"joint {j}{name}: still-frame offset {mean_off:+.1%} "
-                             f"of range varies irregularly with position (R^2 {r2:.2f}) - load, "
-                             "contact or a joint limit rather than calibration",
-                             {**info, "kind": "irregular"}))
+                             f"of range varies with position but not along a line (a step fits "
+                             f"{1 / max(line_vs_step, 1e-9):.1f}x as well) - backlash, load, contact or a joint limit "
+                             "rather than calibration", {**info, "kind": "irregular"}))
         if j in inferred_grip:  # unnamed dim in a gripper slot: do not gate on it
             findings = [(Severity.INFO, m + " [dim looks like an unnamed gripper: not gated]", d)
                         for sev, m, d in findings]
@@ -232,11 +253,18 @@ class CalibrationDriftCheck(Check):
                 per_joint[str(pair[1])] = info
             for sev, msg, det in fs or []:
                 res.findings.append(Finding(self.id, sev, msg, details=det))
-        for pair in grippers:
+        # likely-but-unnamed grippers: the joint test above only reports at
+        # INFO, so also run the gripper free-end test, which can gate - a big
+        # constant offset on a misdetected joint shows at both ends and is
+        # still caught
+        inferred_pairs = [p for p in joints if p[1] in inferred_grip]
+        for pair in grippers + inferred_pairs:
             fs, info = self._gripper(ctx, cfg, pair)
-            if info:
+            if info and str(pair[1]) not in per_joint:
                 per_joint[str(pair[1])] = info
             for sev, msg, det in fs or []:
+                if pair in inferred_pairs:
+                    msg += " [dim inferred as an unnamed gripper]"
                 res.findings.append(Finding(self.id, sev, msg, details=det))
         if not per_joint:
             return self.skip("not enough still frames to measure calibration")

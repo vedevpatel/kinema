@@ -70,6 +70,7 @@ class CheckConfig:
     calib_scale_warn: float = 0.05  # offset drifts > 5% of range across the range
     calib_scale_fail: float = 0.15
     calib_scale_min_r2: float = 0.60  # ...and a line explains the offset
+    calib_scale_line_vs_step: float = 1.5  # ...and beats the best two-level step (backlash)
     calib_gripper_warn: float = 0.15  # gripper offset at its free end
     # idle / stuck
     idle_eps_frac: float = 0.01  # fraction of per-joint action std

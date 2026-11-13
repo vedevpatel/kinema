@@ -169,7 +169,7 @@ class StuckActuatorCheck(Check):
         #    died or was disabled during those recordings. A joint idle in
         #    (nearly) every episode is an unused DOF for this task - INFO.
         for j in live:
-            if j in grip:
+            if j in named_grip:
                 continue
             stuck_eps = [eps_ids[i] for i in range(n_eps) if still[i, j] and eps_ids[i] not in dead_set]
             if not stuck_eps:
@@ -182,6 +182,8 @@ class StuckActuatorCheck(Check):
             else:
                 sev, why = Severity.INFO, "the task may not need it in every episode"
             name = f" ({ctx.action_names[j]})" if ctx.action_names and len(ctx.action_names) == n else ""
+            if j in inferred_grip:  # a shut/open gripper idles legitimately: report, do not gate
+                sev, why = Severity.INFO, why + " [dim looks like an unnamed gripper]"
             res.findings.append(Finding(
                 self.id, sev,
                 f"joint {j}{name} does not move in {len(stuck_eps)}/{n_eps} episodes "

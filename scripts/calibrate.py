@@ -203,6 +203,16 @@ def _copy(ctx, m):
     return ctx
 
 
+def _splice(ctx, m):
+    """m frames from the middle of one episode pasted at a different offset in another."""
+    eps = [e for e in ctx.episode_ids() if len(ctx.rows_for(e)) >= int(m) + 60]
+    if len(eps) < 2:
+        return None
+    rs, rd = ctx.rows_for(eps[0]), ctx.rows_for(eps[-1])
+    ctx.action[rd[40:40 + int(m)]] = ctx.action[rs[20:20 + int(m)]]
+    return ctx
+
+
 def _jitter(ctx, m):
     if not ctx.fps:
         return None
@@ -236,7 +246,8 @@ DEFECTS = [
     ("idle start m seconds", "idle-segments", [1, 2, 4], _idle_start),
     ("one-frame spike m std", "outlier-episodes", [3, 10, 30], _spike),
     ("clipped top m %", "action-saturation", [2, 5, 10, 20], _saturation),
-    ("copied m frames (0 = all)", "duplicate-and-leakage", [10, 30, 0], _copy),
+    ("copied opening m frames (0 = all)", "duplicate-and-leakage", [10, 30, 0], _copy),
+    ("spliced m frames, other offset", "duplicate-and-leakage", [10, 20, 30, 60], _splice),
     ("timestamp jitter m x period", "timestamp-grid", [0.05, 0.2, 0.5], _jitter),
     ("dropped frames (m gap)", "timestamp-grid", [1, 3], _gap),
 ]

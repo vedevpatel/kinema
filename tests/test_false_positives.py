@@ -526,7 +526,7 @@ def _paste(a, ep, src, dst, start, n):
 
 
 def test_partial_copy_is_flagged(base):
-    _rewrite_data(base, lambda s, a, ep: (s, _paste(a, ep, 2, 9, 10, 30)))
+    _rewrite_data(base, lambda s, a, ep: (s, _paste(a, ep, 2, 9, 10, 30)))  # same offset, not the opening
     res = run("duplicate-and-leakage", load_dataset(str(base)))
     assert any(f.details.get("kind") == "partial" and f.details["episodes"] == [2, 9] for f in res.findings)
 
@@ -567,3 +567,67 @@ def test_velocity_command_steps_are_not_outliers(base):
                ["j0", "j1", "j2", "j3", "linear_x", "gripper"])
     res = run("outlier-episodes", load_dataset(str(base)))
     assert not any(f.episode_index == 7 and f.severity == Severity.WARN for f in res.findings)
+
+
+def test_backlash_step_is_not_a_scale_error(base):
+    # intern-pour joint_6: offset -2% on one side of the range, +3% on the
+    # other - a step (backlash / load reversal), not a line
+    def step(s, a, ep):
+        a = a.copy()
+        mid = np.median(s[:, 1])
+        a[:, 1] = s[:, 1] + np.where(s[:, 1] < mid, -0.02, 0.03) * np.ptp(s[:, 1])
+        return s, a
+    _rewrite_data(base, step)
+    res = run("calibration-drift", load_dataset(str(base)))
+    assert not any(f.details.get("kind") == "scale" for f in res.findings)
+
+
+def test_big_offset_on_misdetected_joint_still_gated(base):
+    # generic names put dim 5 in the gripper slot; if it is really a joint with
+    # a large constant offset, the free-end test still catches it
+    _set_names(base, [f"motor_{i}" for i in range(6)], [f"motor_{i}" for i in range(6)])
+
+    def offset(s, a, ep):
+        a = a.copy()
+        a[:, 5] = s[:, 5] + 0.3 * np.ptp(s[:, 5])
+        return s, a
+    _rewrite_data(base, offset)
+    res = run("calibration-drift", load_dataset(str(base)))
+    assert any(f.severity >= Severity.WARN and f.details.get("joint") == 5 for f in res.findings)
+
+
+def test_identical_scripted_opening_is_info_not_warn(base):
+    # robomme: scripted demos replay the same opening motion from frame 0
+    _rewrite_data(base, lambda s, a, ep: (s, _paste(a, ep, 2, 9, 0, 25)))
+    res = run("duplicate-and-leakage", load_dataset(str(base)))
+    hit = [f for f in res.findings if f.details.get("kind") == "partial"]
+    assert hit and all(f.severity == Severity.INFO and f.details["aligned_opening"] for f in hit)
+
+
+def test_short_splice_at_another_offset_is_flagged(base):
+    def splice(s, a, ep):
+        a = a.copy()
+        rs, rd = np.flatnonzero(ep == 2), np.flatnonzero(ep == 9)
+        a[rd[30:50]] = a[rs[5:25]]  # 20 frames, different offset
+        return s, a
+    _rewrite_data(base, splice)
+    res = run("duplicate-and-leakage", load_dataset(str(base)))
+    assert any(f.severity == Severity.WARN and f.details.get("kind") == "partial"
+               and f.details["episodes"] == [2, 9] for f in res.findings)
+
+
+def test_motion_repeated_within_episodes_is_not_a_copy(base):
+    # robomme "retrace the pattern": each episode replays its demo motion, and
+    # episodes of one task share the pattern - by design, not a copy
+    def pattern(s, a, ep):
+        a = a.copy()
+        motif = a[np.flatnonzero(ep == 0)[5:25]].copy()
+        for e in (3, 9):
+            r = np.flatnonzero(ep == e)
+            a[r[0:20]] = motif
+            a[r[30:50]] = motif
+        return s, a
+    _rewrite_data(base, pattern)
+    res = run("duplicate-and-leakage", load_dataset(str(base)))
+    assert not any(f.severity >= Severity.WARN and f.details.get("kind") == "partial"
+                   and set(f.details["episodes"]) == {3, 9} for f in res.findings)
