@@ -1,0 +1,595 @@
+{
+  "source": "lerobot/xarm_lift_medium_replay",
+  "format_version": "v3.0",
+  "episodes": 50,
+  "frames": 1250,
+  "fps": 15.0,
+  "truncated": true,
+  "score": 42,
+  "verdict": "FAIL",
+  "checks": [
+    {
+      "id": "stats-drift",
+      "title": "Stats drift (meta/stats.json vs actual data)",
+      "verdict": "FAIL",
+      "summary": "worst relative error 107.6%",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "FAIL",
+          "message": "observation.state.mean: off by 40.8% on dim 3 (stored 0.276229, actual 0.38891). Normalization at training and inference will disagree.",
+          "episode_index": null,
+          "details": {
+            "feature": "observation.state",
+            "stat": "mean",
+            "dim": 3,
+            "rel_err": 0.40792842360575127
+          }
+        },
+        {
+          "severity": "FAIL",
+          "message": "observation.state.std: off by 80.2% on dim 2 (stored 0.0651041, actual 0.117324). Normalization at training and inference will disagree.",
+          "episode_index": null,
+          "details": {
+            "feature": "observation.state",
+            "stat": "std",
+            "dim": 2,
+            "rel_err": 0.8020984125889946
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "observation.state.max: off by 4.8% on dim 1 (stored 0.672802, actual 0.640213). Normalization at training and inference will disagree.",
+          "episode_index": null,
+          "details": {
+            "feature": "observation.state",
+            "stat": "max",
+            "dim": 1,
+            "rel_err": 0.04843679098973028
+          }
+        },
+        {
+          "severity": "FAIL",
+          "message": "action.mean: off by 107.6% on dim 3 (stored -0.0250458, actual 0.00190351). Normalization at training and inference will disagree.",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "stat": "mean",
+            "dim": 3,
+            "rel_err": 1.076001107128065
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "action.std: off by 10.0% on dim 2 (stored 0.529255, actual 0.58192). Normalization at training and inference will disagree.",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "stat": "std",
+            "dim": 2,
+            "rel_err": 0.09950744149788868
+          }
+        }
+      ]
+    },
+    {
+      "id": "timestamp-grid",
+      "title": "Timestamp grid (on-grid, monotonic, low jitter)",
+      "verdict": "PASS",
+      "summary": "all episodes on the 15 fps grid and monotonic",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "dropped-frames",
+      "title": "Dropped / duplicated frames",
+      "verdict": "INFO",
+      "summary": "frame_index contiguous and episode lengths match the data",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "video frame counts not checked (pass --video to include MP4s)",
+          "episode_index": null,
+          "details": {}
+        }
+      ]
+    },
+    {
+      "id": "calibration-drift",
+      "title": "Calibration drift (action vs state offset on still frames)",
+      "verdict": "FAIL",
+      "summary": "worst joint 0: offset 230.0% of its range",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "mean_offset_per_joint": [
+          -1.257576836447309,
+          -0.2962046591207036,
+          -0.6580023733507065,
+          -0.3108069471425673
+        ],
+        "range_fraction_per_joint": [
+          2.299886417702592,
+          0.4348122844746578,
+          0.8470467738385918,
+          0.32411298099456737
+        ],
+        "still_frame_share": 0.24
+      },
+      "findings": [
+        {
+          "severity": "FAIL",
+          "message": "joint 0: mean action-state offset -1.258 on still frames = 230.0% of its range. Leader/follower calibration has drifted; the policy is learning a shifted target.",
+          "episode_index": null,
+          "details": {
+            "joint": 0,
+            "mean_offset": -1.257576836447309,
+            "range_fraction": 2.299886417702592,
+            "still_frames": 300
+          }
+        },
+        {
+          "severity": "FAIL",
+          "message": "joint 1: mean action-state offset -0.2962 on still frames = 43.5% of its range. Leader/follower calibration has drifted; the policy is learning a shifted target.",
+          "episode_index": null,
+          "details": {
+            "joint": 1,
+            "mean_offset": -0.2962046591207036,
+            "range_fraction": 0.4348122844746578,
+            "still_frames": 300
+          }
+        },
+        {
+          "severity": "FAIL",
+          "message": "joint 2: mean action-state offset -0.658 on still frames = 84.7% of its range. Leader/follower calibration has drifted; the policy is learning a shifted target.",
+          "episode_index": null,
+          "details": {
+            "joint": 2,
+            "mean_offset": -0.6580023733507065,
+            "range_fraction": 0.8470467738385918,
+            "still_frames": 300
+          }
+        },
+        {
+          "severity": "FAIL",
+          "message": "joint 3: mean action-state offset -0.3108 on still frames = 32.4% of its range. Leader/follower calibration has drifted; the policy is learning a shifted target.",
+          "episode_index": null,
+          "details": {
+            "joint": 3,
+            "mean_offset": -0.3108069471425673,
+            "range_fraction": 0.32411298099456737,
+            "still_frames": 300
+          }
+        }
+      ]
+    },
+    {
+      "id": "idle-segments",
+      "title": "Idle segments (policy learns to do nothing)",
+      "verdict": "PASS",
+      "summary": "no idle runs >= 2s at >= 30% of an episode",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "stuck-actuator",
+      "title": "Stuck actuators (joints that never move)",
+      "verdict": "PASS",
+      "summary": "every joint moves in every episode",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "action-saturation",
+      "title": "Action saturation (commands clipped at the limits)",
+      "verdict": "PASS",
+      "summary": "no action dim saturated above 5%",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "nan-and-normalization",
+      "title": "NaN / Inf and normalization hazards",
+      "verdict": "PASS",
+      "summary": "no NaN/Inf; all dims have usable variance",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "duplicate-and-leakage",
+      "title": "Duplicate episodes / train-eval leakage",
+      "verdict": "PASS",
+      "summary": "no exact or near duplicates",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "outlier-episodes",
+      "title": "Outlier episodes (duration, jerk, velocity, static, end-pose)",
+      "verdict": "INFO",
+      "summary": "5/50 episodes flagged; worst: [2, 13, 25, 29, 48]. Review or drop these episodes before training: [2, 13, 25, 29, 48]",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "metrics": {
+          "duration_s": {
+            "0": 1.6666666666666667,
+            "1": 1.6666666666666667,
+            "2": 1.6666666666666667,
+            "3": 1.6666666666666667,
+            "4": 1.6666666666666667,
+            "5": 1.6666666666666667,
+            "6": 1.6666666666666667,
+            "7": 1.6666666666666667,
+            "8": 1.6666666666666667,
+            "9": 1.6666666666666667,
+            "10": 1.6666666666666667,
+            "11": 1.6666666666666667,
+            "12": 1.6666666666666667,
+            "13": 1.6666666666666667,
+            "14": 1.6666666666666667,
+            "15": 1.6666666666666667,
+            "16": 1.6666666666666667,
+            "17": 1.6666666666666667,
+            "18": 1.6666666666666667,
+            "19": 1.6666666666666667,
+            "20": 1.6666666666666667,
+            "21": 1.6666666666666667,
+            "22": 1.6666666666666667,
+            "23": 1.6666666666666667,
+            "24": 1.6666666666666667,
+            "25": 1.6666666666666667,
+            "26": 1.6666666666666667,
+            "27": 1.6666666666666667,
+            "28": 1.6666666666666667,
+            "29": 1.6666666666666667,
+            "30": 1.6666666666666667,
+            "31": 1.6666666666666667,
+            "32": 1.6666666666666667,
+            "33": 1.6666666666666667,
+            "34": 1.6666666666666667,
+            "35": 1.6666666666666667,
+            "36": 1.6666666666666667,
+            "37": 1.6666666666666667,
+            "38": 1.6666666666666667,
+            "39": 1.6666666666666667,
+            "40": 1.6666666666666667,
+            "41": 1.6666666666666667,
+            "42": 1.6666666666666667,
+            "43": 1.6666666666666667,
+            "44": 1.6666666666666667,
+            "45": 1.6666666666666667,
+            "46": 1.6666666666666667,
+            "47": 1.6666666666666667,
+            "48": 1.6666666666666667,
+            "49": 1.6666666666666667
+          },
+          "p95_jerk": {
+            "0": 2.6950356394052504,
+            "1": 2.970592314004898,
+            "2": 2.9695977598428724,
+            "3": 2.804040889441967,
+            "4": 3.0223991632461544,
+            "5": 3.425477880239486,
+            "6": 3.152060520648956,
+            "7": 2.9405215859413145,
+            "8": 3.1591943889856338,
+            "9": 3.056568172574043,
+            "10": 2.9092049121856687,
+            "11": 3.2215012729167936,
+            "12": 2.7023115686140953,
+            "13": 3.0686496511101717,
+            "14": 2.944455228000879,
+            "15": 3.298962733149528,
+            "16": 2.6135225012898444,
+            "17": 2.8264892607927323,
+            "18": 3.3149534225463864,
+            "19": 2.5863210633397102,
+            "20": 3.1685521900653835,
+            "21": 3.530289798974991,
+            "22": 3.4117398958653204,
+            "23": 2.8091355517506598,
+            "24": 2.9306084394454954,
+            "25": 3.1444842875003816,
+            "26": 3.043024057149887,
+            "27": 3.023256927728653,
+            "28": 2.8373459547758104,
+            "29": 3.27902979850769,
+            "30": 3.040984201431274,
+            "31": 3.0504774540662765,
+            "32": 3.1255943059921254,
+            "33": 3.3796125531196592,
+            "34": 2.970529967546463,
+            "35": 3.354923012852668,
+            "36": 3.3386691749095916,
+            "37": 3.4350350260734555,
+            "38": 2.684790816903114,
+            "39": 2.9108079552650445,
+            "40": 3.1497539043426515,
+            "41": 3.18280790746212,
+            "42": 2.9681578755378717,
+            "43": 3.2050449728965758,
+            "44": 3.371660530567169,
+            "45": 3.1957541435956953,
+            "46": 2.8320920765399933,
+            "47": 3.0509125292301174,
+            "48": 3.185278177261352,
+            "49": 2.5812591522932054
+          },
+          "peak_velocity": {
+            "0": 1.768432080745697,
+            "1": 1.8361961245536804,
+            "2": 1.8640739917755127,
+            "3": 1.8234408497810364,
+            "4": 1.8018370270729065,
+            "5": 1.9000616073608398,
+            "6": 1.8068907856941223,
+            "7": 1.8893922567367554,
+            "8": 1.792738437652588,
+            "9": 1.8261694312095642,
+            "10": 1.825191617012024,
+            "11": 1.8874318599700928,
+            "12": 1.9283863306045532,
+            "13": 1.805101454257965,
+            "14": 1.9124284982681274,
+            "15": 1.8744270205497742,
+            "16": 1.6381937861442566,
+            "17": 1.6311829090118408,
+            "18": 1.9307660460472107,
+            "19": 1.7770991325378418,
+            "20": 1.7590820789337158,
+            "21": 1.874860167503357,
+            "22": 1.9753051400184631,
+            "23": 1.8411104679107666,
+            "24": 1.8448323607444763,
+            "25": 1.8861128687858582,
+            "26": 1.7357783317565918,
+            "27": 1.8857868909835815,
+            "28": 1.8395972847938538,
+            "29": 1.8582144975662231,
+            "30": 1.9512913227081299,
+            "31": 1.7758333683013916,
+            "32": 1.9350864887237549,
+            "33": 1.9264925718307495,
+            "34": 1.7416778206825256,
+            "35": 1.863625705242157,
+            "36": 1.7502275109291077,
+            "37": 1.8425666689872742,
+            "38": 1.952823281288147,
+            "39": 1.7556609511375427,
+            "40": 1.8826406002044678,
+            "41": 1.890855312347412,
+            "42": 1.9703214764595032,
+            "43": 1.7869621515274048,
+            "44": 1.8796459436416626,
+            "45": 1.8010995388031006,
+            "46": 1.7806684970855713,
+            "47": 1.7120401263237,
+            "48": 1.7999405264854431,
+            "49": 1.991952121257782
+          },
+          "static_fraction": {
+            "0": 0.08333333333333333,
+            "1": 0.041666666666666664,
+            "2": 0.20833333333333334,
+            "3": 0.08333333333333333,
+            "4": 0.0,
+            "5": 0.0,
+            "6": 0.08333333333333333,
+            "7": 0.041666666666666664,
+            "8": 0.041666666666666664,
+            "9": 0.125,
+            "10": 0.0,
+            "11": 0.08333333333333333,
+            "12": 0.08333333333333333,
+            "13": 0.08333333333333333,
+            "14": 0.041666666666666664,
+            "15": 0.0,
+            "16": 0.125,
+            "17": 0.08333333333333333,
+            "18": 0.0,
+            "19": 0.0,
+            "20": 0.08333333333333333,
+            "21": 0.0,
+            "22": 0.041666666666666664,
+            "23": 0.041666666666666664,
+            "24": 0.0,
+            "25": 0.041666666666666664,
+            "26": 0.08333333333333333,
+            "27": 0.16666666666666666,
+            "28": 0.041666666666666664,
+            "29": 0.041666666666666664,
+            "30": 0.08333333333333333,
+            "31": 0.08333333333333333,
+            "32": 0.08333333333333333,
+            "33": 0.08333333333333333,
+            "34": 0.08333333333333333,
+            "35": 0.041666666666666664,
+            "36": 0.041666666666666664,
+            "37": 0.125,
+            "38": 0.08333333333333333,
+            "39": 0.0,
+            "40": 0.0,
+            "41": 0.041666666666666664,
+            "42": 0.0,
+            "43": 0.0,
+            "44": 0.0,
+            "45": 0.0,
+            "46": 0.041666666666666664,
+            "47": 0.08333333333333333,
+            "48": 0.08333333333333333,
+            "49": 0.0
+          },
+          "end_pose_deviation": {
+            "0": 0.45973566022618767,
+            "1": 0.39612587451578035,
+            "2": 0.34268994755023385,
+            "3": 0.45140176577988445,
+            "4": 0.3971584688604771,
+            "5": 0.4485221628748937,
+            "6": 0.3393239607156579,
+            "7": 0.6543324944717157,
+            "8": 0.47598692136851994,
+            "9": 0.3684160261445839,
+            "10": 0.4829903319414999,
+            "11": 0.39641222339501736,
+            "12": 0.34900944826237834,
+            "13": 0.17393721060801173,
+            "14": 0.4246953297729659,
+            "15": 0.2601117274662517,
+            "16": 0.6364196145566922,
+            "17": 0.6317537454961538,
+            "18": 0.5203894975579353,
+            "19": 0.4383644940787072,
+            "20": 0.42626995277636914,
+            "21": 0.4515643465007028,
+            "22": 0.4716545434311916,
+            "23": 0.46389627270886924,
+            "24": 0.44686124934875776,
+            "25": 0.21252620863849148,
+            "26": 0.5334183487516128,
+            "27": 0.3124652925907525,
+            "28": 0.4573485284937223,
+            "29": 0.6812447278556771,
+            "30": 0.47105590563673694,
+            "31": 0.4673990674208363,
+            "32": 0.31416615975081297,
+            "33": 0.6328445712886613,
+            "34": 0.46524661185870586,
+            "35": 0.3759707024431889,
+            "36": 0.2251420382130737,
+            "37": 0.33304425939215865,
+            "38": 0.34135455923547,
+            "39": 0.45123743636090635,
+            "40": 0.45039460369049605,
+            "41": 0.5070135077566823,
+            "42": 0.38005215162006795,
+            "43": 0.4533910050632721,
+            "44": 0.46466476195443845,
+            "45": 0.5382890058692339,
+            "46": 0.4878288651861368,
+            "47": 0.4929864922433177,
+            "48": 0.7341855664110485,
+            "49": 0.44875531508677996
+          }
+        },
+        "flagged": {
+          "2": [
+            "static_fraction"
+          ],
+          "13": [
+            "end_pose_deviation"
+          ],
+          "25": [
+            "end_pose_deviation"
+          ],
+          "29": [
+            "end_pose_deviation"
+          ],
+          "48": [
+            "end_pose_deviation"
+          ]
+        }
+      },
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "episode 2: IQR outlier on static_fraction",
+          "episode_index": 2,
+          "details": {
+            "metrics": [
+              "static_fraction"
+            ]
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 13: IQR outlier on end_pose_deviation",
+          "episode_index": 13,
+          "details": {
+            "metrics": [
+              "end_pose_deviation"
+            ]
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 25: IQR outlier on end_pose_deviation",
+          "episode_index": 25,
+          "details": {
+            "metrics": [
+              "end_pose_deviation"
+            ]
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 29: IQR outlier on end_pose_deviation",
+          "episode_index": 29,
+          "details": {
+            "metrics": [
+              "end_pose_deviation"
+            ]
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 48: IQR outlier on end_pose_deviation",
+          "episode_index": 48,
+          "details": {
+            "metrics": [
+              "end_pose_deviation"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "visual-quality",
+      "title": "Visual quality (blur, lighting)",
+      "verdict": "SKIP",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "pass --video to run (downloads MP4s; needs the video extra)",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "deployment-readiness",
+      "title": "Deployment readiness (would this dataset serve a policy?)",
+      "verdict": "WARN",
+      "summary": "0 blocker(s), 1 warning(s)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "WARN",
+          "message": "observation.state: 6.00% of values sit >3 sigma from the stored normalization stats - at inference the policy sees inputs outside the range it trained on (the openpi #906 failure mode)",
+          "episode_index": null,
+          "details": {
+            "feature": "observation.state",
+            "ood_fraction": 0.06
+          }
+        }
+      ]
+    }
+  ]
+}

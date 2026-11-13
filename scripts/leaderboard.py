@@ -251,10 +251,23 @@ def render_index(entries: list[dict], generated: str) -> str:
         "<a href='https://github.com/vedevpatel/kinema'>kinema</a>. "
         f"Generated {esc(generated)}. Scores are heuristic: 100 minus penalties per "
         "warning/failing check. Video checks are off (v0).</p>"
-        "<table><tr><th>#</th><th>dataset</th><th>downloads</th><th>score</th>"
-        "<th>verdict</th><th>flags</th></tr>"
+        "<p id=pager><button onclick=pg(-1)>&larr; Prev</button> "
+        "<span id=pglabel></span> "
+        "<button onclick=pg(1)>Next &rarr;</button></p>"
+        "<table id=lb><thead><tr><th>#</th><th>dataset</th><th>downloads</th><th>score</th>"
+        "<th>verdict</th><th>flags</th></tr></thead><tbody>"
         + "".join(rows)
-        + "</table>"
+        + "</tbody></table>"
+        "<script>"
+        "const PER=50;let cur=0;"
+        "const rows=[...document.querySelectorAll('#lb tbody tr')];"
+        "function show(){rows.forEach((r,i)=>r.style.display="
+        "(i>=cur*PER&&i<(cur+1)*PER)?'':'none');"
+        "document.getElementById('pglabel').textContent="
+        "(cur+1)+' / '+Math.max(1,Math.ceil(rows.length/PER));}"
+        "function pg(d){cur=Math.min(Math.ceil(rows.length/PER)-1,Math.max(0,cur+d));show();}"
+        "show();"
+        "</script>"
     )
     return page("LeRobot dataset health leaderboard", body)
 
