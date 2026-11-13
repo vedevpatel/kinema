@@ -104,7 +104,7 @@ class OutlierEpisodesCheck(Check):
             top = [ep for ep, _ in worst[:10]]
             res.summary = (
                 f"{len(worst)}/{len(eps)} episodes flagged; worst: {top}. "
-                f"Review or drop with: dataset.delete_episodes({top})"
+                f"Review or drop these episodes before training: {top}"
             )
         else:
             res.summary = f"no IQR outliers across {len(eps)} episodes"

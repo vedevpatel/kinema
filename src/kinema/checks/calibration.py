@@ -59,7 +59,7 @@ class CalibrationDriftCheck(Check):
 
         mean_offset = np.where(usable, offsets / np.maximum(1, counts), 0.0)
         frac = np.abs(mean_offset) / state_range
-        still_share = float(counts.sum()) / max(1, ctx.row_count)
+        still_share = float(counts.max()) / max(1, ctx.row_count)
 
         worst_j = int(np.argmax(np.where(usable, frac, 0.0)))
         for j in range(n_joints):

@@ -95,6 +95,31 @@ def find_lerobot_datasets(limit: int) -> list[dict]:
     return out
 
 
+def _range_read_parquet(repo_id: str, name: str, dest: Path, min_rows: int = 20000,
+                        max_bytes: int = 150 * 1024 * 1024) -> None:
+    """Materialize the leading row groups of a remote parquet via HTTP range
+    reads (footer first, then only the needed row groups) - no full download.
+    Used when every data shard exceeds the sample cap."""
+    from huggingface_hub import HfFileSystem
+    import pyarrow.parquet as pq
+
+    fs = HfFileSystem()
+    with fs.open(f"datasets/{repo_id}/{name}", "rb") as f:
+        pf = pq.ParquetFile(f)
+        groups, rows, total = [], 0, 0
+        for i in range(pf.metadata.num_row_groups):
+            rg = pf.metadata.row_group(i)
+            groups.append(i)
+            rows += rg.num_rows
+            total += rg.total_byte_size
+            if rows >= min_rows or total >= max_bytes:
+                break
+        table = pf.read_row_groups(groups)
+    out = dest / name
+    out.parent.mkdir(parents=True, exist_ok=True)
+    pq.write_table(table, out)
+
+
 def download_sample(repo_id: str, cap_bytes: int, dest: Path) -> Path:
     """meta/** in full plus data files in name order until cap_bytes.
 
@@ -122,11 +147,14 @@ def download_sample(repo_id: str, cap_bytes: int, dest: Path) -> Path:
         if not data_files:
             raise DatasetError(f"{repo_id}: no data files listed on the Hub")
         smallest, ssize = min(data_files, key=lambda x: x[1])
-        if ssize > 3 * cap_bytes:
+        try:
+            _range_read_parquet(repo_id, smallest, dest, max_bytes=cap_bytes)
+        except Exception as e:  # noqa: BLE001
             raise DatasetError(
-                f"smallest data shard is {ssize / 1e6:.0f} MB, over the sample cap"
+                f"smallest data shard is {ssize / 1e6:.0f} MB and range-read "
+                f"sampling failed: {type(e).__name__}: {e}"
             )
-        picked.append(smallest)
+        return dest
     for name in picked:
         hf_hub_download(
             repo_id, name, repo_type="dataset", local_dir=str(dest)
