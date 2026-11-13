@@ -111,7 +111,9 @@ def download_sample(repo_id: str, cap_bytes: int, dest: Path) -> Path:
     picked = [n for n, _ in sib if n.startswith("meta/")]
     budget = cap_bytes
     data_files = sorted((n, sz) for n, sz in sib if n.startswith("data/"))
-    for name, size in data_files:
+    # cap file count too: v2.1 keeps one small parquet per episode, and
+    # hundreds of per-file requests are what trips the Hub's rate limits
+    for name, size in data_files[:40]:
         if size > budget:
             continue
         picked.append(name)
@@ -140,11 +142,15 @@ def _clean_reason(msg: str) -> str:
 
 
 def audit_one(repo_id: str, max_episodes: int, cap_bytes: int) -> DatasetReport:
+    import shutil
     import tempfile
 
     dest = Path(tempfile.mkdtemp(prefix="kinema-leaderboard-"))
-    download_sample(repo_id, cap_bytes, dest)
-    ctx = load_dataset(str(dest), max_episodes=max_episodes)
+    try:
+        download_sample(repo_id, cap_bytes, dest)
+        ctx = load_dataset(str(dest), max_episodes=max_episodes)
+    finally:
+        shutil.rmtree(dest, ignore_errors=True)
     rep = DatasetReport(
         source=repo_id,
         format_version=ctx.format_version,
