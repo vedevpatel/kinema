@@ -1,0 +1,499 @@
+{
+  "source": "lerobot/svla_so100_pickplace",
+  "format_version": "v3.0",
+  "episodes": 50,
+  "frames": 19631,
+  "fps": 30.0,
+  "truncated": false,
+  "score": 76,
+  "verdict": "WARN",
+  "checks": [
+    {
+      "id": "stats-drift",
+      "title": "Stats drift (meta/stats.json vs actual data)",
+      "verdict": "PASS",
+      "summary": "stats.json matches the data (mean/std/min/max within 1%)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "timestamp-grid",
+      "title": "Timestamp grid (on-grid, monotonic, low jitter)",
+      "verdict": "PASS",
+      "summary": "all episodes on the 30 fps grid and monotonic",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "dropped-frames",
+      "title": "Dropped / duplicated frames",
+      "verdict": "INFO",
+      "summary": "frame_index contiguous and episode lengths match the data",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "video frame counts not checked (pass --video to include MP4s)",
+          "episode_index": null,
+          "details": {}
+        }
+      ]
+    },
+    {
+      "id": "calibration-drift",
+      "title": "Calibration drift (action vs state offset on still frames)",
+      "verdict": "WARN",
+      "summary": "worst joint 5: offset 5.7% of its range",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "mean_offset_per_joint": [
+          0.07351538535276074,
+          -0.5332823057432432,
+          -0.757525778014266,
+          -0.1907031884205033,
+          -0.0032120543711931207,
+          -1.9993795791477198
+        ],
+        "range_fraction_per_joint": [
+          0.0006707632059273545,
+          0.004047743540738871,
+          0.0062320751722230935,
+          0.00222313370836288,
+          4.834132386980828e-05,
+          0.05732874790146833
+        ],
+        "still_frame_share": 2.9855330854261117
+      },
+      "findings": [
+        {
+          "severity": "WARN",
+          "message": "joint 5: mean action-state offset -1.999 on still frames = 5.7% of its range. Leader/follower calibration has drifted; the policy is learning a shifted target.",
+          "episode_index": null,
+          "details": {
+            "joint": 5,
+            "mean_offset": -1.9993795791477198,
+            "range_fraction": 0.05732874790146833,
+            "still_frames": 14384
+          }
+        }
+      ]
+    },
+    {
+      "id": "idle-segments",
+      "title": "Idle segments (policy learns to do nothing)",
+      "verdict": "PASS",
+      "summary": "no idle runs >= 2s at >= 30% of an episode",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "stuck-actuator",
+      "title": "Stuck actuators (joints that never move)",
+      "verdict": "PASS",
+      "summary": "every joint moves in every episode",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "action-saturation",
+      "title": "Action saturation (commands clipped at the limits)",
+      "verdict": "WARN",
+      "summary": "2 dim(s) saturated",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "WARN",
+          "message": "action dim 2: 30.4% of commands sit at the min/max limit - clipped commands the policy will imitate",
+          "episode_index": null,
+          "details": {
+            "dim": 2,
+            "saturated_fraction": 0.3040599052518975
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "action dim 5: 38.7% of commands sit at the min/max limit - clipped commands the policy will imitate",
+          "episode_index": null,
+          "details": {
+            "dim": 5,
+            "saturated_fraction": 0.38658244613111914
+          }
+        }
+      ]
+    },
+    {
+      "id": "nan-and-normalization",
+      "title": "NaN / Inf and normalization hazards",
+      "verdict": "PASS",
+      "summary": "no NaN/Inf; all dims have usable variance",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "duplicate-and-leakage",
+      "title": "Duplicate episodes / train-eval leakage",
+      "verdict": "PASS",
+      "summary": "no exact or near duplicates",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "outlier-episodes",
+      "title": "Outlier episodes (duration, jerk, velocity, static, end-pose)",
+      "verdict": "INFO",
+      "summary": "2/50 episodes flagged; worst: [10, 31]. Review or drop with: dataset.delete_episodes([10, 31])",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "metrics": {
+          "duration_s": {
+            "0": 15.133333333333333,
+            "1": 15.6,
+            "2": 14.0,
+            "3": 13.866666666666667,
+            "4": 13.366666666666667,
+            "5": 11.8,
+            "6": 11.9,
+            "7": 11.7,
+            "8": 12.266666666666667,
+            "9": 12.933333333333334,
+            "10": 12.133333333333333,
+            "11": 12.566666666666666,
+            "12": 12.3,
+            "13": 11.9,
+            "14": 12.5,
+            "15": 12.8,
+            "16": 12.166666666666666,
+            "17": 13.633333333333333,
+            "18": 12.833333333333334,
+            "19": 12.233333333333333,
+            "20": 12.2,
+            "21": 12.333333333333334,
+            "22": 12.9,
+            "23": 12.5,
+            "24": 12.166666666666666,
+            "25": 13.6,
+            "26": 11.766666666666667,
+            "27": 10.866666666666667,
+            "28": 12.6,
+            "29": 12.466666666666667,
+            "30": 13.933333333333334,
+            "31": 19.166666666666668,
+            "32": 13.866666666666667,
+            "33": 14.166666666666666,
+            "34": 12.533333333333333,
+            "35": 13.1,
+            "36": 14.666666666666666,
+            "37": 12.733333333333333,
+            "38": 13.4,
+            "39": 11.366666666666667,
+            "40": 15.766666666666667,
+            "41": 15.833333333333334,
+            "42": 13.9,
+            "43": 14.1,
+            "44": 12.233333333333333,
+            "45": 11.7,
+            "46": 11.533333333333333,
+            "47": 13.933333333333334,
+            "48": 12.033333333333333,
+            "49": 13.366666666666667
+          },
+          "p95_jerk": {
+            "0": 1.0063476562499991,
+            "1": 1.0623939335346222,
+            "2": 1.2779534697532653,
+            "3": 0.958466374874115,
+            "4": 0.791015625,
+            "5": 0.87890625,
+            "6": 1.171457862854004,
+            "7": 1.0608524322509763,
+            "8": 1.0649626553058624,
+            "9": 1.142578125,
+            "10": 0.966796875,
+            "11": 0.966796875,
+            "12": 1.142578125,
+            "13": 1.0577705383300782,
+            "14": 1.001953124999998,
+            "15": 1.23046875,
+            "16": 1.142578125,
+            "17": 1.0546875,
+            "18": 0.966796875,
+            "19": 1.142578125,
+            "20": 1.142578125,
+            "21": 1.023925781249998,
+            "22": 1.142578125,
+            "23": 1.0649625778198242,
+            "24": 1.309570312499998,
+            "25": 1.0649633407592773,
+            "26": 1.142578125,
+            "27": 1.041503906249997,
+            "28": 1.0546875,
+            "29": 1.318359375,
+            "30": 1.1497983932495117,
+            "31": 1.384450912475586,
+            "32": 0.9613840103149411,
+            "33": 0.87890625,
+            "34": 1.0649617671966554,
+            "35": 1.064962387084961,
+            "36": 0.8560126304626459,
+            "37": 1.142578125,
+            "38": 0.9588821411132809,
+            "39": 1.491268730163574,
+            "40": 0.87890625,
+            "41": 0.966796875,
+            "42": 1.1512420177459703,
+            "43": 0.966796875,
+            "44": 1.0546875,
+            "45": 1.23046875,
+            "46": 1.2216172456741312,
+            "47": 0.966796875,
+            "48": 1.1454661846160878,
+            "49": 0.87890625
+          },
+          "peak_velocity": {
+            "0": 4.74609375,
+            "1": 4.74609375,
+            "2": 4.3663482666015625,
+            "3": 3.603515625,
+            "4": 4.04296875,
+            "5": 3.603515625,
+            "6": 4.482421875,
+            "7": 5.625,
+            "8": 3.779296875,
+            "9": 4.21875,
+            "10": 4.579339504241943,
+            "11": 3.603515625,
+            "12": 5.009765625,
+            "13": 4.39453125,
+            "14": 3.33984375,
+            "15": 5.537109375,
+            "16": 3.515625,
+            "17": 6.064453125,
+            "18": 4.6858367919921875,
+            "19": 3.8671875,
+            "20": 5.009765625,
+            "21": 4.579339504241943,
+            "22": 5.537806510925293,
+            "23": 5.009765625,
+            "24": 5.431310176849365,
+            "25": 5.111821413040161,
+            "26": 4.5703125,
+            "27": 6.15234375,
+            "28": 4.130859375,
+            "29": 4.921875,
+            "30": 5.9765625,
+            "31": 5.9637908935546875,
+            "32": 5.625,
+            "33": 5.3248138427734375,
+            "34": 6.85546875,
+            "35": 5.009765625,
+            "36": 4.259850978851318,
+            "37": 5.361328125,
+            "38": 5.09765625,
+            "39": 7.3828125,
+            "40": 3.427734375,
+            "41": 4.04296875,
+            "42": 5.537109375,
+            "43": 3.940361499786377,
+            "44": 4.04296875,
+            "45": 5.361328125,
+            "46": 6.922257661819458,
+            "47": 4.74609375,
+            "48": 6.328125,
+            "49": 3.779296875
+          },
+          "static_fraction": {
+            "0": 0.3090507726269316,
+            "1": 0.33832976445396146,
+            "2": 0.37708830548926014,
+            "3": 0.3156626506024096,
+            "4": 0.2925,
+            "5": 0.29745042492917845,
+            "6": 0.351123595505618,
+            "7": 0.3342857142857143,
+            "8": 0.2779291553133515,
+            "9": 0.3281653746770026,
+            "10": 0.2396694214876033,
+            "11": 0.31117021276595747,
+            "12": 0.25271739130434784,
+            "13": 0.3061797752808989,
+            "14": 0.2620320855614973,
+            "15": 0.2924281984334204,
+            "16": 0.24175824175824176,
+            "17": 0.3112745098039216,
+            "18": 0.2552083333333333,
+            "19": 0.3005464480874317,
+            "20": 0.3561643835616438,
+            "21": 0.36585365853658536,
+            "22": 0.3704663212435233,
+            "23": 0.29411764705882354,
+            "24": 0.29945054945054944,
+            "25": 0.28992628992628994,
+            "26": 0.29829545454545453,
+            "27": 0.27076923076923076,
+            "28": 0.3395225464190981,
+            "29": 0.32439678284182305,
+            "30": 0.3069544364508393,
+            "31": 0.2926829268292683,
+            "32": 0.3493975903614458,
+            "33": 0.33254716981132076,
+            "34": 0.30666666666666664,
+            "35": 0.28061224489795916,
+            "36": 0.2437357630979499,
+            "37": 0.32808398950131235,
+            "38": 0.39650872817955113,
+            "39": 0.37058823529411766,
+            "40": 0.298728813559322,
+            "41": 0.3459915611814346,
+            "42": 0.4543269230769231,
+            "43": 0.33886255924170616,
+            "44": 0.34972677595628415,
+            "45": 0.32,
+            "46": 0.3681159420289855,
+            "47": 0.34772182254196643,
+            "48": 0.4305555555555556,
+            "49": 0.355
+          },
+          "end_pose_deviation": {
+            "0": 0.25,
+            "1": 0.25,
+            "2": 0.25,
+            "3": 0.5,
+            "4": 0.1524822695035461,
+            "5": 0.25,
+            "6": 0.25,
+            "7": 0.25177304964539005,
+            "8": 0.25,
+            "9": 0.24060150375939848,
+            "10": 0.9915966386554622,
+            "11": 0.39849624060150374,
+            "12": 0.37593984962406013,
+            "13": 0.41843971631205673,
+            "14": 0.15789473684210525,
+            "15": 0.32978723404255317,
+            "16": 0.42105263157894735,
+            "17": 0.25,
+            "18": 0.25,
+            "19": 0.25,
+            "20": 0.015037593984962405,
+            "21": 0.48120300751879697,
+            "22": 0.25,
+            "23": 0.3383458646616541,
+            "24": 0.06766917293233082,
+            "25": 0.25,
+            "26": 0.25,
+            "27": 0.2730496453900709,
+            "28": 0.518796992481203,
+            "29": 0.14285714285714285,
+            "30": 0.5815602836879432,
+            "31": 0.41843971631205673,
+            "32": 0.125,
+            "33": 0.19148936170212766,
+            "34": 0.3262411347517731,
+            "35": 0.125,
+            "36": 0.19548872180451127,
+            "37": 0.25,
+            "38": 0.38652482269503546,
+            "39": 0.36879432624113473,
+            "40": 0.125,
+            "41": 0.25,
+            "42": 0.2706766917293233,
+            "43": 0.5,
+            "44": 0.3308270676691729,
+            "45": 0.125,
+            "46": 0.125,
+            "47": 0.5037593984962406,
+            "48": 0.12030075187969924,
+            "49": 0.18439716312056736
+          }
+        },
+        "flagged": {
+          "10": [
+            "end_pose_deviation"
+          ],
+          "31": [
+            "duration_s"
+          ]
+        }
+      },
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "episode 10: IQR outlier on end_pose_deviation",
+          "episode_index": 10,
+          "details": {
+            "metrics": [
+              "end_pose_deviation"
+            ]
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 31: IQR outlier on duration_s",
+          "episode_index": 31,
+          "details": {
+            "metrics": [
+              "duration_s"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "visual-quality",
+      "title": "Visual quality (blur, lighting)",
+      "verdict": "SKIP",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "pass --video to run (downloads MP4s; needs the video extra)",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "deployment-readiness",
+      "title": "Deployment readiness (would this dataset serve a policy?)",
+      "verdict": "WARN",
+      "summary": "0 blocker(s), 2 warning(s)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "WARN",
+          "message": "observation.state: 0.24% of values sit >3 sigma from the stored normalization stats - at inference the policy sees inputs outside the range it trained on (the openpi #906 failure mode)",
+          "episode_index": null,
+          "details": {
+            "feature": "observation.state",
+            "ood_fraction": 0.002377192535615438
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "action: 0.24% of values sit >3 sigma from the stored normalization stats - at inference the policy sees inputs outside the range it trained on (the openpi #906 failure mode)",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "ood_fraction": 0.0023941724822984056
+          }
+        }
+      ]
+    }
+  ]
+}
