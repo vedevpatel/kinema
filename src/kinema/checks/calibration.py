@@ -1,21 +1,31 @@
 """Check 4 - calibration drift.
 
-The differentiator. On frames where the arm is holding still, action
-(commanded position) and observation.state (measured position) should
-agree. A steady offset means leader/follower calibration drifted - the
-real-world case behind LeRobot PR #3762 was a 17-degree offset on one
-joint that survived recording AND training. No shipped tool checks this.
+On frames where a joint holds still, its command (action) and measured
+position (observation.state) should agree. The real-world case behind
+LeRobot PR #3762 was a 17-degree offset on one joint that survived
+recording AND training.
 
-The comparison only means something when action[j] and state[j] are the
-same quantity. Equal dims do not imply that: many datasets pair an
-end-effector pose state with joint (or delta) actions. A dim is compared
-only when (a) info.json names do not contradict it, and (b) the data
-agrees - a position command tracks its measured position (high
-correlation, similar range). A constant calibration offset changes
-neither, so the guard does not hide real drift.
+Per comparable joint, the still-frame offset (action - state) is fit as a
+line over the joint's position (both in units of its range):
 
-Grippers are excluded: a gripper commanded shut on an object never
-reaches the commanded position, so a steady offset is normal there.
+- intercept: a constant offset - leader/follower calibration drift.
+- slope: the offset grows across the range - a scale (gear ratio / unit)
+  calibration error, where command and measurement disagree on how far a
+  unit of motion is.
+- a large offset the line does not explain (low R^2) is load, contact or
+  a joint limit: INFO, not a calibration verdict.
+
+Which dims are comparable: action[j] must be a position command for the
+same joint as state[j]. Equal dims do not imply that - many datasets pair
+an end-effector pose state with joint or delta actions. A dim is compared
+when its names do not contradict the pairing and the data agrees
+(correlation, similar range); a calibration error changes neither. Every
+other dim is classified (delta / velocity command, different space, ...)
+so a skip says why.
+
+Grippers get their own test: a gripper commanded shut on an object never
+gets there, so only the FREE end (where nothing blocks it - the end with
+the smaller still-frame offset) says anything about calibration.
 """
 
 from __future__ import annotations
@@ -23,165 +33,228 @@ from __future__ import annotations
 import numpy as np
 
 from kinema.checks.base import Check, CheckConfig, CheckResult, Finding, Severity
-from kinema.stats import canonical, gripper_dims, is_generic
+from kinema.stats import action_gripper_dims, canonical, gripper_dims, is_generic, is_velocity
 
 
-def _comparable_dims(ctx, cfg) -> tuple[list[int], dict[int, str]]:
-    """Dims where action and state are the same physical quantity, plus a
-    reason for every excluded dim."""
-    n = ctx.state.shape[1]
+def _space_of(ctx, i: int, j: int) -> str:
+    """Best guess at what action[j] is when it does not track state[i]."""
+    an = ctx.action_names
+    name = an[j] if an and len(an) == ctx.action.shape[1] else ""
+    if is_velocity(name):
+        return "velocity command"
+    s, a = ctx.state[:, i], ctx.action[:, j]
+    # delta commands correlate with the step in state - the next step
+    # (target = state + action) or the one that produced this frame
+    for lag in (0, 1):
+        xs, ys = [], []
+        for ep in ctx.episode_ids()[:200]:
+            rows = ctx.rows_for(ep)
+            if len(rows) < 3:
+                continue
+            d = np.diff(s[rows])
+            xs.append(a[rows][1:] if lag else a[rows][:-1])
+            ys.append(d)
+        if not xs:
+            break
+        x, y = np.concatenate(xs), np.concatenate(ys)
+        ok = np.isfinite(x) & np.isfinite(y)
+        if ok.sum() > 20 and np.std(x[ok]) > 0 and np.std(y[ok]) > 0:
+            if abs(float(np.corrcoef(x[ok], y[ok])[0, 1])) >= 0.7:
+                return "delta command"
+    return "different space"
+
+
+def _pairs(ctx) -> list[tuple[int, int]]:
+    """(state index, action index) candidates: same index when the vectors
+    match in size, otherwise by name (an 8-dim pose+quaternion state still
+    shares x/y/z/gripper with a 7-dim action)."""
+    ns, na = ctx.state.shape[1], ctx.action.shape[1]
+    if ns == na:
+        return [(j, j) for j in range(ns)]
     sn, an = ctx.state_names, ctx.action_names
+    if not (sn and an and len(sn) == ns and len(an) == na):
+        return []
+    by_name: dict[str, int] = {}
+    for i, nm in enumerate(sn):
+        if not is_generic([nm]):
+            by_name.setdefault(canonical(nm), i)
+    out = []
+    for j, nm in enumerate(an):
+        i = by_name.get(canonical(nm)) if not is_generic([nm]) else None
+        if i is not None:
+            out.append((i, j))
+    return out
+
+
+def _comparable_dims(ctx, cfg):
+    """(joint pairs, gripper pairs, excluded-with-reason keyed by action index)."""
+    sn, an = ctx.state_names, ctx.action_names
+    ns, na = ctx.state.shape[1], ctx.action.shape[1]
+    have = sn is not None and an is not None and len(sn) == ns and len(an) == na
+    named_grip_s, named_grip_a = gripper_dims(sn, ns), gripper_dims(an, na)
     excluded: dict[int, str] = {}
-    grip = gripper_dims(sn, n) | gripper_dims(an, n)
-    named = (
-        sn is not None and an is not None and len(sn) == n and len(an) == n
-        and not is_generic(sn) and not is_generic(an)
-    )
-    keep = []
-    for j in range(n):
-        if j in grip:
-            excluded[j] = "gripper"
+    joints, grippers = [], []
+    for i, j in _pairs(ctx):
+        if have and not is_generic([sn[i]]) and not is_generic([an[j]]) \
+                and canonical(sn[i]) != canonical(an[j]):
+            excluded[j] = f"different quantities (state {sn[i]!r}, action {an[j]!r})"
             continue
-        if named and canonical(sn[j]) != canonical(an[j]):
-            excluded[j] = f"state {sn[j]!r} vs action {an[j]!r}"
-            continue
-        s, a = ctx.state[:, j], ctx.action[:, j]
+        s, a = ctx.state[:, i], ctx.action[:, j]
         ok = np.isfinite(s) & np.isfinite(a)
         if ok.sum() < 20 or np.ptp(s[ok]) < 1e-8 or np.ptp(a[ok]) < 1e-8:
             excluded[j] = "no motion"
             continue
         corr = float(np.corrcoef(s[ok], a[ok])[0, 1])
         ratio = float(np.ptp(a[ok]) / np.ptp(s[ok]))
-        if not (corr >= cfg.calib_min_corr and 0.5 <= ratio <= 2.0):
-            excluded[j] = f"action does not track state (corr {corr:.2f}, range ratio {ratio:.2f})"
+        tracks = abs(corr) >= cfg.calib_min_corr and 0.5 <= ratio <= 2.0
+        if i in named_grip_s or j in named_grip_a:
+            # grippers track loosely (blocked on objects); require same units
+            if 0.5 <= ratio <= 2.0 and corr >= 0.5:
+                grippers.append((i, j))
+            else:
+                excluded[j] = "gripper in different units"
             continue
-        keep.append(j)
-    return keep, excluded
+        if not tracks or corr < 0:
+            excluded[j] = _space_of(ctx, i, j)
+            continue
+        joints.append((i, j))
+    return joints, grippers, excluded
+
+
+def _still_rows(ctx, i: int) -> np.ndarray:
+    """Row indices where state dim i holds still (its stillest ~40% of steps)."""
+    out = []
+    for ep in ctx.episode_ids():
+        rows = ctx.rows_for(ep)
+        if len(rows) < 10:
+            continue
+        ds = np.abs(np.diff(ctx.state[rows, i]))
+        thr = np.nanpercentile(ds, 40)
+        out.append(rows[1:][ds <= thr])
+    return np.concatenate(out) if out else np.empty(0, dtype=int)
 
 
 class CalibrationDriftCheck(Check):
     id = "calibration-drift"
-    title = "Calibration drift (action vs state offset on still frames)"
+    title = "Calibration drift (action vs state on still frames)"
+
+    def _joint(self, ctx, cfg, pair, inferred_grip):
+        i, j = pair
+        s, a = ctx.state[:, i], ctx.action[:, j]
+        rng = max(float(np.nanmax(s) - np.nanmin(s)), 1e-8)
+        rows = _still_rows(ctx, i)
+        rows = rows[np.isfinite(s[rows]) & np.isfinite(a[rows])]
+        if len(rows) < 20:
+            return None, None
+        u = (s[rows] - np.nanmedian(s)) / rng  # position, in units of the range
+        off = (a[rows] - s[rows]) / rng  # offset, in units of the range
+        # least-squares line off = b0 + b1 * u
+        A = np.stack([np.ones_like(u), u], axis=1)
+        (b0, b1), *_ = np.linalg.lstsq(A, off, rcond=None)
+        resid = off - (b0 + b1 * u)
+        var = float(np.var(off))
+        r2 = 1.0 - float(np.var(resid)) / var if var > 1e-12 else 1.0
+        mean_off = float(np.mean(off))
+        info = {"joint": j, "offset_fraction": mean_off, "scale_error": float(b1),
+                "r2": r2, "still_frames": int(len(rows))}
+        name = f" ({ctx.action_names[j]})" if ctx.action_names and len(ctx.action_names) == ctx.action.shape[1] else ""
+        findings = []
+        # constant offset: large mean offset that does not vary across the range
+        if abs(mean_off) > cfg.calib_warn_range_frac and abs(b1) < max(cfg.calib_scale_warn, abs(mean_off)):
+            sev = Severity.FAIL if abs(mean_off) > cfg.calib_fail_range_frac else Severity.WARN
+            findings.append((sev, f"joint {j}{name}: commanded and measured position disagree by "
+                             f"{mean_off:+.1%} of its range on still frames, the same across its "
+                             "range - leader/follower calibration drift; the policy learns a "
+                             "shifted target", {**info, "kind": "offset"}))
+        # scale error: offset grows linearly with position, and the line explains it
+        elif abs(b1) > cfg.calib_scale_warn and r2 >= cfg.calib_scale_min_r2:
+            sev = Severity.FAIL if abs(b1) > cfg.calib_scale_fail else Severity.WARN
+            findings.append((sev, f"joint {j}{name}: command and measurement drift apart across "
+                             f"the range ({b1:+.1%} per full range, R^2 {r2:.2f}) - a scale "
+                             "calibration error (gear ratio or units), not a fixed offset",
+                             {**info, "kind": "scale"}))
+        elif abs(mean_off) > cfg.calib_warn_range_frac or abs(b1) > cfg.calib_scale_warn:
+            findings.append((Severity.INFO, f"joint {j}{name}: still-frame offset {mean_off:+.1%} "
+                             f"of range varies irregularly with position (R^2 {r2:.2f}) - load, "
+                             "contact or a joint limit rather than calibration",
+                             {**info, "kind": "irregular"}))
+        if j in inferred_grip:  # unnamed dim in a gripper slot: do not gate on it
+            findings = [(Severity.INFO, m + " [dim looks like an unnamed gripper: not gated]", d)
+                        for sev, m, d in findings]
+        return findings, info
+
+    def _gripper(self, ctx, cfg, pair):
+        i, j = pair
+        s, a = ctx.state[:, i], ctx.action[:, j]
+        rng = max(float(np.nanmax(s) - np.nanmin(s)), 1e-8)
+        lo, hi = np.nanpercentile(a, [1, 99])
+        band = 0.15 * (hi - lo)
+        rows = _still_rows(ctx, i)
+        rows = rows[np.isfinite(s[rows]) & np.isfinite(a[rows])]
+        sides = []
+        for label, sel in (("low", a[rows] <= lo + band), ("high", a[rows] >= hi - band)):
+            r = rows[sel]
+            if len(r) >= 20:
+                sides.append((label, float(np.median((a[r] - s[r]) / rng)), len(r)))
+        if not sides:
+            return None, None
+        label, off, nfr = min(sides, key=lambda x: abs(x[1]))  # the free end
+        info = {"joint": j, "free_end": label, "offset_fraction": off, "still_frames": nfr,
+                "kind": "gripper"}
+        if abs(off) > cfg.calib_gripper_warn:
+            name = f" ({ctx.action_names[j]})" if ctx.action_names else ""
+            return [(Severity.WARN, f"gripper {j}{name}: even at its free ({label}) end the "
+                     f"measured position sits {off:+.1%} of its range off the command - gripper "
+                     "calibration drift", info)], info
+        return [], info
 
     def run(self, ctx, cfg: CheckConfig) -> CheckResult:
         res = CheckResult(self.id, self.title)
         state, action = ctx.state, ctx.action
         if state is None or action is None:
             return self.skip("observation.state or action column missing")
-        if state.shape[1] != action.shape[1]:
+        if state.shape[1] != action.shape[1] and not _pairs(ctx):
             return self.skip(
-                f"state dim {state.shape[1]} != action dim {action.shape[1]} "
-                "(cannot compare joints)"
+                f"state dim {state.shape[1]} != action dim {action.shape[1]} and no "
+                "names to pair them by"
             )
-
-        n_joints = state.shape[1]
-        joints, excluded = _comparable_dims(ctx, cfg)
-        if not joints:
-            reasons = sorted(set(r.split(" (")[0] for r in excluded.values()))
-            return self.skip(
-                "no dim where action is a position command for the same joint "
-                f"({'; '.join(reasons)})"
-            )
-        state_range = np.maximum(1e-8, np.nanmax(state, axis=0) - np.nanmin(state, axis=0))
-
-        # Per joint, measure the mean action-state offset on the frames where
-        # THAT joint is holding still (its stillest quartile of motion).
-        # Requiring all joints still at once throws away nearly every frame.
-        # Offsets are also split by where in its range the joint sits: a
-        # calibration error is position-independent, contact/load is not.
-        offsets = np.zeros(n_joints)
-        counts = np.zeros(n_joints, dtype=np.int64)
-        mid = np.nanmedian(state, axis=0)
-        half_sum = np.zeros((n_joints, 2))
-        half_n = np.zeros((n_joints, 2), dtype=np.int64)
-        for ep in ctx.episode_ids():
-            rows = ctx.rows_for(ep)
-            if len(rows) < 10:
-                continue
-            s = state[rows]
-            ds = np.abs(np.diff(s, axis=0))
-            vel_thresh = np.maximum(1e-8, np.nanpercentile(ds, 25, axis=0))
-            still = ds < vel_thresh  # (n-1, joints), per-joint stillness
-            idx = rows[1:]
-            diff = action[idx] - state[idx]
-            for j in joints:
-                m = still[:, j] & np.isfinite(diff[:, j])
-                if m.sum() >= 5:
-                    offsets[j] += diff[m, j].sum()
-                    counts[j] += int(m.sum())
-                    hi = state[idx, j] >= mid[j]
-                    for h, sel in enumerate((m & ~hi, m & hi)):
-                        half_sum[j, h] += diff[sel, j].sum()
-                        half_n[j, h] += int(sel.sum())
-
-        usable = counts >= 20
-        if not usable.any():
+        joints, grippers, excluded = _comparable_dims(ctx, cfg)
+        _, inferred_grip = action_gripper_dims(ctx)
+        if not joints and not grippers:
+            kinds = sorted({r.split(" (")[0] for r in excluded.values()})
+            return self.skip("no dim where action is a position command for the same joint: "
+                             + "; ".join(f"{sum(1 for r in excluded.values() if r.startswith(k))} "
+                                         f"{k}" for k in kinds))
+        per_joint = {}
+        for pair in joints:
+            fs, info = self._joint(ctx, cfg, pair, inferred_grip)
+            if info:
+                per_joint[str(pair[1])] = info
+            for sev, msg, det in fs or []:
+                res.findings.append(Finding(self.id, sev, msg, details=det))
+        for pair in grippers:
+            fs, info = self._gripper(ctx, cfg, pair)
+            if info:
+                per_joint[str(pair[1])] = info
+            for sev, msg, det in fs or []:
+                res.findings.append(Finding(self.id, sev, msg, details=det))
+        if not per_joint:
             return self.skip("not enough still frames to measure calibration")
 
-        mean_offset = np.where(usable, offsets / np.maximum(1, counts), 0.0)
-        frac = np.abs(mean_offset) / state_range
-        still_share = float(counts.max()) / max(1, ctx.row_count)
-        half_mean = half_sum / np.maximum(1, half_n)
-
-        worst_j = int(np.argmax(np.where(usable, frac, 0.0)))
-        for j in joints:
-            if not usable[j]:
-                continue
-            f = float(frac[j])
-            if f > cfg.calib_fail_range_frac:
-                sev = Severity.FAIL
-            elif f > cfg.calib_warn_range_frac:
-                sev = Severity.WARN
-            else:
-                continue
-            consistent = True
-            if (half_n[j] >= 10).all():
-                lo, hi = half_mean[j]
-                consistent = (np.sign(lo) == np.sign(hi)) and (
-                    min(abs(lo), abs(hi)) >= 0.5 * max(abs(lo), abs(hi))
-                )
-            if not consistent:
-                # offset only in part of the range: load, contact or a joint
-                # limit - not a calibration shift. Report, do not gate.
-                sev = Severity.INFO
-            res.findings.append(
-                Finding(
-                    self.id,
-                    sev,
-                    f"joint {j}: mean action-state offset {mean_offset[j]:+.4g} on still "
-                    f"frames = {f:.1%} of its range. "
-                    + (
-                        "Leader/follower calibration has drifted; the policy is learning "
-                        "a shifted target."
-                        if consistent
-                        else f"The offset depends on position ({half_mean[j, 0]:+.3g} low vs "
-                        f"{half_mean[j, 1]:+.3g} high), which points to load or contact, "
-                        "not calibration."
-                    ),
-                    details={
-                        "joint": j,
-                        "mean_offset": float(mean_offset[j]),
-                        "range_fraction": f,
-                        "still_frames": int(counts[j]),
-                        "position_independent": bool(consistent),
-                    },
-                )
-            )
         res.details = {
-            "mean_offset_per_joint": [float(x) for x in mean_offset],
-            "range_fraction_per_joint": [float(x) for x in frac],
-            "still_frame_share": still_share,
-            "compared_joints": joints,
+            "per_joint": per_joint,
+            "compared_joints": [j for _, j in joints],
+            "compared_grippers": [j for _, j in grippers],
             "excluded_joints": {str(k): v for k, v in excluded.items()},
         }
-        note = f"; {len(excluded)} dim(s) not comparable" if excluded else ""
+        worst = max(per_joint.values(), key=lambda d: abs(d.get("offset_fraction", 0)))
+        kinds = sorted({r.split(" (")[0] for r in excluded.values()})
+        note = ("; not compared: " + ", ".join(
+            f"{sum(1 for r in excluded.values() if r.startswith(k))} {k}" for k in kinds)) if kinds else ""
         if not any(f.severity >= Severity.WARN for f in res.findings):
-            res.summary = (
-                f"max joint offset {float(frac[worst_j]):.1%} of range "
-                f"(joint {worst_j}) over {len(joints)} comparable joints{note}"
-            )
+            res.summary = (f"{len(joints)} joint(s) + {len(grippers)} gripper(s) agree; worst offset "
+                           f"{worst['offset_fraction']:+.1%} of range (joint {worst['joint']}){note}")
         else:
-            res.summary = (
-                f"worst joint {worst_j}: offset {float(frac[worst_j]):.1%} of its range{note}"
-            )
+            n_bad = sum(1 for f in res.findings if f.severity >= Severity.WARN)
+            res.summary = f"{n_bad} joint(s) miscalibrated{note}"
         return res

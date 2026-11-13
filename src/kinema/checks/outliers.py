@@ -7,8 +7,9 @@ deleted before training.
 
 Only the harmful direction is flagged (high jerk is a glitch, low jerk is
 smooth; only duration is suspicious both ways). Velocity and jerk are
-measured per dim in units of that dim's std, without grippers, so a dim
-with large units or an open/shut toggle does not dominate. Duration and
+measured per dim in units of that dim's std, without grippers or velocity
+commands, so a dim with large units, an open/shut toggle or a base that
+starts and stops does not dominate. Duration and
 end pose are compared within a task: a multi-task dataset legitimately
 ends in different places. An episode is a WARN when independent kinds of
 evidence agree, or when one metric is far out (Tukey k=3).
@@ -19,7 +20,7 @@ from __future__ import annotations
 import numpy as np
 
 from kinema.checks.base import Check, CheckConfig, CheckResult, Finding, Severity
-from kinema.stats import gripper_dims
+from kinema.stats import action_gripper_dims, velocity_dims
 
 # metric -> (which side is harmful, evidence family)
 _METRICS = {
@@ -99,7 +100,10 @@ class OutlierEpisodesCheck(Check):
         if action is not None:
             n = action.shape[1]
             std = np.nanstd(action, axis=0)
-            grip = gripper_dims(ctx.action_names, n)
+            named_grip, inferred_grip = action_gripper_dims(ctx)
+            # grippers toggle and velocity commands step on/off by design:
+            # neither belongs in a jerk / peak-velocity outlier score
+            grip = named_grip | inferred_grip | velocity_dims(ctx.action_names, n)
             motion_dims = [j for j in range(n) if std[j] > 1e-8 and j not in grip
                            and len(np.unique(action[:, j])) > 10]
             scale = np.where(std > 1e-8, std, 1.0)

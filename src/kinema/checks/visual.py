@@ -22,7 +22,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-import pyarrow.parquet as pq
 
 from kinema.checks.base import Check, CheckConfig, CheckResult, Finding, Severity
 
@@ -66,39 +65,19 @@ def _segments(ctx) -> list[_Segment]:
             out.append(_Segment(ep, p.parent.name, p, 0.0, None))
     if out:
         return out
-    # v3.0: shared files, segments from meta/episodes
+    # v3.0: shared files, segments recorded in meta/episodes (loaded by the loader)
     template = ctx.info.get("video_path") or ""
-    ep_dir = root / "meta" / "episodes"
-    if not template or not ep_dir.is_dir():
+    if not template:
         return out
-    for f in sorted(ep_dir.glob("**/*.parquet")):
-        names = pq.read_schema(f).names
-        cams = sorted({c.split("/")[1] for c in names if c.startswith("videos/") and c.count("/") == 2})
-        if not cams:
-            continue
-        cols = ["episode_index"] + [
-            f"videos/{cam}/{k}" for cam in cams
-            for k in ("chunk_index", "file_index", "from_timestamp", "to_timestamp")
-            if f"videos/{cam}/{k}" in names
-        ]
-        t = pq.read_table(f, columns=cols).to_pydict()
-        for i, ep in enumerate(t["episode_index"]):
-            if ep not in wanted:
+    for ep in sorted(wanted):
+        for cam, (chunk, file_idx, start, end) in ctx.video_segments.get(ep, {}).items():
+            try:
+                rel = template.format(video_key=cam, chunk_index=chunk, file_index=file_idx)
+            except (KeyError, IndexError, ValueError):
                 continue
-            for cam in cams:
-                try:
-                    rel = template.format(
-                        video_key=cam,
-                        chunk_index=int(t[f"videos/{cam}/chunk_index"][i]),
-                        file_index=int(t[f"videos/{cam}/file_index"][i]),
-                    )
-                    start = float(t[f"videos/{cam}/from_timestamp"][i])
-                    end = float(t[f"videos/{cam}/to_timestamp"][i])
-                except (KeyError, TypeError, ValueError):
-                    continue
-                path = root / rel
-                if path.exists():
-                    out.append(_Segment(int(ep), cam, path, start, end))
+            path = root / rel
+            if path.exists():
+                out.append(_Segment(ep, cam, path, start, end))
     return out
 
 

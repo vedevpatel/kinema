@@ -6,7 +6,7 @@ import numpy as np
 
 from kinema.checks.base import Check, CheckConfig, CheckResult, Finding, Severity
 from kinema.dataset import ACTION_KEY, STATE_KEY
-from kinema.stats import gripper_dims
+from kinema.stats import action_gripper_dims
 
 
 class ActionSaturationCheck(Check):
@@ -23,7 +23,8 @@ class ActionSaturationCheck(Check):
         if action is None:
             return self.skip("action column missing")
         n = action.shape[1]
-        grip = gripper_dims(ctx.action_names, n)
+        named_grip, inferred_grip = action_gripper_dims(ctx)
+        grip = named_grip | inferred_grip
         finite = np.isfinite(action).all(axis=1)
         a = action[finite]
         if len(a) < 20:

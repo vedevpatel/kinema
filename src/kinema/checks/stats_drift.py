@@ -102,17 +102,27 @@ class StatsDriftCheck(Check):
                 sev = Severity.WARN
             else:
                 continue
-            # a stored std that is too LARGE only shrinks inputs; too small
-            # amplifies them (the dangerous direction). Cap the former at WARN.
+            # A stored std that is too SMALL amplifies values (always serious).
+            # Too LARGE shrinks them: harmless-ish for state inputs (WARN at
+            # most), but for actions the normalized targets shrink and the
+            # loss on that dim drops by ratio^2 - at 3x the policy all but
+            # ignores it.
+            oversize_note = ""
             if stat == "std" and ref["std"][dim] > actual["std"][dim]:
-                sev = min(sev, Severity.WARN)
+                ratio = ref["std"][dim] / max(actual["std"][dim], 1e-12)
+                if feat == ACTION_KEY and ratio >= cfg.stats_std_oversize_fail:
+                    sev = Severity.FAIL
+                    oversize_note = (f" Stored std is {ratio:.1f}x the real one: the loss on "
+                                     f"this action dim is down-weighted ~{ratio**2:.0f}x.")
+                else:
+                    sev = min(sev, Severity.WARN)
             res.findings.append(
                 Finding(
                     self.id,
                     sev,
                     f"{feat}.{stat}: {ref_label} is off by {_fmt(stat, e)} on dim {dim} "
                     f"(stored {ref[stat][dim]:.6g}, {what} {actual[stat][dim]:.6g}). "
-                    "Normalization at training and inference will disagree.",
+                    "Normalization at training and inference will disagree." + oversize_note,
                     details={"feature": feat, "stat": stat, "dim": dim, "error": e,
                              "unit": _UNIT[stat], "reference": ref_label},
                 )
@@ -170,6 +180,26 @@ class StatsDriftCheck(Check):
                     # no exact reference for a subset: only a value outside the
                     # stored range is conclusive (the stats cannot describe it)
                     mode = "containment"
+                    # a sample's mean/std differ from the whole dataset's, but
+                    # not by multiples: gross corruption is still visible
+                    if "std" in stored and stored["std"].shape == actual["std"].shape:
+                        sd_s, sd_a = stored["std"], actual["std"]
+                        live = (sd_s > 1e-6) & (sd_a > 1e-6)
+                        ratio = np.where(live, np.maximum(sd_s, sd_a) / np.maximum(np.minimum(sd_s, sd_a), 1e-12), 1.0)
+                        shift = np.where(live, np.abs(actual["mean"] - stored["mean"]) / np.maximum(sd_s, 1e-12), 0.0)
+                        for kind, arr, lim, fmt in (("std", ratio, cfg.stats_sample_std_ratio, "{:.1f}x"),
+                                                    ("mean", shift, cfg.stats_sample_mean_sigma, "{:.1f} std devs")):
+                            d = int(np.argmax(arr))
+                            if arr[d] > lim:
+                                res.findings.append(Finding(
+                                    self.id, Severity.WARN,
+                                    f"{feat}.{kind}: the sampled data is off the stored stats by "
+                                    f"{fmt.format(float(arr[d]))} on dim {d} - far more than sampling "
+                                    "explains; the stored stats look wrong (sampled audit: load the "
+                                    "full dataset to confirm)",
+                                    details={"feature": feat, "stat": kind, "dim": d,
+                                             "error": float(arr[d]), "reference": "sampled"},
+                                ))
                     if "min" in stored and "max" in stored and stored["min"].shape == actual["min"].shape:
                         rng = np.maximum(stored["max"] - stored["min"], 1e-8)
                         over = np.maximum(stored["min"] - actual["min"], actual["max"] - stored["max"]) / rng

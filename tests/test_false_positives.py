@@ -146,16 +146,41 @@ def test_v21_episode_stats_count_as_stats(base, tmp_path):
 
 # --- calibration-drift -------------------------------------------------------
 
-def test_gripper_offset_is_not_calibration_drift(base):
-    # ALOHA / SO-100: a gripper commanded shut on an object never gets there.
-    def squeeze(s, a, ep):
-        a = a.copy()
-        a[:, 5] = s[:, 5] - 0.4 * np.ptp(s[:, 5])
-        return s, a
-    _rewrite_data(base, squeeze)
+def _gripper(s, a, closed_offset, open_offset):
+    """Gripper dim 5 that alternates open/closed; offsets in units of its range."""
+    s, a = s.copy(), a.copy()
+    t = np.arange(len(s))
+    closed = (t // 15) % 2 == 0
+    s[:, 5] = np.where(closed, 0.0, 1.0) + 0.002 * np.sin(t)
+    a[:, 5] = np.where(closed, 0.0 + closed_offset, 1.0 + open_offset)
+    return s, a
+
+
+def test_gripper_blocked_on_object_is_not_calibration_drift(base):
+    # ALOHA / SO-100: commanded shut on an object, the gripper never gets
+    # there - a big offset at the closed end only
+    _rewrite_data(base, lambda s, a, ep: _gripper(s, a, closed_offset=-0.4, open_offset=0.0))
     res = run("calibration-drift", load_dataset(str(base)))
     assert gated(res) == []
-    assert res.details["excluded_joints"]["5"] == "gripper"
+    assert 5 in res.details["compared_grippers"]
+
+
+def test_gripper_offset_at_its_free_end_is_drift(base):
+    _rewrite_data(base, lambda s, a, ep: _gripper(s, a, closed_offset=-0.4, open_offset=0.3))
+    res = run("calibration-drift", load_dataset(str(base)))
+    assert any(f.severity == Severity.WARN and f.details.get("kind") == "gripper" for f in res.findings)
+
+
+def test_scale_error_is_told_apart_from_offset(base):
+    def scale(s, a, ep):
+        a = a.copy()
+        mid = np.median(s[:, 1])
+        a[:, 1] = mid + 1.25 * (s[:, 1] - mid)  # command overshoots by 25% across the range
+        return s, a
+    _rewrite_data(base, scale)
+    res = run("calibration-drift", load_dataset(str(base)))
+    hit = [f for f in res.findings if f.details.get("joint") == 1]
+    assert hit and hit[0].details["kind"] == "scale" and hit[0].severity >= Severity.WARN
 
 
 def test_ee_state_vs_joint_action_is_not_compared(base):
@@ -176,7 +201,8 @@ def test_unnamed_delta_actions_are_not_compared(base):
         return s, np.r_[np.zeros((1, s.shape[1])), np.diff(s, axis=0)]
     _rewrite_data(base, delta)
     _set_names(base, [f"motor_{i}" for i in range(6)], [f"motor_{i}" for i in range(6)])
-    assert run("calibration-drift", load_dataset(str(base))).skipped
+    res = run("calibration-drift", load_dataset(str(base)))
+    assert res.skipped and "delta command" in res.skip_reason
 
 
 def test_real_calibration_drift_still_caught_with_generic_names(tmp_path):
@@ -458,3 +484,86 @@ def test_brief_command_blip_is_not_a_dead_motor(base):
     _rewrite_data(base, blip)
     res = run("stuck-actuator", load_dataset(str(base)))
     assert not any(f.details.get("kind") == "not_followed" and 5 in f.details["episodes"] for f in res.findings)
+
+
+def test_oversized_action_std_fails_but_state_only_warns(base):
+    p = base / "meta" / "stats.json"
+    st = json.loads(p.read_text())
+    st["action"]["std"] = [v * 4 for v in st["action"]["std"]]
+    st["observation.state"]["std"] = [v * 4 for v in st["observation.state"]["std"]]
+    p.write_text(json.dumps(st))
+    res = run("stats-drift", load_dataset(str(base)))
+    sev = {f.details["feature"]: f.severity for f in res.findings if f.details.get("stat") == "std"}
+    assert sev["action"] == Severity.FAIL and "down-weighted" in [f.message for f in res.findings
+                                                                    if f.details.get("feature") == "action"
+                                                                    and f.details.get("stat") == "std"][0]
+    assert sev["observation.state"] == Severity.WARN
+
+
+def test_video_segment_shorter_than_data_fails(base):
+    cam = "observation.images.top"
+    mf = base / "meta" / "episodes" / "chunk-000" / "file-000.parquet"
+    m = pq.read_table(mf).to_pydict()
+    n = len(m["episode_index"])
+    m[f"videos/{cam}/chunk_index"] = [0] * n
+    m[f"videos/{cam}/file_index"] = [0] * n
+    m[f"videos/{cam}/from_timestamp"] = [e * 6.0 for e in m["episode_index"]]
+    m[f"videos/{cam}/to_timestamp"] = [e * 6.0 + (5.0 if e == 3 else 6.0) for e in m["episode_index"]]
+    pq.write_table(pa.table(m), mf)
+    res = run("dropped-frames", load_dataset(str(base)))
+    bad = [f for f in res.findings if f.details.get("camera") == cam]
+    assert len(bad) == 1 and bad[0].severity == Severity.FAIL and bad[0].details["episodes"] == [3]
+
+
+# --- duplicates ---------------------------------------------------------------
+
+def _paste(a, ep, src, dst, start, n):
+    """Copy n frames of episode src (from frame start) into episode dst."""
+    a = a.copy()
+    rs, rd = np.flatnonzero(ep == src), np.flatnonzero(ep == dst)
+    a[rd[start:start + n]] = a[rs[start:start + n]]
+    return a
+
+
+def test_partial_copy_is_flagged(base):
+    _rewrite_data(base, lambda s, a, ep: (s, _paste(a, ep, 2, 9, 10, 30)))
+    res = run("duplicate-and-leakage", load_dataset(str(base)))
+    assert any(f.details.get("kind") == "partial" and f.details["episodes"] == [2, 9] for f in res.findings)
+
+
+def test_shared_rest_pose_is_not_a_partial_copy(base):
+    # episodes that sit in the same home pose share identical frames - not a copy
+    def home(s, a, ep):
+        a = a.copy()
+        for e in (2, 9):
+            a[np.flatnonzero(ep == e)[:30]] = 0.123
+        return s, a
+    _rewrite_data(base, home)
+    res = run("duplicate-and-leakage", load_dataset(str(base)))
+    assert not any(f.details.get("kind") == "partial" for f in res.findings)
+
+
+def test_copy_across_declared_splits_is_leakage(base):
+    _rewrite_data(base, lambda s, a, ep: (s, _paste(a, ep, 2, 20, 0, 60)))
+    p = base / "meta" / "info.json"
+    info = json.loads(p.read_text())
+    info["splits"] = {"train": "0:18", "val": "18:24"}
+    p.write_text(json.dumps(info))
+    res = run("duplicate-and-leakage", load_dataset(str(base)))
+    leak = [f for f in res.findings if f.details.get("kind") == "leakage"]
+    assert leak and leak[0].details["pairs"] == [[2, 20]]
+
+
+def test_velocity_command_steps_are_not_outliers(base):
+    # Dongkkka linear_x: a base velocity command steps 0 -> v -> 0 by design
+    def steps(s, a, ep):
+        a = a.copy()
+        a[:, 4] = 0.0
+        rows = np.flatnonzero(ep == 7)
+        a[rows[20:40], 4] = 5.0
+        return s, a
+    _rewrite_data(base, steps)
+    _set_names(base, ["j0", "j1", "j2", "j3", "linear_x", "gripper"],
+               ["j0", "j1", "j2", "j3", "linear_x", "gripper"])
+    res = run("outlier-episodes", load_dataset(str(base)))
+    assert not any(f.episode_index == 7 and f.severity == Severity.WARN for f in res.findings)

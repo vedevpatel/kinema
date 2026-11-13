@@ -11,7 +11,7 @@ from __future__ import annotations
 import numpy as np
 
 from kinema.checks.base import Check, CheckConfig, CheckResult, Finding, Severity
-from kinema.stats import canonical, gripper_dims, is_generic
+from kinema.stats import action_gripper_dims, canonical, is_generic
 
 _PICK_WORDS = ("pick", "place", "grasp", "grab", "lift")
 
@@ -107,6 +107,7 @@ class IdleSegmentsCheck(Check):
                 )
             )
         n_tail = sum(1 for f in res.findings if f.severity == Severity.INFO)
+        basis = "" if state is not None else " (no state recorded: judged from commands alone)"
         if not n_flagged:
             res.summary = (
                 f"no episode starts idle or idles >= {cfg.idle_warn_fraction:.0%}"
@@ -114,6 +115,7 @@ class IdleSegmentsCheck(Check):
             )
         else:
             res.summary = f"{n_flagged}/{n_eps} episodes flagged; worst {worst_frac:.0%} idle"
+        res.summary += basis
         return res
 
 
@@ -133,7 +135,8 @@ class StuckActuatorCheck(Check):
         if action is None:
             return self.skip("action column missing")
         n = action.shape[1]
-        grip = gripper_dims(ctx.action_names, n)
+        named_grip, inferred_grip = action_gripper_dims(ctx)
+        grip = named_grip | inferred_grip
         lo = np.nanpercentile(action, 1, axis=0)
         hi = np.nanpercentile(action, 99, axis=0)
         glob = hi - lo
@@ -187,7 +190,7 @@ class StuckActuatorCheck(Check):
             ))
 
         # 3. pick/place task where the gripper never actuates
-        g_dims = sorted(grip) if grip else ([n - 1] if ctx.action_names is None else [])
+        g_dims = sorted(grip)
         for g in g_dims:
             if g not in live:
                 continue

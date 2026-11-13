@@ -172,25 +172,51 @@ class DroppedFramesCheck(Check):
                         details={"meta_length": meta.length, "rows": int(len(rows))},
                     )
                 )
-        if cfg.video:
-            res.findings.append(
-                Finding(
-                    self.id,
-                    Severity.INFO,
-                    "video frame-count cross-check not implemented in v0 "
-                    "(parquet side verified)",
-                )
-            )
-        else:
-            res.findings.append(
-                Finding(
-                    self.id,
-                    Severity.INFO,
-                    "video frame counts not checked (pass --video to include MP4s)",
-                )
-            )
-        if n_gap == n_meta_mismatch == n_dup == 0:
-            res.summary = "frame_index contiguous and episode lengths match the data"
+        # video segment length vs frames in the data, from metadata alone
+        # (v3 records every episode's [from, to) per camera). A segment
+        # shorter than the data means frame lookups past its end fail.
+        n_vid_bad = 0
+        if ctx.video_segments and ctx.fps:
+            short: dict[str, list] = {}
+            long_: dict[str, list] = {}
+            for ep in ctx.episode_ids():
+                n_rows = len(ctx.rows_for(ep))
+                for cam, (_, _, t0, t1) in ctx.video_segments.get(ep, {}).items():
+                    n_vid = int(round((t1 - t0) * ctx.fps))
+                    if n_vid < n_rows - 1:
+                        short.setdefault(cam, []).append((ep, n_vid, n_rows))
+                    elif n_vid > n_rows + 1:
+                        long_.setdefault(cam, []).append((ep, n_vid, n_rows))
+            for cam, bad in short.items():
+                n_vid_bad += len(bad)
+                ep, nv, nr = bad[0]
+                res.findings.append(Finding(
+                    self.id, Severity.FAIL,
+                    f"camera {cam}: {len(bad)} episode(s) whose video segment is shorter than "
+                    f"the data (e.g. episode {ep}: {nv} video frames, {nr} rows) - frame "
+                    "lookups past the segment end fail",
+                    details={"camera": cam, "episodes": [b[0] for b in bad]},
+                ))
+            for cam, bad in long_.items():
+                n_vid_bad += len(bad)
+                ep, nv, nr = bad[0]
+                res.findings.append(Finding(
+                    self.id, Severity.WARN,
+                    f"camera {cam}: {len(bad)} episode(s) whose video segment is longer than "
+                    f"the data (e.g. episode {ep}: {nv} video frames, {nr} rows) - images and "
+                    "states may be misaligned",
+                    details={"camera": cam, "episodes": [b[0] for b in bad]},
+                ))
+        elif not ctx.video_segments:
+            res.findings.append(Finding(
+                self.id, Severity.INFO,
+                "no per-episode video segments in the metadata (v2.x or no videos): "
+                "video frame counts not cross-checked",
+            ))
+        if n_gap == n_meta_mismatch == n_dup == n_vid_bad == 0 and not ctx.duplicate_episode_ids \
+                and not ctx.unreadable_files:
+            res.summary = "frame_index contiguous; episode lengths" + (
+                " and video segments" if ctx.video_segments else "") + " match the data"
         else:
             res.summary = (
                 f"{n_gap} episodes with gaps, {n_dup} with duplicate indices, "

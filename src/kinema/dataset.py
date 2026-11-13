@@ -79,6 +79,8 @@ class DatasetContext:
     # episode index -> times catalogued, when the metadata lists it > once
     duplicate_episode_ids: dict = field(default_factory=dict)
     unreadable_files: list = field(default_factory=list)  # [(relpath, error)]
+    # v3: episode -> camera -> (chunk_index, file_index, from_s, to_s)
+    video_segments: dict = field(default_factory=dict, repr=False)
     _row_slices: dict = field(default_factory=dict, repr=False)
     _meta_index: dict = field(default_factory=dict, repr=False)
 
@@ -271,6 +273,31 @@ def _spread(ids: list[int], n: int) -> list[int]:
         return list(ids)
     pos = np.unique(np.round(np.linspace(0, len(ids) - 1, n)).astype(int))
     return [ids[i] for i in pos]
+
+
+def _load_video_segments(root: Path) -> dict[int, dict[str, tuple]]:
+    """v3.0 records each episode's [from, to) segment inside the shared MP4
+    of every camera. Metadata only - no video is needed to read it."""
+    out: dict[int, dict[str, tuple]] = {}
+    ep_dir = root / "meta" / "episodes"
+    if not ep_dir.is_dir():
+        return out
+    for f in sorted(ep_dir.glob("**/*.parquet")):
+        names = pq.read_schema(f).names
+        cams = sorted({c.split("/")[1] for c in names
+                       if c.startswith("videos/") and c.endswith("/from_timestamp")})
+        keys = ("chunk_index", "file_index", "from_timestamp", "to_timestamp")
+        cams = [c for c in cams if all(f"videos/{c}/{k}" in names for k in keys)]
+        if not cams:
+            continue
+        t = pq.read_table(f, columns=["episode_index"] + [f"videos/{c}/{k}" for c in cams for k in keys]).to_pydict()
+        for i, ep in enumerate(t["episode_index"]):
+            rec = out.setdefault(int(ep), {})
+            for c in cams:
+                vals = [t[f"videos/{c}/{k}"][i] for k in keys]
+                if None not in vals:
+                    rec.setdefault(c, (int(vals[0]), int(vals[1]), float(vals[2]), float(vals[3])))
+    return out
 
 
 def _effective_stats(
@@ -509,6 +536,7 @@ def load_dataset(
         stats_source=stats_source,
         feature_keys=keys,
         duplicate_episode_ids=duplicate_ids,
+        video_segments=_load_video_segments(root),
         unreadable_files=unreadable,
         state_names=feature_names(info, keys[STATE_KEY]),
         action_names=feature_names(info, keys[ACTION_KEY]),

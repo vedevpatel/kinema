@@ -55,14 +55,22 @@ class CheckConfig:
     stats_mean_fail_sigma: float = 0.50
     stats_std_warn: float = 0.05
     stats_std_fail: float = 0.25
+    stats_std_oversize_fail: float = 3.0  # stored action std >= 3x real: FAIL
     stats_range_warn: float = 0.01
     stats_range_fail: float = 0.10
+    # sampled loads without per-episode stats: only gross corruption is conclusive
+    stats_sample_std_ratio: float = 3.0
+    stats_sample_mean_sigma: float = 2.0
     # timestamp-grid
     grid_warn_frac: float = 0.10  # fraction of the frame period
     # calibration-drift
     calib_warn_range_frac: float = 0.05
     calib_fail_range_frac: float = 0.15
     calib_min_corr: float = 0.90  # action must track state to be comparable
+    calib_scale_warn: float = 0.05  # offset drifts > 5% of range across the range
+    calib_scale_fail: float = 0.15
+    calib_scale_min_r2: float = 0.60  # ...and a line explains the offset
+    calib_gripper_warn: float = 0.15  # gripper offset at its free end
     # idle / stuck
     idle_eps_frac: float = 0.01  # fraction of per-joint action std
     idle_min_seconds: float = 2.0
@@ -77,8 +85,6 @@ class CheckConfig:
     saturation_warn_fraction: float = 0.05
     # outliers
     outlier_iqr_k: float = 1.5
-    # duplicates
-    near_dup_max_pairs: int = 400
 
 
 class Check:
