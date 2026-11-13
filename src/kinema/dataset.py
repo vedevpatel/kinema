@@ -19,8 +19,25 @@ import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
+from kinema.stats import aggregate, as_stat_dict, feature_names
+
 STATE_KEY = "observation.state"
 ACTION_KEY = "action"
+# column names seen in the wild for the same features (openpi / GR00T-style
+# conversions use "state" / "actions"); resolved to the canonical keys
+_ALIASES = {
+    STATE_KEY: ("observation.state", "state", "observation.states", "observation.proprio"),
+    ACTION_KEY: ("action", "actions"),
+}
+
+
+def _resolve_keys(info: dict) -> dict[str, str]:
+    """canonical key -> the column name this dataset actually uses."""
+    feats = info.get("features") or {}
+    out = {}
+    for canon, names in _ALIASES.items():
+        out[canon] = next((n for n in names if n in feats), canon)
+    return out
 
 
 class DatasetError(Exception):
@@ -50,6 +67,13 @@ class DatasetContext:
     action: np.ndarray | None
     task_index: np.ndarray | None
     truncated: bool = False  # True when --max-episodes limited the load
+    # per-episode {feature: {stat: array}} for EVERY catalogued episode
+    # (meta is always complete, even when the frame data is sampled)
+    episode_stats: dict = field(default_factory=dict, repr=False)
+    stats_json: dict = field(default_factory=dict, repr=False)  # raw meta/stats.json
+    stats_source: str = "meta/stats.json"  # where ctx.stats came from
+    state_names: list | None = None
+    action_names: list | None = None
     _row_slices: dict = field(default_factory=dict, repr=False)
 
     @property
@@ -173,6 +197,75 @@ def _load_episode_meta(root: Path) -> list[EpisodeMeta]:
     return episodes
 
 
+def _load_episode_stats(
+    root: Path, keys: dict[str, str] | None = None
+) -> dict[int, dict[str, dict[str, np.ndarray]]]:
+    """Per-episode stats for observation.state and action, keyed by episode.
+
+    v3.0 stores them as stats/<feature>/<stat> columns in meta/episodes;
+    v2.1 as meta/episodes_stats.jsonl. Empty dict when neither exists."""
+    out: dict[int, dict[str, dict[str, np.ndarray]]] = {}
+    ep_dir = root / "meta" / "episodes"
+    jsonl = root / "meta" / "episodes_stats.jsonl"
+    keys = keys or {STATE_KEY: STATE_KEY, ACTION_KEY: ACTION_KEY}
+    feats = (STATE_KEY, ACTION_KEY)
+    if ep_dir.is_dir():
+        wanted = [f"stats/{keys[f]}/{k}" for f in feats for k in ("mean", "std", "min", "max", "count")]
+        for f in sorted(ep_dir.glob("**/*.parquet")):
+            names = set(pq.read_schema(f).names)
+            cols = [c for c in wanted if c in names]
+            if not cols:
+                continue
+            t = pq.read_table(f, columns=["episode_index", *cols]).to_pydict()
+            for i, ep in enumerate(t["episode_index"]):
+                rec = {}
+                for feat in feats:
+                    entry = {
+                        c.rsplit("/", 1)[1]: t[c][i]
+                        for c in cols
+                        if c.startswith(f"stats/{keys[feat]}/")
+                    }
+                    d = as_stat_dict(entry)
+                    if d:
+                        rec[feat] = d
+                if rec:
+                    out[int(ep)] = rec
+    elif jsonl.exists():
+        with open(jsonl) as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                r = json.loads(line)
+                st = r.get("stats") or {}
+                rec = {feat: d for feat in feats if (d := as_stat_dict(st.get(keys[feat])))}
+                if rec:
+                    out[int(r["episode_index"])] = rec
+    return out
+
+
+def _effective_stats(
+    stats_json: dict, episode_stats: dict, version: str, episode_ids: list[int]
+) -> tuple[dict, str]:
+    """The stats a LeRobot policy would actually normalize with.
+
+    v2.1 ignores meta/stats.json and aggregates episodes_stats.jsonl at load
+    time; v2.0/v3.0 read meta/stats.json. A feature missing from stats.json
+    falls back to the aggregated per-episode stats when those exist."""
+    stats = dict(stats_json)
+    source = "meta/stats.json"
+    v21 = version.startswith("v2.1")
+    for feat in (STATE_KEY, ACTION_KEY):
+        if feat in stats and not v21:
+            continue
+        per_ep = [episode_stats[e][feat] for e in episode_ids if feat in episode_stats.get(e, {})]
+        agg = aggregate(per_ep) if len(per_ep) == len(episode_ids) else None
+        if agg:
+            stats[feat] = {k: v.tolist() for k, v in agg.items()}
+            source = "aggregated per-episode stats"
+    return stats, source
+
+
 def _column(table: pa.Table, name: str) -> np.ndarray | None:
     if name not in table.column_names:
         return None
@@ -199,6 +292,16 @@ def load_dataset(
     version = str(info.get("codebase_version", "unknown"))
 
     episodes = _load_episode_meta(root)
+    keys = _resolve_keys(info)
+    episode_stats = _load_episode_stats(root, keys)
+    # expose stats under the canonical keys whatever the dataset calls them
+    stats_json = dict(stats)
+    for canon, col in keys.items():
+        if col != canon and col in stats_json and canon not in stats_json:
+            stats_json[canon] = stats_json[col]
+    stats, stats_source = _effective_stats(
+        stats_json, episode_stats, version, [e.index for e in episodes]
+    )
 
     data_files = sorted(root.glob("data/**/*.parquet"))
     if not data_files:
@@ -268,8 +371,8 @@ def load_dataset(
         if "task_index" in table.column_names
         else None
     )
-    state = _column(table, STATE_KEY)
-    action = _column(table, ACTION_KEY)
+    state = _column(table, keys[STATE_KEY])
+    action = _column(table, keys[ACTION_KEY])
 
     return DatasetContext(
         root=root,
@@ -286,4 +389,9 @@ def load_dataset(
         action=action,
         task_index=task_index,
         truncated=truncated,
+        episode_stats=episode_stats,
+        stats_json=stats_json,
+        stats_source=stats_source,
+        state_names=feature_names(info, keys[STATE_KEY]),
+        action_names=feature_names(info, keys[ACTION_KEY]),
     )

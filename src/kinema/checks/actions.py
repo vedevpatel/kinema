@@ -6,40 +6,84 @@ import numpy as np
 
 from kinema.checks.base import Check, CheckConfig, CheckResult, Finding, Severity
 from kinema.dataset import ACTION_KEY, STATE_KEY
+from kinema.stats import gripper_dims
 
 
 class ActionSaturationCheck(Check):
     id = "action-saturation"
     title = "Action saturation (commands clipped at the limits)"
 
+    # Clipping leaves a pile-up of commands at EXACTLY the limit value while
+    # the robot is moving. Merely sitting near an extreme is normal (rest
+    # poses, grippers fully open/shut), as are binary or constant dims.
+
     def run(self, ctx, cfg: CheckConfig) -> CheckResult:
         res = CheckResult(self.id, self.title)
         action = ctx.action
         if action is None:
             return self.skip("action column missing")
-        entry = ctx.stats.get(ACTION_KEY) or {}
-        if "min" in entry and "max" in entry:
-            lo = np.asarray(entry["min"], dtype=np.float64).ravel()
-            hi = np.asarray(entry["max"], dtype=np.float64).ravel()
-        else:
-            lo, hi = action.min(axis=0), action.max(axis=0)
-        rng = np.maximum(1e-8, hi - lo)
-        delta = 0.01 * rng
-        saturated = (np.abs(action - lo) < delta) | (np.abs(action - hi) < delta)
-        frac = saturated.mean(axis=0)
-        for j, f in enumerate(frac):
+        n = action.shape[1]
+        grip = gripper_dims(ctx.action_names, n)
+        finite = np.isfinite(action).all(axis=1)
+        a = action[finite]
+        if len(a) < 20:
+            return self.skip("too few finite action frames")
+        lo, hi = a.min(axis=0), a.max(axis=0)
+        rng = hi - lo
+        tol = 1e-6 * np.maximum(rng, 1e-12)
+
+        # moving frames: some dim changed since the previous frame of the
+        # same episode (idle stretches are idle-segments' job)
+        eps = np.maximum(1e-8, cfg.idle_eps_frac * a.std(axis=0))
+        moving = np.zeros(len(action), dtype=bool)
+        for ep in ctx.episode_ids():
+            rows = ctx.rows_for(ep)
+            if len(rows) < 2:
+                continue
+            d = np.abs(np.diff(action[rows], axis=0)) >= eps
+            moving[rows[1:]] = d.any(axis=1)
+        moving = moving[finite]
+
+        checked = 0
+        for j in range(n):
+            if j in grip or rng[j] <= 1e-8 or len(np.unique(a[:, j])) <= 10:
+                continue  # gripper, constant or discrete-valued dim
+            if moving.sum() < 20:
+                continue
+            checked += 1
+            at_hi = np.abs(a[:, j] - hi[j]) <= tol[j]
+            at_lo = np.abs(a[:, j] - lo[j]) <= tol[j]
+            f_hi = float((at_hi & moving).sum() / moving.sum())
+            f_lo = float((at_lo & moving).sum() / moving.sum())
+            f = max(f_hi, f_lo)
             if f > cfg.saturation_warn_fraction:
+                side = "max" if f_hi >= f_lo else "min"
+                name = f" ({ctx.action_names[j]})" if ctx.action_names and len(ctx.action_names) == n else ""
+                if f > 0.5:
+                    # most of the data AT the limit is a mode, not a clipped tail:
+                    # an unnamed gripper / binary-like command or a rest state
+                    res.findings.append(Finding(
+                        self.id, Severity.INFO,
+                        f"action dim {j}{name}: {f:.0%} of commands sit exactly at its {side} - "
+                        "a gripper or on/off command rather than clipping?",
+                        details={"dim": j, "saturated_fraction": f, "side": side},
+                    ))
+                    continue
                 res.findings.append(
                     Finding(
                         self.id,
                         Severity.WARN,
-                        f"action dim {j}: {f:.1%} of commands sit at the min/max limit - "
-                        "clipped commands the policy will imitate",
-                        details={"dim": j, "saturated_fraction": float(f)},
+                        f"action dim {j}{name}: {f:.1%} of commands during motion are pinned at "
+                        f"exactly its {side} ({(hi if side == 'max' else lo)[j]:.6g}) - clipped "
+                        "commands the policy will imitate",
+                        details={"dim": j, "saturated_fraction": f, "side": side},
                     )
                 )
-        if not res.findings:
-            res.summary = "no action dim saturated above 5%"
+        if not any(f.severity >= Severity.WARN for f in res.findings):
+            res.summary = (
+                f"no continuous action dim pinned at a limit above "
+                f"{cfg.saturation_warn_fraction:.0%} ({checked} dims checked)"
+            )
         else:
             res.summary = f"{len(res.findings)} dim(s) saturated"
         return res
@@ -80,9 +124,10 @@ class NanAndNormalizationCheck(Check):
                 res.findings.append(
                     Finding(
                         self.id,
-                        Severity.WARN,
-                        f"{feat} dim {j}: zero variance - std=0 breaks mean/std "
-                        "normalization (division by zero) and the dim carries no signal",
+                        Severity.INFO,
+                        f"{feat} dim {j}: constant (std=0) - carries no signal; if it ever "
+                        "varies at deployment, mean/std normalization (std + 1e-8) blows "
+                        "it up. Usually padding; consider dropping it",
                         details={"feature": feat, "dim": int(j)},
                     )
                 )

@@ -44,14 +44,24 @@ class DeploymentReadinessCheck(Check):
             )
 
         # 1. stats coverage: training consumes observation.state + action
-        for feat in (STATE_KEY, ACTION_KEY):
+        for feat, arr in ((STATE_KEY, ctx.state), (ACTION_KEY, ctx.action)):
+            if arr is None:
+                res.findings.append(
+                    Finding(
+                        self.id,
+                        Severity.INFO,
+                        f"no {feat} column found (checked the usual aliases) - "
+                        "state/action checks could not run",
+                    )
+                )
+                continue
             if feat not in ctx.stats:
                 res.findings.append(
                     Finding(
                         self.id,
                         Severity.FAIL,
-                        f"{feat}: absent from meta/stats.json - the policy cannot "
-                        "normalize inputs/outputs at inference",
+                        f"{feat}: no normalization stats (meta/stats.json or per-episode "
+                        "stats) - the policy cannot normalize inputs/outputs at inference",
                     )
                 )
 
@@ -100,33 +110,6 @@ class DeploymentReadinessCheck(Check):
                         Severity.FAIL,
                         f"{key}: info.json declares shape {declared} but the data has "
                         f"{arr.shape[1]} dims",
-                    )
-                )
-
-        # 5. would inference see OOD inputs? normalize the data with the
-        #    STORED stats (what a deployed policy uses) and look past 3 sigma
-        for feat, arr in ((STATE_KEY, ctx.state), (ACTION_KEY, ctx.action)):
-            if arr is None:
-                continue
-            entry = ctx.stats.get(feat) or {}
-            if "mean" not in entry or "std" not in entry:
-                continue
-            mean = np.asarray(entry["mean"], dtype=np.float64).ravel()
-            std = np.asarray(entry["std"], dtype=np.float64).ravel()
-            if mean.shape[0] != arr.shape[1]:
-                continue
-            safe = np.where(std > 1e-8, std, 1.0)
-            z = np.abs((arr - mean) / safe)
-            frac = float((z > 3).mean())
-            if frac > 0.001:
-                res.findings.append(
-                    Finding(
-                        self.id,
-                        Severity.WARN,
-                        f"{feat}: {frac:.2%} of values sit >3 sigma from the stored "
-                        "normalization stats - at inference the policy sees inputs "
-                        "outside the range it trained on (the openpi #906 failure mode)",
-                        details={"feature": feat, "ood_fraction": frac},
                     )
                 )
 

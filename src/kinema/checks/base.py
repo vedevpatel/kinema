@@ -50,20 +50,27 @@ class CheckResult:
 class CheckConfig:
     video: bool = False
     policy: str | None = None
-    # stats-drift
-    stats_rel_tol: float = 0.01
-    stats_fail_tol: float = 0.10
+    # stats-drift (mean in std devs, std as a ratio, min/max as range fraction)
+    stats_mean_warn_sigma: float = 0.10
+    stats_mean_fail_sigma: float = 0.50
+    stats_std_warn: float = 0.05
+    stats_std_fail: float = 0.25
+    stats_range_warn: float = 0.01
+    stats_range_fail: float = 0.10
     # timestamp-grid
     grid_warn_frac: float = 0.10  # fraction of the frame period
     # calibration-drift
     calib_warn_range_frac: float = 0.05
     calib_fail_range_frac: float = 0.15
+    calib_min_corr: float = 0.90  # action must track state to be comparable
     # idle / stuck
     idle_eps_frac: float = 0.01  # fraction of per-joint action std
     idle_min_seconds: float = 2.0
     idle_warn_fraction: float = 0.30
-    stuck_warn_fraction: float = 0.80
-    # action saturation
+    stuck_range_frac: float = 0.005  # episode range < 0.5% of the dataset range
+    stuck_warn_share: float = 0.25  # stuck in <= 25% of episodes: anomalous
+    stuck_unused_share: float = 0.90  # stuck in >= 90%: unused DOF (INFO)
+    # action saturation (frames pinned exactly at the limit while moving)
     saturation_warn_fraction: float = 0.05
     # outliers
     outlier_iqr_k: float = 1.5

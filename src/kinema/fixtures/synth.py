@@ -32,6 +32,18 @@ KNOWN_DEFECTS = [
 _FPS = 10
 _STATE_DIM = 6
 _LEN = 60
+_NAMES = ["joint_0", "joint_1", "joint_2", "joint_3", "joint_4", "gripper"]
+
+
+def _stats(a):
+    a = a[np.isfinite(a).all(axis=1)]
+    return {
+        "mean": a.mean(axis=0).tolist(),
+        "std": a.std(axis=0).tolist(),
+        "min": a.min(axis=0).tolist(),
+        "max": a.max(axis=0).tolist(),
+        "count": [len(a)],
+    }
 
 
 def _smooth(rng, n, dim, scale=1.0):
@@ -132,12 +144,25 @@ def make_dataset(
     )
     pq.write_table(table, root / "data" / "chunk-000" / "file-000.parquet")
 
+    # per-episode stats, as LeRobot v3 writes them (stats/<feature>/<stat>)
+    ep_arr = np.asarray(rows_ep)
+    state_all, action_all = np.asarray(rows_state), np.asarray(rows_action)
+    ep_cols: dict[str, list] = {}
+    for m in ep_meta:
+        sel = ep_arr == m["episode_index"]
+        for feat, arr in (("observation.state", state_all), ("action", action_all)):
+            for k, v in _stats(arr[sel]).items():
+                ep_cols.setdefault(f"stats/{feat}/{k}", []).append(v)
     pq.write_table(
         pa.table(
             {
                 "episode_index": pa.array([m["episode_index"] for m in ep_meta], type=pa.int64()),
                 "length": pa.array([m["length"] for m in ep_meta], type=pa.int64()),
                 "tasks": pa.array([m["tasks"] for m in ep_meta], type=pa.list_(pa.string())),
+                **{
+                    c: pa.array(v, type=pa.list_(pa.int64() if c.endswith("/count") else pa.float64()))
+                    for c, v in ep_cols.items()
+                },
             }
         ),
         root / "meta" / "episodes" / "chunk-000" / "file-000.parquet",
@@ -152,21 +177,9 @@ def make_dataset(
         root / "meta" / "tasks.parquet",
     )
 
-    state_arr = np.asarray(rows_state)
-    action_arr = np.asarray(rows_action)
-
-    def _stats(a):
-        return {
-            "mean": a.mean(axis=0).tolist(),
-            "std": a.std(axis=0).tolist(),
-            "min": a.min(axis=0).tolist(),
-            "max": a.max(axis=0).tolist(),
-            "count": [len(a)],
-        }
-
     stats = {
-        "observation.state": _stats(state_arr[np.isfinite(state_arr).all(axis=1)]),
-        "action": _stats(action_arr),
+        "observation.state": _stats(state_all),
+        "action": _stats(action_all),
     }
     if "stats-drift" in defects:
         for k in ("mean", "std"):
@@ -181,8 +194,8 @@ def make_dataset(
                 "total_episodes": episodes,
                 "total_frames": global_index,
                 "features": {
-                    "observation.state": {"dtype": "float64", "shape": [_STATE_DIM]},
-                    "action": {"dtype": "float64", "shape": [_STATE_DIM]},
+                    "observation.state": {"dtype": "float64", "shape": [_STATE_DIM], "names": _NAMES},
+                    "action": {"dtype": "float64", "shape": [_STATE_DIM], "names": _NAMES},
                     "timestamp": {"dtype": "float64", "shape": [1]},
                     "frame_index": {"dtype": "int64", "shape": [1]},
                     "episode_index": {"dtype": "int64", "shape": [1]},

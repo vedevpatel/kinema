@@ -11,6 +11,7 @@ from __future__ import annotations
 import numpy as np
 
 from kinema.checks.base import Check, CheckConfig, CheckResult, Finding, Severity
+from kinema.stats import gripper_dims
 
 _PICK_WORDS = ("pick", "place", "grasp", "grab", "lift")
 
@@ -82,51 +83,98 @@ class StuckActuatorCheck(Check):
     id = "stuck-actuator"
     title = "Stuck actuators (joints that never move)"
 
+    # A joint is stuck in an episode when its commanded range there is a
+    # sliver of its range across the dataset. Frame-to-frame differences
+    # are the wrong statistic: piecewise-constant commands (quantized
+    # servos, low-rate teleop, binary grippers) read as "static" on most
+    # frames while sweeping the joint's whole range.
+
     def run(self, ctx, cfg: CheckConfig) -> CheckResult:
         res = CheckResult(self.id, self.title)
         action = ctx.action
         if action is None:
             return self.skip("action column missing")
-        eps = np.maximum(1e-8, cfg.idle_eps_frac * action.std(axis=0))
+        n = action.shape[1]
+        grip = gripper_dims(ctx.action_names, n)
+        lo = np.nanpercentile(action, 1, axis=0)
+        hi = np.nanpercentile(action, 99, axis=0)
+        glob = hi - lo
+        live = [j for j in range(n) if glob[j] > 1e-8]  # constant dims: check 8
+        if not live:
+            return self.skip("no action dim varies (see nan-and-normalization)")
+        eps_ids = [ep for ep in ctx.episode_ids() if len(ctx.rows_for(ep)) >= 3]
+        if not eps_ids:
+            return self.skip("no episode long enough")
+        ep_range = np.stack(
+            [np.nanmax(action[ctx.rows_for(ep)], axis=0) - np.nanmin(action[ctx.rows_for(ep)], axis=0)
+             for ep in eps_ids]
+        )  # (episodes, dims)
+        still = ep_range < cfg.stuck_range_frac * np.maximum(glob, 1e-12)
+        n_eps = len(eps_ids)
 
-        flagged_eps: set[int] = set()
-        for ep in ctx.episode_ids():
-            rows = ctx.rows_for(ep)
-            if len(rows) < 3:
+        # 1. episodes where nothing moves at all: aborted/empty recordings
+        dead = [eps_ids[i] for i in range(n_eps) if still[i, live].all()]
+        dead_set = set(dead)
+        if dead:
+            res.findings.append(Finding(
+                self.id, Severity.WARN,
+                f"{len(dead)}/{n_eps} episodes where no joint moves at all: {dead[:10]}"
+                f"{'...' if len(dead) > 10 else ''} - aborted or empty recordings "
+                "that teach the policy to do nothing",
+                details={"episodes": dead},
+            ))
+
+        # 2. a joint that moves in most episodes but not in a few: the motor
+        #    died or was disabled during those recordings. A joint idle in
+        #    (nearly) every episode is an unused DOF for this task - INFO.
+        for j in live:
+            if j in grip:
                 continue
-            a = action[rows]
-            da = np.abs(np.diff(a, axis=0))
-            static_frac = (da < eps).mean(axis=0)
-            for j, f in enumerate(static_frac):
-                if f > cfg.stuck_warn_fraction:
-                    flagged_eps.add(ep)
-                    res.findings.append(
-                        Finding(
-                            self.id,
-                            Severity.WARN,
-                            f"episode {ep}: joint {j} static for {f:.0%} of frames - "
-                            "dead actuator or disabled motor?",
-                            episode_index=ep,
-                            details={"joint": j, "static_fraction": float(f)},
-                        )
-                    )
-            # gripper heuristic: pick/place task, last action dim never fires
-            meta = ctx.meta_for(ep)
-            if meta and any(w in " ".join(meta.tasks).lower() for w in _PICK_WORDS):
-                g = action.shape[1] - 1
-                if static_frac[g] > 0.95:
-                    res.findings.append(
-                        Finding(
-                            self.id,
-                            Severity.WARN,
-                            f"episode {ep}: gripper (action dim {g}) never actuates on a "
-                            "pick/place task",
-                            episode_index=ep,
-                            details={"joint": g, "static_fraction": float(static_frac[g])},
-                        )
-                    )
-        if not res.findings:
-            res.summary = "every joint moves in every episode"
+            stuck_eps = [eps_ids[i] for i in range(n_eps) if still[i, j] and eps_ids[i] not in dead_set]
+            if not stuck_eps:
+                continue
+            share = len(stuck_eps) / n_eps
+            if share >= cfg.stuck_unused_share:
+                sev, why = Severity.INFO, "an unused degree of freedom for this task?"
+            elif share <= cfg.stuck_warn_share:
+                sev, why = Severity.WARN, "it moves in the others - dead or disabled motor during those recordings?"
+            else:
+                sev, why = Severity.INFO, "the task may not need it in every episode"
+            name = f" ({ctx.action_names[j]})" if ctx.action_names and len(ctx.action_names) == n else ""
+            res.findings.append(Finding(
+                self.id, sev,
+                f"joint {j}{name} does not move in {len(stuck_eps)}/{n_eps} episodes "
+                f"{stuck_eps[:8]}{'...' if len(stuck_eps) > 8 else ''} - {why}",
+                details={"joint": j, "episodes": stuck_eps, "share": share},
+            ))
+
+        # 3. pick/place task where the gripper never actuates
+        g_dims = sorted(grip) if grip else ([n - 1] if ctx.action_names is None else [])
+        for g in g_dims:
+            if g not in live:
+                continue
+            idle_g = []
+            for i, ep in enumerate(eps_ids):
+                meta = ctx.meta_for(ep)
+                if ep in dead_set or not meta:
+                    continue
+                if any(w in " ".join(meta.tasks).lower() for w in _PICK_WORDS) and \
+                        ep_range[i, g] < 0.05 * glob[g]:
+                    idle_g.append(ep)
+            if idle_g:
+                unused = len(idle_g) / n_eps >= cfg.stuck_unused_share
+                res.findings.append(Finding(
+                    self.id, Severity.INFO if unused else Severity.WARN,
+                    f"gripper (action dim {g}) never actuates in {len(idle_g)}/{n_eps} "
+                    f"pick/place episode(s): {idle_g[:10]}{'...' if len(idle_g) > 10 else ''}"
+                    + (" - that arm looks unused in this task" if unused else ""),
+                    details={"joint": g, "episodes": idle_g},
+                ))
+
+        if not any(f.severity >= Severity.WARN for f in res.findings):
+            res.summary = "every joint moves wherever the dataset uses it"
         else:
-            res.summary = f"{len(flagged_eps)}/{ctx.total_episodes} episodes with stuck joints"
+            flagged = {e for f in res.findings if f.severity >= Severity.WARN
+                       for e in f.details.get("episodes", [])}
+            res.summary = f"{len(flagged)}/{n_eps} episodes with stuck joints"
         return res

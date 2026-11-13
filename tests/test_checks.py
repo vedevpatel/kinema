@@ -107,7 +107,10 @@ def test_idle_segments(tmp_path, cfg):
 def test_stuck_actuator(tmp_path, cfg):
     ctx = defective(tmp_path, "stuck-actuator")
     res = run("stuck-actuator", ctx, cfg)
-    assert any(f.episode_index == 3 and f.details.get("joint") == 4 for f in res.findings)
+    assert any(
+        f.severity == Severity.WARN and f.details.get("joint") == 4 and f.details["episodes"] == [3]
+        for f in res.findings
+    )
 
 
 def test_action_saturation(tmp_path, cfg):
