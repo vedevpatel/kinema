@@ -207,6 +207,15 @@ def load_dataset(
     table = pa.concat_tables(tables) if len(tables) > 1 else tables[0]
 
     truncated = False
+
+    # partial downloads: restrict episode metadata to episodes whose frames
+    # are actually present BEFORE capping, so a sample holding later shards
+    # still audits the episodes it has instead of capping to absent ones
+    present = set(table.column("episode_index").to_pylist())
+    if len(present) < len(episodes):
+        episodes = [e for e in episodes if e.index in present]
+        truncated = True
+
     if max_episodes is not None and len(episodes) > max_episodes:
         episodes = episodes[:max_episodes]
         truncated = True
@@ -214,12 +223,11 @@ def load_dataset(
     mask = pc.is_in(table.column("episode_index"), value_set=pa.array(keep))
     table = table.filter(mask)
 
-    # partial downloads: restrict episode metadata to episodes whose frames
-    # are actually present, so checks never see phantom episodes
-    present = set(table.column("episode_index").to_pylist())
-    if len(present) < len(episodes):
-        episodes = [e for e in episodes if e.index in present]
-        truncated = True
+    if table.num_rows == 0:
+        raise DatasetError(
+            f"no frames in {root} match the episode metadata "
+            "(partial download without overlapping episodes)"
+        )
 
     episode_index = np.asarray(table.column("episode_index").to_pylist(), dtype=np.int64)
     frame_index = (
