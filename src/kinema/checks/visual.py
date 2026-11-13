@@ -168,7 +168,7 @@ class VisualQualityCheck(Check):
                 if not bad:
                     continue
                 share = len(bad) / len(eps)
-                worst = sorted(bad, key=bad.get)[:8]
+                worst = sorted(bad, key=lambda ep: bad[ep])[:8]
                 sev = Severity.WARN if share >= CAMERA_WARN_SHARE else Severity.INFO
                 res.findings.append(Finding(
                     self.id, sev,

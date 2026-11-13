@@ -92,7 +92,9 @@ def feature_names(info: dict, key: str) -> list[str] | None:
 
 
 def is_gripper(name: str | None) -> bool:
-    return bool(name) and bool(_GRIPPER_RE.search(name.lower()))
+    if not name:
+        return False
+    return bool(_GRIPPER_RE.search(name.lower()))
 
 
 def is_generic(names: list[str] | None) -> bool:
@@ -108,7 +110,9 @@ _VELOCITY_RE = re.compile(r"(^|[_.\- ])(vel|velocity|linear|angular|twist|speed|
 
 def is_velocity(name: str | None) -> bool:
     """A velocity command (base twist, joint velocity): steps on and off by design."""
-    return bool(name) and bool(_VELOCITY_RE.search(name.lower()))
+    if not name:
+        return False
+    return bool(_VELOCITY_RE.search(name.lower()))
 
 
 def velocity_dims(names: list[str] | None, dim: int) -> set[int]:

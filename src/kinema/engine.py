@@ -24,10 +24,10 @@ def _strip_docstrings(tree: ast.AST) -> ast.AST:
     for node in ast.walk(tree):
         if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
             body = node.body
-            if body and isinstance(body[0], ast.Expr) and isinstance(
-                getattr(body[0], "value", None), ast.Constant
-            ) and isinstance(body[0].value.value, str):
-                node.body = body[1:] or [ast.Pass()]
+            if body and isinstance(body[0], ast.Expr):
+                val = body[0].value
+                if isinstance(val, ast.Constant) and isinstance(val.value, str):
+                    node.body = body[1:] or [ast.Pass()]
     return tree
 
 

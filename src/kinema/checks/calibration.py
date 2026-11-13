@@ -80,9 +80,9 @@ def _pairs(ctx) -> list[tuple[int, int]]:
             by_name.setdefault(canonical(nm), i)
     out = []
     for j, nm in enumerate(an):
-        i = by_name.get(canonical(nm)) if not is_generic([nm]) else None
-        if i is not None:
-            out.append((i, j))
+        m = by_name.get(canonical(nm)) if not is_generic([nm]) else None
+        if m is not None:
+            out.append((m, j))
     return out
 
 

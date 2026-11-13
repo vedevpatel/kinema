@@ -11,6 +11,8 @@ unless the caller asks for them.
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -42,6 +44,21 @@ def _resolve_keys(info: dict) -> dict[str, str]:
 
 class DatasetError(Exception):
     pass
+
+
+_FRAME_BUDGET_ENV = "KINEMA_FRAME_BUDGET_BYTES"
+_FRAME_BUDGET_DEFAULT = 1 << 30  # 1 GiB
+
+
+def _frame_budget() -> int:
+    """Resident-byte budget for the frame arrays. A load estimated above it
+    spills the arrays into memory-mapped temp files instead of RAM (a full
+    DROID load is ~27M frames ≈ 3.5 GB of float64 - without a budget that
+    is an OOM on smaller machines). 0 disables spilling."""
+    try:
+        return int(os.environ.get(_FRAME_BUDGET_ENV, _FRAME_BUDGET_DEFAULT))
+    except ValueError:
+        return _FRAME_BUDGET_DEFAULT
 
 
 @dataclass
@@ -496,12 +513,53 @@ def load_dataset(
         targets = _spread(sorted(present_ids), max_episodes)
     value_set = pa.array(targets, type=pa.int64())
     tgt = np.asarray(sorted(targets), dtype=np.int64)
-    tables: list[pa.Table] = []
+
+    # the read plan: which row groups of each shard can hold target episodes
+    plan: list[tuple[Path, pq.ParquetFile, list[int]]] = []
+    row_bound = 0
     for f, pf, ranges in files:
         groups = [g for g, rng in enumerate(ranges)
                   if rng is None or np.searchsorted(tgt, rng[1], side="right") > np.searchsorted(tgt, rng[0])]
         if not groups:
             continue
+        plan.append((f, pf, groups))
+        row_bound += sum(pf.metadata.row_group(g).num_rows for g in groups)
+
+    def _feat_dim(col: str) -> int:
+        shape = (info.get("features", {}).get(col) or {}).get("shape") or []
+        return int(shape[0]) if shape else 0
+
+    est_bytes = row_bound * 8 * (4 + _feat_dim(keys[STATE_KEY]) + _feat_dim(keys[ACTION_KEY]))
+    spill = est_bytes > _frame_budget() > 0
+    spill_dir = tempfile.mkdtemp(prefix="kinema-frames-") if spill else ""
+    dtypes: dict[str, type[np.generic]] = {
+        "episode_index": np.int64, "frame_index": np.int64,
+        "timestamp": np.float64, "task_index": np.int64,
+        keys[STATE_KEY]: np.float64, keys[ACTION_KEY]: np.float64,
+    }
+    chunks: dict[str, list[np.ndarray]] = {}
+    maps: dict[str, np.memmap] = {}
+    widths: dict[str, int] = {}
+    seen: set[str] = set()
+    n = 0
+
+    def _put(name: str, arr: np.ndarray) -> None:
+        if arr.ndim == 1:
+            arr = arr.reshape(-1, 1)
+        if spill:
+            if name not in maps:
+                maps[name] = np.memmap(
+                    os.path.join(spill_dir, name.replace("/", "_") + ".dat"),
+                    dtype=dtypes[name], mode="w+", shape=(row_bound, arr.shape[1]),
+                )
+            m = maps[name]
+            m[n:n + arr.shape[0]] = arr
+        else:
+            chunks.setdefault(name, []).append(arr)
+
+    # file at a time, numpy at a time: the Arrow table is dropped before the
+    # next file is read, so peak memory is one shard plus the output arrays
+    for f, pf, groups in plan:
         cols = [c for c in wanted_cols if c in pf.schema_arrow.names]
         try:
             t = pf.read_row_groups(groups, columns=cols)
@@ -509,28 +567,54 @@ def load_dataset(
             _bad(f, e)
             continue
         t = t.filter(pc.is_in(t.column("episode_index").cast(pa.int64()), value_set=value_set))
-        if t.num_rows:
-            tables.append(t)
-    if not tables and unreadable:
+        if not t.num_rows:
+            continue
+        for name in ("episode_index", "frame_index", "task_index"):
+            if name in t.column_names:
+                seen.add(name)
+                _put(name, _ints(t, name))
+        if "timestamp" in t.column_names:
+            seen.add("timestamp")
+            _put("timestamp", t.column("timestamp").to_numpy().astype(np.float64, copy=False))
+        for canon in (STATE_KEY, ACTION_KEY):
+            name = keys[canon]
+            if name in t.column_names:
+                arr = _column(t, name)
+                if arr is not None:
+                    seen.add(name)
+                    widths.setdefault(name, arr.shape[1] if arr.ndim > 1 else 1)
+                    _put(name, arr)
+        n += t.num_rows
+
+    if n == 0 and unreadable:
         raise DatasetError(
             f"none of the data files needed could be read ({len(unreadable)} unreadable, "
             f"e.g. {unreadable[0][0]}: {unreadable[0][1]})"
         )
-    if not tables:
+    if n == 0:
         raise DatasetError(
             f"no frames in {root} match the episode metadata "
             f"(metadata catalogues episodes {meta_ids[0]}-{meta_ids[-1]}; "
             f"data files hold none of them - the dataset's metadata and data "
             "disagree on episode indexing)"
         )
-    table = pa.concat_tables(tables) if len(tables) > 1 else tables[0]
 
+    def _take(name: str) -> np.ndarray:
+        if spill:
+            m = maps[name]
+            m.flush()
+            return m[:n].reshape(n) if widths.get(name, 1) == 1 else m[:n]
+        cl = chunks[name]
+        out = cl[0] if len(cl) == 1 else np.concatenate(cl)
+        return out.reshape(-1) if out.shape[1] == 1 else out
+
+    episode_index = _take("episode_index")
     truncated = False
 
     # partial downloads: restrict episode metadata to episodes whose frames
     # are actually present BEFORE capping, so a sample holding later shards
     # still audits the episodes it has instead of capping to absent ones
-    present = set(np.unique(_ints(table, "episode_index")).tolist())
+    present = set(np.unique(episode_index).tolist())
     if len(present) < len(episodes):
         episodes = [e for e in episodes if e.index in present]
         truncated = True
@@ -539,34 +623,53 @@ def load_dataset(
         keep_ids = set(_spread([e.index for e in episodes], max_episodes))
         episodes = [e for e in episodes if e.index in keep_ids]
         truncated = True
-    keep = [e.index for e in episodes]
-    mask = pc.is_in(table.column("episode_index"), value_set=pa.array(keep))
-    table = table.filter(mask)
+    keep = {e.index for e in episodes}
+    if not present <= keep:
+        # some loaded rows belong to capped-away episodes (sampled partial
+        # downloads); drop them. Fancy-indexing copies, so skip when the
+        # loaded episodes are exactly the kept ones - the full-load case.
+        # n keeps the written row count: _take slices maps with it below.
+        mask = np.isin(episode_index, list(keep))
+        episode_index = episode_index[mask]
 
-    if table.num_rows == 0:
+        def _masked(arr: np.ndarray) -> np.ndarray:
+            return arr[mask]
+
+    else:
+        def _masked(arr: np.ndarray) -> np.ndarray:
+            return arr
+
+    if episode_index.shape[0] == 0:
         raise DatasetError(
             f"no frames in {root} match the episode metadata "
             "(partial download without overlapping episodes)"
         )
 
-    episode_index = _ints(table, "episode_index")
     frame_index = (
-        _ints(table, "frame_index")
-        if "frame_index" in table.column_names
+        _masked(_take("frame_index"))
+        if "frame_index" in seen
         else np.zeros_like(episode_index)
     )
     timestamp = (
-        table.column("timestamp").to_numpy().astype(np.float64, copy=False)
-        if "timestamp" in table.column_names
+        _masked(_take("timestamp"))
+        if "timestamp" in seen
         else np.zeros(len(episode_index), dtype=np.float64)
     )
     task_index = (
-        _ints(table, "task_index")
-        if "task_index" in table.column_names
+        _masked(_take("task_index"))
+        if "task_index" in seen
         else None
     )
-    state = _column(table, keys[STATE_KEY])
-    action = _column(table, keys[ACTION_KEY])
+    state = (
+        _masked(_take(keys[STATE_KEY]))
+        if keys[STATE_KEY] in seen
+        else None
+    )
+    action = (
+        _masked(_take(keys[ACTION_KEY]))
+        if keys[ACTION_KEY] in seen
+        else None
+    )
 
     return DatasetContext(
         root=root,

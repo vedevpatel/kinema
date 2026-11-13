@@ -99,3 +99,43 @@ def test_config_rejects_unknown_keys_and_flags(tmp_path):
     p.write_text(json.dumps({"stats_std_fail": "high"}))
     with pytest.raises(ValueError, match="must be numbers"):
         load_config_overrides(str(p))
+
+
+def test_spilled_load_matches_in_memory(tmp_path, monkeypatch):
+    import numpy as np
+
+    from kinema.checks import ALL_CHECKS, CheckConfig
+    from kinema.dataset import load_dataset
+    from kinema.fixtures.synth import make_dataset
+
+    root = make_dataset(tmp_path / "ds", episodes=12,
+                        defects=["idle-segments", "timestamp-grid", "calibration-drift"])
+    monkeypatch.setenv("KINEMA_FRAME_BUDGET_BYTES", "0")  # never spill
+    a = load_dataset(str(root))
+    monkeypatch.setenv("KINEMA_FRAME_BUDGET_BYTES", "1")  # always spill
+    b = load_dataset(str(root))
+
+    assert isinstance(b.state, np.memmap) or isinstance(b.episode_index, np.memmap)
+    np.testing.assert_array_equal(a.state, np.asarray(b.state))
+    np.testing.assert_array_equal(a.action, np.asarray(b.action))
+    np.testing.assert_array_equal(a.episode_index, np.asarray(b.episode_index))
+    np.testing.assert_array_equal(a.timestamp, np.asarray(b.timestamp))
+    assert a.total_episodes == b.total_episodes and a.truncated == b.truncated
+
+    cfg = CheckConfig()
+    va = {c.id: c.run(a, cfg).verdict for c in ALL_CHECKS}
+    vb = {c.id: c.run(b, cfg).verdict for c in ALL_CHECKS}
+    assert va == vb
+
+
+def test_spilled_sampled_load(tmp_path, monkeypatch):
+    import numpy as np
+
+    from kinema.dataset import load_dataset
+    from kinema.fixtures.synth import make_dataset
+
+    root = make_dataset(tmp_path / "ds", episodes=24)
+    monkeypatch.setenv("KINEMA_FRAME_BUDGET_BYTES", "1")
+    ctx = load_dataset(str(root), max_episodes=8)
+    assert ctx.total_episodes == 8 and ctx.truncated
+    assert np.unique(np.asarray(ctx.episode_index)).size == 8

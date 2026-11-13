@@ -10,7 +10,7 @@ import os
 
 import pytest
 
-from kinema.checks import ALL_CHECKS, CheckConfig, Severity
+from kinema.checks import ALL_CHECKS, CheckConfig
 from kinema.dataset import load_dataset
 from kinema.report import DatasetReport, render_markdown
 

@@ -53,8 +53,8 @@ def _is_toggle(ctx, j: int, std: float) -> bool:
         big.extend(z[z > 1.0].tolist())
     if len(big) < 3:
         return False
-    big = np.asarray(big)
-    return float(big.std() / big.mean()) < 0.05
+    arr = np.asarray(big)
+    return float(arr.std() / arr.mean()) < 0.05
 
 
 def _iqr_flags(values: np.ndarray, k: float, side: str = "both",
@@ -131,7 +131,7 @@ class OutlierEpisodesCheck(Check):
 
         eps: list[int] = []
         tasks: list = []
-        vals = {m: [] for m in _METRICS}
+        vals: dict[str, list] = {m: [] for m in _METRICS}
         end_poses = []
         for ep in ctx.episode_ids():
             rows = ctx.rows_for(ep)

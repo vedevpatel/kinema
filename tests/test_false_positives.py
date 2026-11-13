@@ -637,7 +637,8 @@ def test_tiny_episodes_sit_out_jerk_and_velocity(base):
     # utokyo: 8-frame episodes, where p95 jerk is just the single largest step
     f = base / "data" / "chunk-000" / "file-000.parquet"
     t = pq.read_table(f).to_pydict()
-    ep = np.asarray(t["episode_index"]); fi = np.asarray(t["frame_index"])
+    ep = np.asarray(t["episode_index"])
+    fi = np.asarray(t["frame_index"])
     keep = (ep != 4) | (fi < 8)  # episode 4 becomes 8 frames long
     t = {k: [v for v, m in zip(vals, keep) if m] for k, vals in t.items()}
     a = np.asarray(t["action"])

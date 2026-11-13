@@ -1,0 +1,30 @@
+name: calibration
+
+# Full-list calibration (~700 MB of pinned datasets): too heavy for per-push
+# CI, so it runs weekly and on demand. The nightly sensitivity guard in ci.yml
+# covers the quick subset; this watches the rest. The report is an artifact -
+# compare it against the last run, it does not gate anything by itself.
+
+on:
+  schedule:
+    - cron: "53 4 * * 0" # Sundays 04:53 UTC
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  full:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e .
+      - run: python scripts/calibrate.py --markdown calibration.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: calibration-report
+          path: calibration.md
+          retention-days: 90

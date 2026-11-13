@@ -117,8 +117,8 @@ class DuplicateCheck(Check):
                 continue
             wins = _windows(trajectories[ep], move_eps)
             n_windows[ep] = len(wins)
-            for k, start in wins.items():
-                owner.setdefault(k, {})[ep] = start
+            for win, start in wins.items():
+                owner.setdefault(win, {})[ep] = start
         partial_found: list[Finding] = []
         shared: dict[tuple[int, int], list[tuple[int, int]]] = {}
         for owners in owner.values():

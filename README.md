@@ -100,6 +100,10 @@ kinema check ./my-dataset --config tuning.json
 Unknown keys and non-numeric values are rejected, so a typo fails loudly instead
 of silently tuning nothing. `kinema check --help` lists the rest of the flags.
 
+Resident frame memory is capped separately: `KINEMA_FRAME_BUDGET_BYTES` (default
+1 GiB). Above it the frame arrays are memory-mapped to disk instead of held in
+RAM, so a full load of a DROID-sized dataset cannot OOM a smaller machine.
+
 ## The leaderboard
 
 The most-downloaded LeRobot datasets on Hugging Face, audited nightly:
@@ -132,8 +136,34 @@ kinema check /tmp/demo
 ```bash
 pip install -e .[dev]
 python -m pytest                      # unit tests (synthetic defects + false-positive regressions)
+ruff check src scripts tests          # lint
+mypy src/kinema                       # type check
 KINEMA_E2E=1 python -m pytest        # + real Hub datasets (pinned revisions) and the sensitivity guard
 python scripts/calibrate.py --quick  # how big a defect must be before each check catches it
 ```
+
+### The CI guards
+
+The nightly e2e job runs on pinned real datasets: known-healthy data must not
+FAIL, known defects must still be caught, and the sensitivity guard
+(`tests/test_sensitivity.py`) injects defects of known size. Its **floors** are
+detection rates a little under the measured ones - a drop means a threshold
+lost its teeth. Its **ceilings** are the measured baseline: how many untouched
+datasets each check already flags.
+
+A ceiling failure is not automatically a false positive: it can also be a real
+issue a change newly surfaces (a new check firing, a sharper threshold). When
+one fails:
+
+1. Reproduce locally: `KINEMA_E2E=1 python -m pytest tests/test_sensitivity.py -q`.
+2. Read the new finding on the flagged dataset. If it is a false positive, fix
+   the check - do not raise the ceiling to make it pass.
+3. If the finding is real and the new count is the intended behavior, raise the
+   number in `CEILINGS` in the same commit, with the message saying what the
+   finding was and why it stays. The same rule applies in reverse to floors:
+   lower one only with a reason in the commit message.
+
+The full pinned list (~700 MB) runs weekly in the `calibration` workflow and on
+demand from the Actions tab; the report lands as a run artifact.
 
 Apache-2.0. Named for *kinema*, "motion" - the thing your dataset is supposed to contain.
