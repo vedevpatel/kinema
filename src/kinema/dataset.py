@@ -203,7 +203,28 @@ def load_dataset(
     data_files = sorted(root.glob("data/**/*.parquet"))
     if not data_files:
         raise DatasetError(f"no frame data found under data/ in {root}")
-    tables = [pq.read_table(f) for f in data_files]
+
+    # read files one at a time, keeping only rows for catalogued episodes,
+    # and stop once enough episodes are covered - bounds peak memory instead
+    # of materializing every shard at once (OOM on wide multi-file datasets)
+    meta_ids = sorted(e.index for e in episodes)
+    value_set = pa.array(meta_ids)
+    tables: list[pa.Table] = []
+    seen: set[int] = set()
+    need = max_episodes if max_episodes is not None else len(meta_ids)
+    for f in data_files:
+        t = pq.read_table(f)
+        t = t.filter(pc.is_in(t.column("episode_index"), value_set=value_set))
+        if t.num_rows:
+            tables.append(t)
+            seen.update(t.column("episode_index").to_pylist())
+        if len(seen) >= need:
+            break
+    if not tables:
+        raise DatasetError(
+            f"no frames in {root} match the episode metadata "
+            "(partial download without overlapping episodes)"
+        )
     table = pa.concat_tables(tables) if len(tables) > 1 else tables[0]
 
     truncated = False
