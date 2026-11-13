@@ -72,13 +72,16 @@ def find_lerobot_datasets(limit: int) -> list[dict]:
 
     api = HfApi()
     out = []
-    for d in api.list_datasets(search="lerobot", sort="downloads", direction=-1, limit=limit * 3):
-        files = [s.rfilename for s in (d.siblings or [])]
+    for d in api.list_datasets(search="lerobot", sort="downloads", limit=limit * 3):
+        try:
+            info = api.dataset_info(d.id, files_metadata=True)
+        except Exception:
+            continue
+        sib = [(s.rfilename, s.size or 0) for s in (info.siblings or [])]
+        files = [n for n, _ in sib]
         if "meta/info.json" not in files:
             continue
-        data_bytes = sum(
-            s.size or 0 for s in (d.siblings or []) if s.rfilename.startswith("data/")
-        )
+        data_bytes = sum(sz for n, sz in sib if n.startswith("data/"))
         out.append(
             {
                 "id": d.id,
@@ -92,8 +95,39 @@ def find_lerobot_datasets(limit: int) -> list[dict]:
     return out
 
 
-def audit_one(repo_id: str, max_episodes: int) -> DatasetReport:
-    ctx = load_dataset(repo_id, max_episodes=max_episodes)
+def download_sample(repo_id: str, cap_bytes: int, dest: Path) -> Path:
+    """meta/** in full plus data files in name order until cap_bytes.
+
+    v3 shards hold many episodes per file, so the first shard(s) are a
+    real sample; v2.1 keeps one parquet per episode, so the first files
+    are the first episodes. Either way the audit covers actual data.
+    """
+    from huggingface_hub import dataset_info, hf_hub_download
+
+    sib = [
+        (s.rfilename, s.size or 0)
+        for s in (dataset_info(repo_id, files_metadata=True).siblings or [])
+    ]
+    picked = [n for n, _ in sib if n.startswith("meta/")]
+    budget = cap_bytes
+    for name, size in sorted((n, sz) for n, sz in sib if n.startswith("data/")):
+        if size > budget:
+            continue
+        picked.append(name)
+        budget -= size
+    for name in picked:
+        hf_hub_download(
+            repo_id, name, repo_type="dataset", local_dir=str(dest)
+        )
+    return dest
+
+
+def audit_one(repo_id: str, max_episodes: int, cap_bytes: int) -> DatasetReport:
+    import tempfile
+
+    dest = Path(tempfile.mkdtemp(prefix="kinema-leaderboard-"))
+    download_sample(repo_id, cap_bytes, dest)
+    ctx = load_dataset(str(dest), max_episodes=max_episodes)
     rep = DatasetReport(
         source=repo_id,
         format_version=ctx.format_version,
@@ -194,26 +228,21 @@ def main() -> int:
         slug = d["id"].replace("/", "--")
         entry = {**d, "slug": slug}
         if d["data_bytes"] > args.size_cap_mb * 1024 * 1024:
-            entry["reason"] = (
-                f"parquet payload {d['data_bytes'] / 1e6:.0f} MB exceeds the "
-                f"{args.size_cap_mb} MB sampled-audit cap"
-            )
-            print(f"[{i}/{len(datasets)}] {d['id']}: skipped ({entry['reason']})")
-        else:
-            try:
-                print(f"[{i}/{len(datasets)}] {d['id']} ({d['data_bytes'] / 1e6:.0f} MB)...")
-                rep = audit_one(d["id"], args.max_episodes)
-                entry["report"] = report_to_dict(rep)
-                (out / "dataset" / f"{slug}.html").write_text(render_dataset_page(rep))
-                (out / "dataset" / f"{slug}.json").write_text(json.dumps(entry["report"], indent=2, default=str))
-                print(f"    score {rep.score}/100 ({rep.verdict.name})")
-            except DatasetError as e:
-                entry["reason"] = str(e)
-                print(f"    failed: {e}")
-            except Exception as e:  # noqa: BLE001
-                entry["reason"] = f"audit error: {type(e).__name__}: {e}"
-                print(f"    error: {entry['reason']}")
-                traceback.print_exc()
+            entry["sampled"] = True
+        try:
+            print(f"[{i}/{len(datasets)}] {d['id']} ({d['data_bytes'] / 1e6:.0f} MB)...")
+            rep = audit_one(d["id"], args.max_episodes, args.size_cap_mb * 1024 * 1024)
+            entry["report"] = report_to_dict(rep)
+            (out / "dataset" / f"{slug}.html").write_text(render_dataset_page(rep))
+            (out / "dataset" / f"{slug}.json").write_text(json.dumps(entry["report"], indent=2, default=str))
+            print(f"    score {rep.score}/100 ({rep.verdict.name})")
+        except DatasetError as e:
+            entry["reason"] = str(e)
+            print(f"    failed: {e}")
+        except Exception as e:  # noqa: BLE001
+            entry["reason"] = f"audit error: {type(e).__name__}: {e}"
+            print(f"    error: {entry['reason']}")
+            traceback.print_exc()
         entries.append(entry)
 
     generated = f"{dt.datetime.now(dt.timezone.utc):%Y-%m-%d %H:%M UTC}"

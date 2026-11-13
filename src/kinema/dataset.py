@@ -214,6 +214,13 @@ def load_dataset(
     mask = pc.is_in(table.column("episode_index"), value_set=pa.array(keep))
     table = table.filter(mask)
 
+    # partial downloads: restrict episode metadata to episodes whose frames
+    # are actually present, so checks never see phantom episodes
+    present = set(table.column("episode_index").to_pylist())
+    if len(present) < len(episodes):
+        episodes = [e for e in episodes if e.index in present]
+        truncated = True
+
     episode_index = np.asarray(table.column("episode_index").to_pylist(), dtype=np.int64)
     frame_index = (
         np.asarray(table.column("frame_index").to_pylist(), dtype=np.int64)
