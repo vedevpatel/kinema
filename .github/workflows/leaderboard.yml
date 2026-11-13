@@ -18,8 +18,9 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install -e . hf_transfer
-      - run: HF_HUB_ENABLE_HF_TRANSFER=1 python scripts/leaderboard.py --limit 50 --workers 4 --time-budget 3900 --out docs
+      - run: timeout 3300 env HF_HUB_ENABLE_HF_TRANSFER=1 python scripts/leaderboard.py --limit 50 --workers 8 --time-budget 3000 --out docs || true
       - name: commit site
+        if: always()
         run: |
           git config user.name "Ved Patel"
           git config user.email "130187703+vedevpatel@users.noreply.github.com"

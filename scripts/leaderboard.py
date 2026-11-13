@@ -225,7 +225,20 @@ def render_index(entries: list[dict], generated: str) -> str:
     return page("LeRobot dataset health leaderboard", body)
 
 
+def _write(out: Path, entries: list, generated: str) -> None:
+    """Atomic writes so a kill mid-run never leaves a corrupt or missing site."""
+    data = json.dumps({"generated": generated, "datasets": entries}, indent=2, default=str)
+    idx = render_index(entries, generated)
+    for name, text in (("data.json", data), ("index.html", idx)):
+        tmp = out / f".{name}.tmp"
+        tmp.write_text(text)
+        tmp.replace(out / name)
+
+
 def main() -> int:
+    import socket
+
+    socket.setdefaulttimeout(150)  # no download op may hang the whole run
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=50)
     ap.add_argument("--out", default="docs")
@@ -264,7 +277,7 @@ def main() -> int:
             entries, done_ids = [], set()
 
     import time
-    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 
     def process(d):
         slug = d["id"].replace("/", "--")
@@ -285,24 +298,47 @@ def main() -> int:
 
     started = time.monotonic()
     todo = [d for d in datasets if d["id"] not in done_ids]
+    max_pending = max(1, args.workers) * 2
+
+    def record(entry) -> None:
+        entries.append(entry)
+        generated = f"{dt.datetime.now(dt.timezone.utc):%Y-%m-%d %H:%M UTC}"
+        _write(out, entries, generated)
+
+    # submit incrementally: the queue stays shallow so --time-budget actually
+    # bounds the run (at most max_pending audits in flight when it expires)
     with ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
         pending = {}
-        for d in todo:
-            if args.time_budget and time.monotonic() - started > args.time_budget:
-                break
+        it = iter(todo)
+
+        def submit_next() -> bool:
+            try:
+                d = next(it)
+            except StopIteration:
+                return False
             pending[pool.submit(process, d)] = d
-        for fut in as_completed(pending):
-            entries.append(fut.result())
-            generated = f"{dt.datetime.now(dt.timezone.utc):%Y-%m-%d %H:%M UTC}"
-            (out / "data.json").write_text(
-                json.dumps({"generated": generated, "datasets": entries}, indent=2, default=str)
-            )
+            return True
+
+        for _ in range(min(len(todo), max_pending)):
+            submit_next()
+        while pending:
+            if args.time_budget and time.monotonic() - started > args.time_budget:
+                print("time budget reached; letting in-flight audits finish", flush=True)
+                break
+            done, _ = wait(pending, timeout=30, return_when=FIRST_COMPLETED)
+            for fut in done:
+                pending.pop(fut)
+                record(fut.result())
+            while len(pending) < max_pending and submit_next():
+                pass
+        for fut in list(pending):
+            try:
+                record(fut.result(timeout=600))
+            except Exception as e:  # noqa: BLE001
+                print(f"    dropped in-flight audit: {type(e).__name__}", flush=True)
 
     generated = f"{dt.datetime.now(dt.timezone.utc):%Y-%m-%d %H:%M UTC}"
-    (out / "index.html").write_text(render_index(entries, generated))
-    (out / "data.json").write_text(
-        json.dumps({"generated": generated, "datasets": entries}, indent=2, default=str)
-    )
+    _write(out, entries, generated)
     n_ok = sum(1 for e in entries if e.get("report"))
     print(f"done: {n_ok}/{len(entries)} audited -> {out}/index.html")
     return 0
