@@ -2,9 +2,11 @@
 """Threshold calibration: inject defects of known size into real datasets
 and measure what each check catches.
 
-    python scripts/calibrate.py ds1 ds2 ... [--max-episodes 50] [--markdown out.md]
+    python scripts/calibrate.py                 # pinned list (scripts/calibration_datasets.txt)
+    python scripts/calibrate.py --quick         # its small `quick` subset (~35 MB)
+    python scripts/calibrate.py ds1 ds2 ...     # your own: paths or owner/name[@revision]
 
-Datasets are local paths or Hub ids (owner/name[@revision]). For every
+For every
 dataset the checks first run on the untouched data (baseline), then once
 per (defect, magnitude) on an in-memory copy with that defect injected. A
 defect counts as detected when its target check reports a WARN/FAIL
@@ -253,30 +255,28 @@ DEFECTS = [
 ]
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("datasets", nargs="+")
-    ap.add_argument("--max-episodes", type=int, default=50)
-    ap.add_argument("--markdown", default="")
-    args = ap.parse_args()
+DATASETS_FILE = Path(__file__).resolve().parent / "calibration_datasets.txt"
 
-    ctxs = {}
-    for src in args.datasets:
-        try:
-            ctxs[src] = load_dataset(src, max_episodes=args.max_episodes)
-        except Exception as e:  # noqa: BLE001
-            print(f"skip {src}: {e}", file=sys.stderr)
-    names = list(ctxs)
 
-    # baseline: what each check flags on untouched data
+def pinned_datasets(quick: bool = False) -> list[str]:
+    out = []
+    for line in DATASETS_FILE.read_text().splitlines():
+        parts = line.split()
+        if not parts or parts[0].startswith("#"):
+            continue
+        if quick and "quick" not in parts[1:]:
+            continue
+        out.append(parts[0])
+    return out
+
+
+def run_calibration(ctxs: dict) -> tuple[dict, dict]:
+    """(sensitivity, baseline). sensitivity: label -> [(magnitude, hits, tried)];
+    baseline: check id -> datasets already flagged untouched."""
     base = {src: {cid: _flags(ctx, cid) for cid in CHECKS if cid != "visual-quality"}
             for src, ctx in ctxs.items()}
-    flagged = {cid: sum(1 for s in names if base[s][cid]) for cid in CHECKS if cid != "visual-quality"}
-
-    lines = [f"# kinema calibration ({len(names)} datasets, up to {args.max_episodes} episodes each)", ""]
-    lines += ["## Sensitivity: % of datasets where the injected defect is caught", "",
-              "| defect | check | " + " | ".join(f"m={m}" for m in ("a", "b", "c", "d", "e")) + " |",
-              "|---|---|---|---|---|---|---|"]
+    baseline = {cid: sum(1 for s in ctxs if base[s][cid]) for cid in CHECKS if cid != "visual-quality"}
+    sens = {}
     for label, cid, mags, fn in DEFECTS:
         cells = []
         for m in mags:
@@ -288,13 +288,40 @@ def main() -> int:
                 tried += 1
                 if _flags(mod, cid) - base[src][cid]:
                     hit += 1
-            cells.append(f"{m}: {100 * hit / tried:.0f}% ({tried})" if tried else f"{m}: n/a")
-        cells += [""] * (5 - len(cells))
-        lines.append(f"| {label} | `{cid}` | " + " | ".join(cells) + " |")
+            cells.append((m, hit, tried))
+        sens[label] = (cid, cells)
+    return sens, baseline
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("datasets", nargs="*", help="default: the pinned list")
+    ap.add_argument("--quick", action="store_true", help="the pinned list's small subset")
+    ap.add_argument("--max-episodes", type=int, default=50)
+    ap.add_argument("--markdown", default="")
+    args = ap.parse_args()
+
+    sources = args.datasets or pinned_datasets(quick=args.quick)
+    ctxs = {}
+    for src in sources:
+        try:
+            ctxs[src] = load_dataset(src, max_episodes=args.max_episodes)
+        except Exception as e:  # noqa: BLE001
+            print(f"skip {src}: {e}", file=sys.stderr)
+    sens, flagged = run_calibration(ctxs)
+
+    lines = [f"# kinema calibration ({len(ctxs)} datasets, up to {args.max_episodes} episodes each)", ""]
+    lines += ["## Sensitivity: % of datasets where the injected defect is caught", "",
+              "| defect | check | " + " | ".join(f"m={m}" for m in ("a", "b", "c", "d", "e")) + " |",
+              "|---|---|---|---|---|---|---|"]
+    for label, (cid, cells) in sens.items():
+        row = [f"{m}: {100 * h / t:.0f}% ({t})" if t else f"{m}: n/a" for m, h, t in cells]
+        row += [""] * (5 - len(row))
+        lines.append(f"| {label} | `{cid}` | " + " | ".join(row) + " |")
     lines += ["", "## Baseline: datasets each check already flags (WARN/FAIL) untouched", "",
               "| check | flagged |", "|---|---|"]
     for cid, n in flagged.items():
-        lines.append(f"| `{cid}` | {n}/{len(names)} |")
+        lines.append(f"| `{cid}` | {n}/{len(ctxs)} |")
     lines += ["", "Baseline flags are real issues or false positives - read them before "
               "moving a threshold. Sensitivity says nothing about training impact."]
     out = "\n".join(lines)

@@ -23,24 +23,24 @@ Works on LeRobot **v3.0 and v2.1** layouts, local directories, `.zip`s, and Hub 
 `kinema check lerobot/pusht --policy smolvla`:
 
 ```
-lerobot/pusht  health score 84/100
+lerobot/pusht  health score 87/100
 format v3.0 | 206 episodes | 25650 frames | fps 10.0
 
  check                 verdict  summary
  stats-drift           PASS     data matches meta/stats.json (worst 0% of the FAIL threshold)
- timestamp-grid        PASS     all episodes on the 10 fps grid and monotonic
- dropped-frames        INFO     frame_index contiguous and episode lengths match the data
- calibration-drift     PASS     max joint offset 0.0% of range (joint 1) over 2 comparable joints
+ timestamp-grid        PASS     evenly spaced at 10 fps and monotonic
+ dropped-frames        PASS     frame_index contiguous; episode lengths and video segments match the data
+ calibration-drift     PASS     2 joint(s) + 0 gripper(s) agree; worst offset -0.0% of range (joint 1)
  idle-segments         PASS     no episode starts idle or idles >= 30%
  stuck-actuator        PASS     every joint moves wherever the dataset uses it
  action-saturation     PASS     no continuous action dim pinned at a limit above 5% (2 dims checked)
  nan-and-normalization PASS     no NaN/Inf; all dims have usable variance
- duplicate-and-leakage PASS     no exact or near duplicates
+ duplicate-and-leakage PASS     no exact, partial or near duplicates
  outlier-episodes      WARN     3 episode(s) to review, 22 mild, of 206; worst: [107, 159, 50, ...]
  visual-quality        SKIP     pass --video to run (downloads MP4s; needs the video extra)
- deployment-readiness  WARN     1/206 episodes shorter than smolvla's action chunk
+ deployment-readiness  WARN     0 blocker(s), 1 warning(s) for smolvla
 
-verdict: WARN (0 fail, 4 warn, 23 info)
+verdict: WARN (0 fail, 4 warn, 22 info)
 ```
 
 Exit code is `1` on any FAIL (`--fail-on warn` to also gate on warnings), so it drops
@@ -107,7 +107,8 @@ kinema check /tmp/demo
 ```bash
 pip install -e .[dev]
 python -m pytest                      # unit tests (synthetic defects + false-positive regressions)
-KINEMA_E2E=1 python -m pytest        # + real Hub datasets (pinned revisions)
+KINEMA_E2E=1 python -m pytest        # + real Hub datasets (pinned revisions) and the sensitivity guard
+python scripts/calibrate.py --quick  # how big a defect must be before each check catches it
 ```
 
 Apache-2.0. Named for *kinema*, "motion" - the thing your dataset is supposed to contain.

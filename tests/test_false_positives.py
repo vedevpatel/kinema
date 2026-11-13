@@ -631,3 +631,39 @@ def test_motion_repeated_within_episodes_is_not_a_copy(base):
     res = run("duplicate-and-leakage", load_dataset(str(base)))
     assert not any(f.severity >= Severity.WARN and f.details.get("kind") == "partial"
                    and set(f.details["episodes"]) == {3, 9} for f in res.findings)
+
+
+def test_tiny_episodes_sit_out_jerk_and_velocity(base):
+    # utokyo: 8-frame episodes, where p95 jerk is just the single largest step
+    f = base / "data" / "chunk-000" / "file-000.parquet"
+    t = pq.read_table(f).to_pydict()
+    ep = np.asarray(t["episode_index"]); fi = np.asarray(t["frame_index"])
+    keep = (ep != 4) | (fi < 8)  # episode 4 becomes 8 frames long
+    t = {k: [v for v, m in zip(vals, keep) if m] for k, vals in t.items()}
+    a = np.asarray(t["action"])
+    rows = np.flatnonzero(np.asarray(t["episode_index"]) == 4)
+    a[rows[4], 1] += 3 * a[:, 1].std()  # one big step inside the tiny episode
+    t["action"] = a.tolist()
+    pq.write_table(pa.table(t), f)
+    mf = base / "meta" / "episodes" / "chunk-000" / "file-000.parquet"
+    m = pq.read_table(mf).to_pydict()
+    m["length"] = [8 if e == 4 else n for e, n in zip(m["episode_index"], m["length"])]
+    pq.write_table(pa.table(m), mf)
+    res = run("outlier-episodes", load_dataset(str(base)))
+    hit = [f for f in res.findings if f.episode_index == 4]
+    assert not any(m in ("p95_jerk", "peak_velocity") for f in hit for m in f.details["metrics"])
+
+
+def test_two_level_toggle_does_not_drive_outliers(base):
+    # utokyo motor_3: an unnamed gripper on an odd-sized layout jumps by the
+    # same gap every time it switches - not a glitch
+    def toggle(s, a, ep):
+        a = a.copy()
+        for e in np.unique(ep):
+            r = np.flatnonzero(ep == e)
+            a[r, 2] = np.where(np.arange(len(r)) >= (10 + 3 * (e % 4)), 1.0, 0.0)
+        return s, a
+    _set_names(base, [f"motor_{i}" for i in range(6)], [f"motor_{i}" for i in range(6)])
+    _rewrite_data(base, toggle)
+    res = run("outlier-episodes", load_dataset(str(base)))
+    assert not any(f.severity == Severity.WARN for f in res.findings)

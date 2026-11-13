@@ -44,4 +44,6 @@ jobs:
       - run: pip install -e .[dev]
       # pusht end-to-end + the real-data guard (pinned Hub revisions: known-
       # healthy datasets must not FAIL, known defects must still be caught)
-      - run: KINEMA_E2E=1 python -m pytest tests/test_end_to_end.py tests/test_real_datasets.py -q
+      # + the sensitivity guard: injected defects on pinned datasets must be
+      # caught, untouched data must not grow flags (scripts/calibrate.py --quick)
+      - run: KINEMA_E2E=1 python -m pytest tests/test_end_to_end.py tests/test_real_datasets.py tests/test_sensitivity.py -q

@@ -37,6 +37,26 @@ _METRICS = {
 _ABS_FLOOR = {"static_fraction": 0.15}
 
 
+_MIN_MOTION_FRAMES = 22  # >= 20 jerk samples, so p95 is not just the max
+
+
+def _is_toggle(ctx, j: int, std: float) -> bool:
+    """A two-level command (an unnamed gripper, an on/off switch): its large
+    steps are all the same size. A glitch varies in size and snaps back; a
+    toggle jumps by exactly the gap between its levels, every time."""
+    big = []
+    for ep in ctx.episode_ids():
+        rows = ctx.rows_for(ep)
+        if len(rows) < 2:
+            continue
+        z = np.abs(np.diff(ctx.action[rows, j])) / std
+        big.extend(z[z > 1.0].tolist())
+    if len(big) < 3:
+        return False
+    big = np.asarray(big)
+    return float(big.std() / big.mean()) < 0.05
+
+
 def _iqr_flags(values: np.ndarray, k: float, side: str = "both",
                rel: float = 0.5, floor: float = 0.0) -> np.ndarray:
     """Flag values outside the IQR fence (on the harmful side) that also
@@ -105,7 +125,7 @@ class OutlierEpisodesCheck(Check):
             # neither belongs in a jerk / peak-velocity outlier score
             grip = named_grip | inferred_grip | velocity_dims(ctx.action_names, n)
             motion_dims = [j for j in range(n) if std[j] > 1e-8 and j not in grip
-                           and len(np.unique(action[:, j])) > 10]
+                           and len(np.unique(action[:, j])) > 10 and not _is_toggle(ctx, j, std[j])]
             scale = np.where(std > 1e-8, std, 1.0)
             eps_idle = np.maximum(1e-8, 0.01 * std)
 
@@ -123,7 +143,10 @@ class OutlierEpisodesCheck(Check):
             if action is not None:
                 da = np.diff(action[rows], axis=0)
                 vals["static_fraction"].append(float((np.abs(da) < eps_idle).all(axis=1).mean()))
-                if motion_dims:
+                # on a handful of frames the 95th-percentile jerk IS the maximum,
+                # and a peak over 8 frames is not comparable to one over 300:
+                # short episodes sit out the motion metrics (duration still counts)
+                if motion_dims and len(rows) >= _MIN_MOTION_FRAMES:
                     z = da[:, motion_dims] / scale[motion_dims]
                     vel = np.nanmax(np.abs(z), axis=1)
                     jerk = np.nanmax(np.abs(np.diff(z, axis=0)), axis=1) if len(z) > 1 else np.zeros(1)
