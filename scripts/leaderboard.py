@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from kinema.checks import ALL_CHECKS, CheckConfig, Severity  # noqa: E402
 from kinema.dataset import DatasetError, load_dataset  # noqa: E402
+from kinema.engine import engine_version  # noqa: E402
 from kinema.report import DatasetReport, report_to_dict  # noqa: E402
 
 SIZE_CAP_MB_DEFAULT = 200
@@ -256,9 +257,14 @@ def download_sample(repo_id: str, cap_bytes: int, dest: Path) -> Path:
     budget = cap_bytes
     data_files = sorted((n, sz) for n, sz in sib if n.startswith("data/"))
     # cap file count too: v2.1 keeps one small parquet per episode, and
-    # hundreds of per-file requests are what trips the Hub's rate limits
+    # hundreds of per-file requests are what trips the Hub's rate limits.
+    # Candidates are spread evenly over the dataset (not the first files:
+    # early episodes are often warm-up recordings).
     chosen = []
-    for name, size in data_files[:40]:
+    n_files = len(data_files)
+    spread = sorted({int(round(x)) for x in
+                     (i * (n_files - 1) / 39 for i in range(40))} if n_files > 40 else range(n_files))
+    for name, size in (data_files[i] for i in spread):
         if size > budget:
             continue
         chosen.append(name)
@@ -372,8 +378,12 @@ def render_dataset_page(rep: DatasetReport) -> str:
 
 
 def render_index(entries: list[dict], generated: str) -> str:
+    engine = engine_version()
     rows = []
+    n_stale = 0
     for i, e in enumerate(entries, 1):
+        stale = e.get("report") and e.get("engine") != engine
+        n_stale += bool(stale)
         if e.get("report"):
             r = e["report"]
             link = f"<a href='dataset/{esc(e['slug'])}.html'>{esc(e['id'])}</a>"
@@ -382,6 +392,8 @@ def render_index(entries: list[dict], generated: str) -> str:
             checks = " ".join(
                 badge(c["verdict"]) for c in r["checks"] if c["verdict"] in ("WARN", "FAIL")
             ) or '<span class=dim>all clear</span>'
+            if stale:
+                checks += ' <span class=dim title="audited by older check logic">(stale - re-audit queued)</span>'
         else:
             link = esc(e["id"])
             score = '<span class=dim>-</span>'
@@ -397,8 +409,12 @@ def render_index(entries: list[dict], generated: str) -> str:
         "<h1>LeRobot dataset health leaderboard</h1>"
         f"<p class=dim>The most-downloaded LeRobot datasets on Hugging Face, audited nightly by "
         "<a href='https://github.com/vedevpatel/kinema'>kinema</a>. "
-        f"Generated {esc(generated)}. Scores are heuristic: 100 minus penalties per "
-        "warning/failing check. Video checks are off (v0).</p>"
+        f"Generated {esc(generated)} by engine <code>{esc(engine)}</code>"
+        + (f"; {n_stale} result(s) from older check logic are being re-audited" if n_stale else "")
+        + ". Scores are heuristic: 100 minus a per-check penalty for each warning/failing "
+        "check, weighted by how directly it breaks training. Video checks are not run "
+        "here (MP4s are hundreds of MB per camera); run <code>kinema check --video</code> "
+        "locally.</p>"
         "<p id=pager><button onclick=pg(-1)>&larr; Prev</button> "
         "<span id=pglabel></span> "
         "<button onclick=pg(1)>Next &rarr;</button></p>"
@@ -458,7 +474,10 @@ def main() -> int:
         if worklist_path:
             worklist_path.write_text(json.dumps(datasets))
 
-    # resume: keep entries already audited in a previous run
+    # resume: skip entries already audited BY THIS ENGINE. Results from older
+    # check logic stay on the board (marked stale) until they are replaced,
+    # and are re-audited first; gated repos stay gated whatever the engine.
+    engine = engine_version()
     entries = []
     data_json = out / "data.json"
     done_ids: set[str] = set()
@@ -466,22 +485,25 @@ def main() -> int:
         try:
             prev = json.loads(data_json.read_text()).get("datasets", [])
             entries = [
-                e
-                for e in prev
-                if e.get("report")
-                or (e.get("reason") and e.get("status") in ("gated", "unsupported"))
+                e for e in prev
+                if e.get("report") or (e.get("reason") and e.get("status") in ("gated", "unsupported"))
             ]
-            done_ids = {e["id"] for e in entries}
-            print(f"resuming: {len(done_ids)} already done")
+            done_ids = {
+                e["id"] for e in entries
+                if e.get("status") == "gated" or e.get("engine") == engine
+            }
+            n_stale = sum(1 for e in entries if e["id"] not in done_ids)
+            print(f"resuming: {len(done_ids)} current, {n_stale} stale (engine {engine})")
         except Exception:
             entries, done_ids = [], set()
+    stale_ids = {e["id"] for e in entries if e["id"] not in done_ids}
 
     import time
     from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 
     def process(d):
         slug = d["id"].replace("/", "--")
-        entry = {**d, "slug": slug}
+        entry = {**d, "slug": slug, "engine": engine}
         if d["data_bytes"] > args.size_cap_mb * 1024 * 1024:
             entry["sampled"] = True
         try:
@@ -500,10 +522,16 @@ def main() -> int:
 
     started = time.monotonic()
     todo = [d for d in datasets if d["id"] not in done_ids]
+    todo.sort(key=lambda d: d["id"] not in stale_ids)  # stale results first
     max_pending = max(1, args.workers) * 2
 
     def record(entry) -> None:
-        entries.append(entry)
+        for i, e in enumerate(entries):
+            if e["id"] == entry["id"]:
+                entries[i] = entry  # replace the stale result in place
+                break
+        else:
+            entries.append(entry)
         generated = f"{dt.datetime.now(dt.timezone.utc):%Y-%m-%d %H:%M UTC}"
         _write(out, entries, generated)
 

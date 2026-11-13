@@ -6,7 +6,7 @@
   <name> synth PATH [--episodes N] [--defects a,b,c]
 
 DATASET is a local directory, a .zip, or a Hub repo id (owner/name or
-hf://owner/name).
+hf://owner/name, optionally @revision to pin a branch, tag or commit).
 """
 
 from __future__ import annotations

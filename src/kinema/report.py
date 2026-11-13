@@ -8,9 +8,27 @@ from typing import Any
 
 from kinema.checks.base import CheckResult, Severity
 
-# health score: start at 100, pay per failing/warning check (not per finding)
+# health score: start at 100, pay per failing/warning check (not per finding).
+# A FAIL is a blocker wherever it comes from. A WARN costs what the issue
+# does to a training run: wrong normalization or broken sampling corrupts
+# every batch; behaviour issues skew what the policy learns; outlier and
+# duplicate lists are "review these episodes".
 _FAIL_COST = 25
-_WARN_COST = 8
+_WARN_COST = {
+    "stats-drift": 10,
+    "nan-and-normalization": 10,
+    "deployment-readiness": 10,
+    "timestamp-grid": 10,
+    "dropped-frames": 8,
+    "calibration-drift": 6,
+    "idle-segments": 6,
+    "stuck-actuator": 6,
+    "action-saturation": 6,
+    "visual-quality": 6,
+    "duplicate-and-leakage": 4,
+    "outlier-episodes": 3,
+}
+_WARN_COST_DEFAULT = 8
 
 
 @dataclass
@@ -35,7 +53,7 @@ class DatasetReport:
             if r.verdict == Severity.FAIL:
                 score -= _FAIL_COST
             elif r.verdict == Severity.WARN:
-                score -= _WARN_COST
+                score -= _WARN_COST.get(r.check_id, _WARN_COST_DEFAULT)
         return max(0, score)
 
     def counts(self) -> dict[str, int]:

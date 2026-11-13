@@ -76,7 +76,7 @@ def test_timestamp_grid_off_grid(tmp_path, cfg):
     ctx = defective(tmp_path, "timestamp-grid")
     res = run("timestamp-grid", ctx, cfg)
     assert res.verdict >= Severity.WARN
-    assert any("off the" in f.message and f.episode_index == 6 for f in res.findings)
+    assert any("frame spacing deviates" in f.message and f.episode_index == 6 for f in res.findings)
     assert any(f.severity == Severity.FAIL and f.episode_index == 7 for f in res.findings)
 
 

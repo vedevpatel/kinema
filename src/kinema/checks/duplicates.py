@@ -52,13 +52,17 @@ class DuplicateCheck(Check):
         eps = sorted(trajectories)
         if 1 < len(eps) <= cfg.near_dup_max_pairs:
             grid = 32
+            # z-score each dim with dataset-wide stats: one std over the
+            # flattened trajectory lets the largest-unit dim decide alone
+            # (two episodes sharing a gripper pattern then look identical)
+            mu = np.nanmean(action, axis=0)
+            sd = np.nanstd(action, axis=0)
+            live = sd > 1e-8
             feats = {}
             for ep in eps:
                 a = trajectories[ep]
                 idx = np.linspace(0, len(a) - 1, min(grid, len(a))).astype(int)
-                v = a[idx].ravel()
-                scale = v.std()
-                feats[ep] = v / scale if scale > 1e-12 else v * 0.0
+                feats[ep] = ((a[idx][:, live] - mu[live]) / sd[live]).ravel()
             flagged: set[tuple[int, int]] = set()
             for i in range(len(eps)):
                 for k in range(i + 1, len(eps)):
@@ -67,8 +71,8 @@ class DuplicateCheck(Check):
                         continue  # already reported as exact
                     if len(feats[e1]) != len(feats[e2]):
                         continue
-                    rmse = float(np.sqrt(((feats[e1] - feats[e2]) ** 2).mean()))
-                    if rmse < 0.02:
+                    rmse = float(np.sqrt(np.nanmean((feats[e1] - feats[e2]) ** 2)))
+                    if rmse < 0.05:  # within 5% of a std on every dim, on average
                         flagged.add((e1, e2))
             for e1, e2 in sorted(flagged):
                 res.findings.append(
@@ -76,7 +80,7 @@ class DuplicateCheck(Check):
                         self.id,
                         Severity.INFO,
                         f"episodes {e1} and {e2}: near-identical trajectories "
-                        "(downsampled RMSE < 0.02) - possible re-recordings of the same run",
+                        "(downsampled RMSE < 0.05 std) - possible re-recordings of the same run",
                         details={"episodes": [e1, e2], "kind": "near"},
                     )
                 )

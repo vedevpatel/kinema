@@ -12,6 +12,7 @@ pip install kinema
 kinema check lerobot/pusht                 # straight off the Hugging Face Hub
 kinema check ./my-dataset --policy pi0     # local dataset, deployment checks for pi0
 kinema check hf://owner/name --json out.json --markdown report.md
+kinema check owner/name@<commit> --video  # pinned revision; + blur/exposure from the MP4s
 ```
 
 No `lerobot` dependency. Installs in seconds: `pyarrow`, `numpy`, `huggingface-hub`, `rich`.
@@ -59,7 +60,7 @@ straight into CI as a pre-training gate.
 | `nan-and-normalization` | NaN/Inf, zero-variance dims, std < 1e-6 | one NaN poisons the loss for the whole batch |
 | `duplicate-and-leakage` | exact-copy episodes, near-duplicates | silent metric inflation |
 | `outlier-episodes` | IQR outliers on the harmful side only: duration and end pose within a task, jerk/velocity per dim in std units without grippers. WARN when two independent signals agree or one is far out (Tukey k=3, >=3x median) | a handful of broken episodes dominate the gradient |
-| `visual-quality` | blur (variance of Laplacian), lighting, per camera | bad visuals cost ~30% of training loss ([HF GIGO](https://huggingface.co/blog/robotdata/gigo)). Needs `--video` and the `video` extra |
+| `visual-quality` | blur (variance of Laplacian) and underexposure (95th-percentile brightness), per camera, sampled inside each episode's segment (v2.1 per-episode and v3 shared MP4s) | bad visuals cost ~30% of training loss ([HF GIGO](https://huggingface.co/blog/robotdata/gigo)). Needs `--video` and the `video` extra |
 | `deployment-readiness` | episode length vs action chunk, stats coverage, quantile-norm support, declared shapes, timestamp grid | the openpi #906 failure mode: low loss, failed robot |
 
 ## Deployment readiness
@@ -99,14 +100,14 @@ kinema check /tmp/demo
   probable causes with evidence out. The checks above are the engine; the copilot is the
   diagnosis layer.
 - Auto-fix suggestions with safe rewrites (stats recompute, idle trimming).
-- Video checks on by default once remote-video attribution lands for v3 shared MP4 files.
+- Video checks on the leaderboard: v3 shared-MP4 attribution works locally (`--video`); the nightly board skips it because the MP4s run to hundreds of MB per camera.
 
 ## Development
 
 ```bash
 pip install -e .[dev]
 python -m pytest                      # unit tests (synthetic defects + false-positive regressions)
-ROLLOUTQA_E2E=1 python -m pytest      # + end-to-end against lerobot/pusht
+KINEMA_E2E=1 python -m pytest        # + real Hub datasets (pinned revisions)
 ```
 
 Apache-2.0. Named for *kinema*, "motion" - the thing your dataset is supposed to contain.

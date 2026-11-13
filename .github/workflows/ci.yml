@@ -19,8 +19,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - run: pip install -e .[dev]
-      - run: python -m pytest tests/test_checks.py -q
+      - run: pip install -e .[dev,video]
+      # every unit suite, including the false-positive regressions; the
+      # network suites skip themselves without KINEMA_E2E
+      - run: python -m pytest -q
 
   secrets:
     runs-on: ubuntu-latest
@@ -40,4 +42,6 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install -e .[dev]
-      - run: ROLLOUTQA_E2E=1 python -m pytest tests/test_end_to_end.py -q
+      # pusht end-to-end + the real-data guard (pinned Hub revisions: known-
+      # healthy datasets must not FAIL, known defects must still be caught)
+      - run: KINEMA_E2E=1 python -m pytest tests/test_end_to_end.py tests/test_real_datasets.py -q

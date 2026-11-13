@@ -1,6 +1,6 @@
 """End-to-end against a real public dataset (lerobot/pusht, v3, ~25k frames).
 
-Network-dependent. Skipped unless ROLLOUTQA_E2E=1; CI sets it on the
+Network-dependent. Skipped unless KINEMA_E2E=1; CI sets it on the
 nightly leg, and it is the command used to generate the README demo.
 """
 
@@ -15,7 +15,8 @@ from kinema.dataset import load_dataset
 from kinema.report import DatasetReport, render_markdown
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("ROLLOUTQA_E2E") != "1", reason="set ROLLOUTQA_E2E=1 to run"
+    os.environ.get("KINEMA_E2E", os.environ.get("ROLLOUTQA_E2E")) != "1",
+    reason="set KINEMA_E2E=1 to run",
 )
 
 

@@ -335,3 +335,74 @@ def test_multitask_end_poses_compared_within_task(base):
     _rewrite_data(base, ends)
     res = run("outlier-episodes", load_dataset(str(base)))
     assert not any("end_pose" in f.message for f in res.findings)
+
+
+# --- timestamps / frame bookkeeping -------------------------------------------
+
+def _set_timestamps(root, fn):
+    f = root / "data" / "chunk-000" / "file-000.parquet"
+    t = pq.read_table(f).to_pydict()
+    t["timestamp"] = fn(np.asarray(t["timestamp"]), np.asarray(t["episode_index"])).tolist()
+    pq.write_table(pa.table(t), f)
+
+
+def test_constant_offset_without_video_is_not_jitter(base):
+    # a constant start offset leaves frame spacing intact
+    _set_timestamps(base, lambda t, ep: t + 0.05)
+    res = run("timestamp-grid", load_dataset(str(base)))
+    assert gated(res) == []
+
+
+def test_wallclock_timestamps_on_video_dataset_fail(base):
+    # openarm-packingbench: Unix-time timestamps; video lookup by timestamp misses
+    _set_timestamps(base, lambda t, ep: t + 1.78e9)
+    p = base / "meta" / "info.json"
+    info = json.loads(p.read_text())
+    info["features"]["observation.images.top"] = {"dtype": "video", "shape": [8, 8, 3]}
+    p.write_text(json.dumps(info))
+    res = run("timestamp-grid", load_dataset(str(base)))
+    assert any(f.severity == Severity.FAIL and "start at 0" in f.message for f in res.findings)
+
+
+def test_dropped_frame_gap_is_reported(base):
+    def gap(t, ep):
+        t = t.copy()
+        rows = np.flatnonzero(ep == 4)
+        t[rows[30:]] += 0.1  # one missing frame at 10 fps
+        return t
+    _set_timestamps(base, gap)
+    res = run("timestamp-grid", load_dataset(str(base)))
+    assert any(f.episode_index == 4 and f.details.get("gaps") == 1 for f in res.findings)
+
+
+def test_duplicate_catalogued_episode_ids_fail_once(base):
+    # koch-arm: merged sessions restarting at 0 list the same index twice
+    mf = base / "meta" / "episodes" / "chunk-000" / "file-000.parquet"
+    m = pq.read_table(mf).to_pydict()
+    m2 = {k: v + v[:3] for k, v in m.items()}  # episodes 0-2 catalogued twice
+    pq.write_table(pa.table(m2), mf)
+    ctx = load_dataset(str(base))
+    assert ctx.duplicate_episode_ids == {0: 2, 1: 2, 2: 2}
+    res = run("dropped-frames", ctx)
+    assert any(f.severity == Severity.FAIL and "more than once" in f.message for f in res.findings)
+    dup = run("duplicate-and-leakage", ctx)
+    assert not any(len(set(f.details.get("episodes", []))) == 1 for f in dup.findings)
+
+
+def test_unreadable_data_file_is_reported_not_a_crash(base, tmp_path):
+    f = base / "data" / "chunk-000" / "file-000.parquet"
+    good = pq.read_table(f)
+    half = good.num_rows // 2
+    pq.write_table(good.slice(0, half), f)
+    pq.write_table(good.slice(half), base / "data" / "chunk-000" / "file-001.parquet")
+    broken = base / "data" / "chunk-000" / "file-001.parquet"
+    broken.write_bytes(broken.read_bytes()[: len(broken.read_bytes()) // 2])  # truncated
+    ctx = load_dataset(str(base))
+    assert [n for n, _ in ctx.unreadable_files] == ["data/chunk-000/file-001.parquet"]
+    res = run("dropped-frames", ctx)
+    assert any(f.severity == Severity.FAIL and "cannot be read" in f.message for f in res.findings)
+
+
+def test_sampled_episodes_are_spread_not_first(base):
+    ctx = load_dataset(str(base), max_episodes=4)
+    assert ctx.episode_ids() == [0, 8, 15, 23]

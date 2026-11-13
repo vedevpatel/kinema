@@ -102,28 +102,15 @@ class DeploymentReadinessCheck(Check):
         for key, arr in ((STATE_KEY, ctx.state), (ACTION_KEY, ctx.action)):
             if arr is None:
                 continue
-            declared = (feats.get(key) or {}).get("shape")
-            if declared and list(declared) != [arr.shape[1]]:
+            declared = (feats.get(ctx.feature_keys.get(key, key)) or {}).get("shape")
+            # compare element counts: [8], [1, 8] and [8, 1] all describe 8 dims
+            if declared and int(np.prod(declared)) != arr.shape[1]:
                 res.findings.append(
                     Finding(
                         self.id,
                         Severity.FAIL,
                         f"{key}: info.json declares shape {declared} but the data has "
                         f"{arr.shape[1]} dims",
-                    )
-                )
-
-        # 6. delta_timestamps compatibility
-        if ctx.fps:
-            t = ctx.timestamp
-            grid_err = float(np.abs(t - np.round(t * ctx.fps) / ctx.fps).max()) if len(t) else 0.0
-            if grid_err > 0.5 / ctx.fps:
-                res.findings.append(
-                    Finding(
-                        self.id,
-                        Severity.WARN,
-                        f"timestamps up to {grid_err * 1000:.1f} ms off-grid - "
-                        "delta_timestamps window sampling will misalign frames",
                     )
                 )
 

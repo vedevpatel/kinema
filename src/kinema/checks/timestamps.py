@@ -15,29 +15,35 @@ from kinema.checks.base import Check, CheckConfig, CheckResult, Finding, Severit
 
 class TimestampGridCheck(Check):
     id = "timestamp-grid"
-    title = "Timestamp grid (on-grid, monotonic, low jitter)"
+    title = "Timestamp grid (spacing, monotonic, start at 0)"
+
+    # Measured on frame-to-frame spacing, not distance from an absolute
+    # grid: a constant offset leaves spacing intact, while any jitter makes
+    # the absolute distance saturate at half a period and say nothing.
+    # LeRobot compares spacing against 1/fps within tolerance_s (default
+    # 1e-4 s), and looks video frames up BY timestamp - so timestamps that
+    # do not start at 0 (e.g. wall-clock seconds) break video decoding.
 
     def run(self, ctx, cfg: CheckConfig) -> CheckResult:
         res = CheckResult(self.id, self.title)
         if not ctx.fps:
             return self.skip("fps missing from meta/info.json")
         fps = ctx.fps
-        worst_frac = 0.0
-        worst_ep = None
+        period = 1.0 / fps
+        has_video = any(
+            isinstance(v, dict) and v.get("dtype") == "video"
+            for v in (ctx.info.get("features") or {}).values()
+        )
+        worst_jit, worst_ep = 0.0, None
         flagged = 0
+        offset_eps: list[tuple[int, float]] = []
         for ep in ctx.episode_ids():
             rows = ctx.rows_for(ep)
             if len(rows) < 3:
                 continue
             t = ctx.timestamp[rows]
-            grid = np.round(t * fps) / fps
-            off = np.abs(t - grid)
-            max_off = float(off.max())
-            frac = max_off * fps  # as a fraction of the frame period
             d = np.diff(t)
             nonmono = int((d <= 0).sum())
-            if frac > worst_frac:
-                worst_frac, worst_ep = frac, ep
             if nonmono:
                 flagged += 1
                 res.findings.append(
@@ -49,24 +55,47 @@ class TimestampGridCheck(Check):
                         episode_index=ep,
                     )
                 )
-            elif frac > cfg.grid_warn_frac:
+                continue
+            if abs(t[0]) > 0.5 * period:
+                offset_eps.append((ep, float(t[0])))
+            jit = float(np.abs(d - period).max()) * fps  # fraction of a period
+            gaps = int((d > 1.5 * period).sum())
+            if jit > worst_jit:
+                worst_jit, worst_ep = jit, ep
+            if jit > cfg.grid_warn_frac:
                 flagged += 1
                 res.findings.append(
                     Finding(
                         self.id,
                         Severity.WARN,
-                        f"episode {ep}: timestamps up to {max_off * 1000:.1f} ms off the "
-                        f"{fps:g} fps grid ({frac:.0%} of the frame period); a loader needs "
-                        f"tolerance_s >= {max_off:.4f}",
+                        f"episode {ep}: frame spacing deviates up to {jit:.0%} of the "
+                        f"{fps:g} fps period"
+                        + (f", {gaps} dropped-frame gap(s)" if gaps else "")
+                        + f"; LeRobot's default tolerance_s (1e-4 s) rejects this - "
+                        f"needs tolerance_s >= {jit * period:.4f}",
                         episode_index=ep,
+                        details={"jitter_fraction": jit, "gaps": gaps},
                     )
                 )
-        if not res.findings:
-            res.summary = f"all episodes on the {fps:g} fps grid and monotonic"
+        if offset_eps:
+            ex = ", ".join(f"{e} ({t0:.4g}s)" for e, t0 in offset_eps[:5])
+            res.findings.append(
+                Finding(
+                    self.id,
+                    Severity.FAIL if has_video else Severity.INFO,
+                    f"{len(offset_eps)} episode(s) whose timestamps do not start at 0: {ex}"
+                    + (" - video frames are looked up by timestamp, so decoding will miss"
+                       if has_video else " - harmless without videos (spacing is what matters)"),
+                    details={"episodes": [e for e, _ in offset_eps]},
+                )
+            )
+        if not any(f.severity >= Severity.WARN for f in res.findings):
+            res.summary = f"evenly spaced at {fps:g} fps and monotonic"
         else:
             res.summary = (
-                f"{flagged}/{ctx.total_episodes} episodes flagged; "
-                f"worst off-grid {worst_frac:.0%} of frame period (episode {worst_ep})"
+                f"{flagged}/{ctx.total_episodes} episodes flagged; worst spacing deviation "
+                f"{worst_jit:.0%} of a period (episode {worst_ep})"
+                + (f"; {len(offset_eps)} not starting at 0" if offset_eps else "")
             )
         return res
 
@@ -78,6 +107,30 @@ class DroppedFramesCheck(Check):
     def run(self, ctx, cfg: CheckConfig) -> CheckResult:
         res = CheckResult(self.id, self.title)
         n_gap = n_meta_mismatch = n_dup = 0
+        if ctx.unreadable_files:
+            ex = "; ".join(f"{name} ({err})" for name, err in ctx.unreadable_files[:3])
+            res.findings.append(
+                Finding(
+                    self.id,
+                    Severity.FAIL,
+                    f"{len(ctx.unreadable_files)} data file(s) cannot be read: {ex} - "
+                    "loading this dataset will crash; their episodes were not audited",
+                    details={"files": [n for n, _ in ctx.unreadable_files]},
+                )
+            )
+        if ctx.duplicate_episode_ids:
+            dup = ctx.duplicate_episode_ids
+            ex = ", ".join(f"{e} (x{n})" for e, n in list(dup.items())[:8])
+            res.findings.append(
+                Finding(
+                    self.id,
+                    Severity.FAIL,
+                    f"{len(dup)} episode index(es) catalogued more than once in the metadata: "
+                    f"{ex}{'...' if len(dup) > 8 else ''} - typical of merged recording sessions "
+                    "that each restarted at 0; frames of different episodes share one index",
+                    details={"duplicates": {str(k): v for k, v in dup.items()}},
+                )
+            )
         for ep in ctx.episode_ids():
             rows = ctx.rows_for(ep)
             fi = ctx.frame_index[rows]

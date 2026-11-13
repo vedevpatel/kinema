@@ -74,6 +74,11 @@ class DatasetContext:
     stats_source: str = "meta/stats.json"  # where ctx.stats came from
     state_names: list | None = None
     action_names: list | None = None
+    # canonical key -> the column name this dataset uses ("actions", ...)
+    feature_keys: dict = field(default_factory=dict)
+    # episode index -> times catalogued, when the metadata lists it > once
+    duplicate_episode_ids: dict = field(default_factory=dict)
+    unreadable_files: list = field(default_factory=list)  # [(relpath, error)]
     _row_slices: dict = field(default_factory=dict, repr=False)
 
     @property
@@ -148,11 +153,17 @@ def _resolve_source(source: str, video: bool = False) -> tuple[Path, str | None]
         )
     from huggingface_hub import snapshot_download
 
+    # owner/name@revision pins a branch, tag or commit (reproducible audits)
+    revision = None
+    if "@" in src:
+        src, revision = src.rsplit("@", 1)
     patterns = ["meta/**", "data/**", "*.json", "*.jsonl"]
     if video:
         patterns.append("videos/**")
     try:
-        local = snapshot_download(repo_id=src, repo_type="dataset", allow_patterns=patterns)
+        local = snapshot_download(
+            repo_id=src, repo_type="dataset", allow_patterns=patterns, revision=revision
+        )
     except Exception as e:  # noqa: BLE001 - surface a clean message
         raise DatasetError(f"could not download {src} from the Hugging Face Hub: {e}")
     return Path(local), src
@@ -246,6 +257,14 @@ def _load_episode_stats(
     return out
 
 
+def _spread(ids: list[int], n: int) -> list[int]:
+    """n ids evenly spaced over the sorted list (first and last included)."""
+    if n >= len(ids):
+        return list(ids)
+    pos = np.unique(np.round(np.linspace(0, len(ids) - 1, n)).astype(int))
+    return [ids[i] for i in pos]
+
+
 def _effective_stats(
     stats_json: dict, episode_stats: dict, version: str, episode_ids: list[int]
 ) -> tuple[dict, str]:
@@ -294,6 +313,15 @@ def load_dataset(
     version = str(info.get("codebase_version", "unknown"))
 
     episodes = _load_episode_meta(root)
+    counts: dict[int, int] = {}
+    for e in episodes:
+        counts[e.index] = counts.get(e.index, 0) + 1
+    duplicate_ids = {i: n for i, n in counts.items() if n > 1}
+    if duplicate_ids:  # audit each index once; dropped-frames reports the rest
+        first: dict[int, EpisodeMeta] = {}
+        for e in episodes:
+            first.setdefault(e.index, e)
+        episodes = list(first.values())
     keys = _resolve_keys(info)
     episode_stats = _load_episode_stats(root, keys)
     # expose stats under the canonical keys whatever the dataset calls them
@@ -309,22 +337,49 @@ def load_dataset(
     if not data_files:
         raise DatasetError(f"no frame data found under data/ in {root}")
 
-    # read files one at a time, keeping only rows for catalogued episodes,
-    # and stop once enough episodes are covered - bounds peak memory instead
-    # of materializing every shard at once (OOM on wide multi-file datasets)
+    # read files one at a time, keeping only rows for the episodes we audit -
+    # bounds peak memory instead of materializing every shard at once (OOM
+    # on wide multi-file datasets). With --max-episodes, the audited episodes
+    # are spread evenly over the ones present: the first N are often warm-up
+    # recordings and are not representative of the dataset.
     meta_ids = sorted(e.index for e in episodes)
-    value_set = pa.array(meta_ids)
+    targets = meta_ids
+    per_file: list[set[int]] | None = None
+    unreadable: list[tuple[str, str]] = []
+
+    def _read(f: Path, columns=None):
+        try:
+            return pq.read_table(f, columns=columns)
+        except (OSError, pa.ArrowInvalid) as e:  # truncated / corrupt file
+            if not any(name == f.relative_to(root).as_posix() for name, _ in unreadable):
+                unreadable.append((f.relative_to(root).as_posix(), str(e)[:120]))
+            return None
+
+    if max_episodes is not None and max_episodes < len(meta_ids):
+        meta_set = set(meta_ids)
+        per_file = []
+        for f in data_files:
+            t = _read(f, columns=["episode_index"])
+            per_file.append(set() if t is None else set(t.column(0).to_pylist()) & meta_set)
+        present_ids = sorted(set().union(*per_file))
+        targets = _spread(present_ids, max_episodes)
+    value_set = pa.array(targets)
     tables: list[pa.Table] = []
-    seen: set[int] = set()
-    need = max_episodes if max_episodes is not None else len(meta_ids)
-    for f in data_files:
-        t = pq.read_table(f)
+    want = set(targets)
+    for i, f in enumerate(data_files):
+        if per_file is not None and not (per_file[i] & want):
+            continue
+        t = _read(f)
+        if t is None:
+            continue
         t = t.filter(pc.is_in(t.column("episode_index"), value_set=value_set))
         if t.num_rows:
             tables.append(t)
-            seen.update(t.column("episode_index").to_pylist())
-        if len(seen) >= need:
-            break
+    if not tables and unreadable:
+        raise DatasetError(
+            f"none of the data files needed could be read ({len(unreadable)} unreadable, "
+            f"e.g. {unreadable[0][0]}: {unreadable[0][1]})"
+        )
     if not tables:
         raise DatasetError(
             f"no frames in {root} match the episode metadata "
@@ -345,7 +400,8 @@ def load_dataset(
         truncated = True
 
     if max_episodes is not None and len(episodes) > max_episodes:
-        episodes = episodes[:max_episodes]
+        keep_ids = set(_spread([e.index for e in episodes], max_episodes))
+        episodes = [e for e in episodes if e.index in keep_ids]
         truncated = True
     keep = [e.index for e in episodes]
     mask = pc.is_in(table.column("episode_index"), value_set=pa.array(keep))
@@ -394,6 +450,9 @@ def load_dataset(
         episode_stats=episode_stats,
         stats_json=stats_json,
         stats_source=stats_source,
+        feature_keys=keys,
+        duplicate_episode_ids=duplicate_ids,
+        unreadable_files=unreadable,
         state_names=feature_names(info, keys[STATE_KEY]),
         action_names=feature_names(info, keys[ACTION_KEY]),
     )
