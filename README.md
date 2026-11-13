@@ -80,6 +80,12 @@ outside the range the policy trained on.
 The most-downloaded LeRobot datasets on Hugging Face, audited nightly:
 **[vedevpatel.github.io/kinema](https://vedevpatel.github.io/kinema/)**
 
+Board audits load the first 50 episodes per dataset (`--max-episodes 50`) to keep a
+nightly run of 200 datasets feasible; a local `kinema check` scans the full dataset.
+Sampled and full scans can score differently - for example pusht scores 67 on the
+board and 84 on a full local scan, because a 50-episode sample's recomputed stats
+are compared against stats.json values computed over all 206 episodes.
+
 ## Try it on the demo dataset
 
 ```bash
