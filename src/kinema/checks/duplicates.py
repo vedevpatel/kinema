@@ -177,8 +177,8 @@ class DuplicateCheck(Check):
         if len(eps) > 1 and live.any():
             scan_eps = eps
             if len(eps) > _NEAR_EXACT_MAX:
-                pos = np.unique(np.round(np.linspace(0, len(eps) - 1, _NEAR_EXACT_MAX)).astype(int))
-                scan_eps = [eps[p] for p in pos]
+                take = np.unique(np.round(np.linspace(0, len(eps) - 1, _NEAR_EXACT_MAX)).astype(int))
+                scan_eps = [eps[p] for p in take]
                 res.findings.append(Finding(
                     self.id, Severity.INFO,
                     f"{len(eps)} episodes: near-duplicate scan ran on an evenly-spaced sample "
