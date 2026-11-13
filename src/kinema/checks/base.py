@@ -71,6 +71,8 @@ class CheckConfig:
     stuck_range_frac: float = 0.005  # episode range < 0.5% of the dataset range
     stuck_warn_share: float = 0.25  # stuck in <= 25% of episodes: anomalous
     stuck_unused_share: float = 0.90  # stuck in >= 90%: unused DOF (INFO)
+    follow_min_command: float = 0.10  # commanded >= 10% of the joint's range...
+    follow_ratio: float = 0.10  # ...but the follower moved < 10% of that
     # action saturation (frames pinned exactly at the limit while moving)
     saturation_warn_fraction: float = 0.05
     # outliers

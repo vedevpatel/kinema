@@ -11,7 +11,7 @@ from __future__ import annotations
 import numpy as np
 
 from kinema.checks.base import Check, CheckConfig, CheckResult, Finding, Severity
-from kinema.stats import gripper_dims
+from kinema.stats import canonical, gripper_dims, is_generic
 
 _PICK_WORDS = ("pick", "place", "grasp", "grab", "lift")
 
@@ -209,6 +209,11 @@ class StuckActuatorCheck(Check):
                     details={"joint": g, "episodes": idle_g},
                 ))
 
+        # 4. commanded but not followed: the leader moves, the follower's
+        #    measured position does not (dead / unpowered follower motor).
+        #    Action-only checks cannot see this - the commands look healthy.
+        res.findings.extend(self._not_followed(ctx, cfg, eps_ids, dead_set))
+
         if not any(f.severity >= Severity.WARN for f in res.findings):
             res.summary = "every joint moves wherever the dataset uses it"
         else:
@@ -216,3 +221,77 @@ class StuckActuatorCheck(Check):
                        for e in f.details.get("episodes", [])}
             res.summary = f"{len(flagged)}/{n_eps} episodes with stuck joints"
         return res
+
+    def _not_followed(self, ctx, cfg, eps_ids, dead_set) -> list[Finding]:
+        state, action = ctx.state, ctx.action
+        if state is None or state.shape[1] != action.shape[1]:
+            return []
+        n = action.shape[1]
+        sn, an = ctx.state_names, ctx.action_names
+        have_names = sn is not None and an is not None and len(sn) == n == len(an)
+        a_rng = np.nanpercentile(action, 99, axis=0) - np.nanpercentile(action, 1, axis=0)
+        s_rng = np.nanpercentile(state, 99, axis=0) - np.nanpercentile(state, 1, axis=0)
+        live = a_rng[a_rng > 1e-8]
+        typical = float(np.median(live)) if len(live) else 0.0
+        out: list[Finding] = []
+        pairs = []
+        for j in range(n):
+            # a joint commanded over a sliver of the robot's typical joint range
+            # is noise, not motion the follower should reproduce
+            if a_rng[j] <= 1e-8 or a_rng[j] < 0.01 * typical:
+                continue
+            # per dim: a meaningful name on both sides vouches for the pairing;
+            # "motor_3" vouches for nothing and needs the data to agree
+            named = have_names and not is_generic([sn[j]]) and not is_generic([an[j]])
+            if named:
+                if canonical(sn[j]) != canonical(an[j]):
+                    continue
+                if s_rng[j] < 0.01 * a_rng[j]:
+                    # same joint by name, commanded everywhere, never measured moving
+                    out.append(Finding(
+                        self.id, Severity.WARN,
+                        f"joint {j} ({an[j]}): commanded across the dataset but its measured "
+                        "position never changes - follower motor dead or unpowered, or the "
+                        "state is not actually recorded",
+                        details={"joint": j, "kind": "never_followed"},
+                    ))
+                    continue
+                pairs.append(j)
+            else:
+                # unnamed: only dims where action demonstrably tracks state
+                ok = np.isfinite(state[:, j]) & np.isfinite(action[:, j])
+                if ok.sum() < 20 or s_rng[j] <= 1e-8:
+                    continue
+                corr = float(np.corrcoef(state[ok, j], action[ok, j])[0, 1])
+                if corr >= cfg.calib_min_corr and 0.5 <= a_rng[j] / s_rng[j] <= 2.0:
+                    pairs.append(j)
+        for j in pairs:
+            bad = []
+            for ep in eps_ids:
+                if ep in dead_set:
+                    continue
+                rows = ctx.rows_for(ep)
+                if len(rows) < 10:
+                    continue
+                # p5-p95: a command held for a couple of frames is a blip the
+                # follower may legitimately lag, not sustained motion
+                a5, a95 = np.nanpercentile(action[rows, j], [5, 95])
+                s5, s95 = np.nanpercentile(state[rows, j], [5, 95])
+                a_ep = (a95 - a5) / a_rng[j]
+                s_ep = (s95 - s5) / max(s_rng[j], 1e-12)
+                if a_ep >= cfg.follow_min_command and s_ep < cfg.follow_ratio * a_ep:
+                    bad.append((ep, a_ep, s_ep))
+            if not bad:
+                continue
+            name = f" ({an[j]})" if an and len(an) == n else ""
+            ep0, a0, s0 = max(bad, key=lambda x: x[1] - x[2])
+            out.append(Finding(
+                self.id, Severity.WARN,
+                f"joint {j}{name}: commanded to move but the follower did not in "
+                f"{len(bad)}/{len(eps_ids)} episode(s) {[b[0] for b in bad][:8]}"
+                f"{'...' if len(bad) > 8 else ''} (e.g. episode {ep0}: commanded {a0:.0%} of "
+                f"its range, moved {s0:.0%}) - dead or disabled follower motor, or blocked joint",
+                details={"joint": j, "kind": "not_followed", "episodes": [b[0] for b in bad]},
+            ))
+        return out
+

@@ -381,6 +381,7 @@ def render_index(entries: list[dict], generated: str) -> str:
     engine = engine_version()
     rows = []
     n_stale = 0
+    entries = sorted(entries, key=lambda e: -(e.get("downloads") or 0))  # current ranking
     for i, e in enumerate(entries, 1):
         stale = e.get("report") and e.get("engine") != engine
         n_stale += bool(stale)
@@ -488,6 +489,20 @@ def main() -> int:
                 e for e in prev
                 if e.get("report") or (e.get("reason") and e.get("status") in ("gated", "unsupported"))
             ]
+            # drop datasets that fell out of the current top list - unless the
+            # listing came back suspiciously short (a Hub hiccup must not wipe
+            # the board)
+            current = {d["id"]: d for d in datasets}
+            if len(current) >= 0.5 * len({e["id"] for e in entries}):
+                dropped = [e["id"] for e in entries if e["id"] not in current]
+                entries = [e for e in entries if e["id"] in current]
+                for e in entries:  # fresh download counts for the ranking
+                    e["downloads"] = current[e["id"]].get("downloads", e.get("downloads", 0))
+                if dropped:
+                    print(f"dropping {len(dropped)} dataset(s) no longer in the top list")
+            else:
+                print(f"listing returned {len(current)} datasets for a board of {len(entries)}; "
+                      "not pruning")
             done_ids = {
                 e["id"] for e in entries
                 if e.get("status") == "gated" or e.get("engine") == engine

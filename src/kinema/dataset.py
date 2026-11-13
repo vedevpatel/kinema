@@ -80,6 +80,7 @@ class DatasetContext:
     duplicate_episode_ids: dict = field(default_factory=dict)
     unreadable_files: list = field(default_factory=list)  # [(relpath, error)]
     _row_slices: dict = field(default_factory=dict, repr=False)
+    _meta_index: dict = field(default_factory=dict, repr=False)
 
     @property
     def total_episodes(self) -> int:
@@ -120,10 +121,11 @@ class DatasetContext:
         return [e.index for e in self.episodes]
 
     def meta_for(self, ep_index: int) -> EpisodeMeta | None:
-        for e in self.episodes:
-            if e.index == ep_index:
-                return e
-        return None
+        # indexed: checks call this per episode, and a linear scan made that
+        # quadratic (hours on a 90k-episode dataset)
+        if len(self._meta_index) != len(self.episodes):
+            self._meta_index = {e.index: e for e in self.episodes}
+        return self._meta_index.get(int(ep_index))
 
 
 def _resolve_source(source: str, video: bool = False) -> tuple[Path, str | None]:
@@ -177,7 +179,13 @@ def _load_episode_meta(root: Path) -> list[EpisodeMeta]:
         files = sorted(ep_dir.glob("**/*.parquet"))
         if not files:
             raise DatasetError(f"meta/episodes exists but holds no parquet files in {root}")
-        table = pa.concat_tables([pq.read_table(f) for f in files])
+        # only the columns we use: meta/episodes also carries per-episode
+        # stats for every feature (images included), often most of its bytes
+        def _meta(f):
+            names = pq.read_schema(f).names
+            return pq.read_table(f, columns=[c for c in ("episode_index", "length", "tasks") if c in names])
+
+        table = pa.concat_tables([_meta(f) for f in files], promote_options="default")
         cols = table.column_names
         idx = table.column("episode_index").to_pylist()
         length = table.column("length").to_pylist() if "length" in cols else [0] * len(idx)
@@ -288,12 +296,32 @@ def _effective_stats(
 
 
 def _column(table: pa.Table, name: str) -> np.ndarray | None:
+    """A vector column as a (rows, dim) float64 array, straight from Arrow
+    buffers. Going through Python lists costs ~10x the memory and time."""
     if name not in table.column_names:
         return None
-    col = table.column(name)
-    if pa.types.is_fixed_size_list(col.type) or pa.types.is_list(col.type):
-        return np.asarray(col.to_pylist(), dtype=np.float64)
-    return col.to_numpy()
+    col = table.column(name).combine_chunks()
+    typ = col.type
+    is_list = pa.types.is_fixed_size_list(typ) or pa.types.is_list(typ) or pa.types.is_large_list(typ)
+    if not is_list:
+        return col.to_numpy(zero_copy_only=False).astype(np.float64, copy=False)
+    if col.null_count == 0 and pa.types.is_primitive(typ.value_type):
+        if pa.types.is_fixed_size_list(typ):
+            width = typ.list_size
+        else:
+            lengths = np.diff(col.offsets.to_numpy())
+            width = int(lengths[0]) if len(lengths) else 0
+            if len(lengths) and not (lengths == width).all():
+                width = -1  # ragged rows: fall back below
+        if width >= 0:
+            flat = col.flatten().to_numpy(zero_copy_only=False)  # nulls -> NaN
+            return flat.astype(np.float64, copy=False).reshape(len(col), width)
+    # null rows, ragged or nested lists: the slow, general path
+    return np.asarray(col.to_pylist(), dtype=np.float64)
+
+
+def _ints(table: pa.Table, name: str) -> np.ndarray:
+    return table.column(name).to_numpy().astype(np.int64, copy=False)
 
 
 def load_dataset(
@@ -344,35 +372,64 @@ def load_dataset(
     # recordings and are not representative of the dataset.
     meta_ids = sorted(e.index for e in episodes)
     targets = meta_ids
-    per_file: list[set[int]] | None = None
     unreadable: list[tuple[str, str]] = []
 
-    def _read(f: Path, columns=None):
+    def _bad(f: Path, e: Exception) -> None:
+        rel = f.relative_to(root).as_posix()
+        if not any(name == rel for name, _ in unreadable):
+            unreadable.append((rel, str(e)[:120]))
+
+    # Only the columns the checks use: datasets that embed images in the
+    # parquet (and wide auxiliary columns) would otherwise be read in full.
+    wanted_cols = ["episode_index", "frame_index", "timestamp", "task_index",
+                   keys[STATE_KEY], keys[ACTION_KEY]]
+
+    # Which episodes each row group holds, from the footer statistics alone
+    # (no data read). None for a row group whose stats are missing.
+    files: list[tuple[Path, pq.ParquetFile, list[tuple[int, int] | None]]] = []
+    for f in data_files:
         try:
-            return pq.read_table(f, columns=columns)
-        except (OSError, pa.ArrowInvalid) as e:  # truncated / corrupt file
-            if not any(name == f.relative_to(root).as_posix() for name, _ in unreadable):
-                unreadable.append((f.relative_to(root).as_posix(), str(e)[:120]))
-            return None
+            pf = pq.ParquetFile(f)
+            md = pf.metadata
+            col_idx = md.schema.names.index("episode_index")
+            ranges = []
+            for g in range(md.num_row_groups):
+                st = md.row_group(g).column(col_idx).statistics
+                ok = st is not None and st.has_min_max
+                ranges.append((int(st.min), int(st.max)) if ok else None)
+            files.append((f, pf, ranges))
+        except (OSError, pa.ArrowInvalid, ValueError) as e:  # corrupt footer
+            _bad(f, e)
+
+    meta_arr = np.asarray(meta_ids, dtype=np.int64)
+
+    def _candidates(rng: tuple[int, int] | None) -> np.ndarray:
+        if rng is None:
+            return meta_arr  # unknown: assume it may hold any episode
+        lo, hi = np.searchsorted(meta_arr, [rng[0], rng[1] + 1])
+        return meta_arr[lo:hi]
 
     if max_episodes is not None and max_episodes < len(meta_ids):
-        meta_set = set(meta_ids)
-        per_file = []
-        for f in data_files:
-            t = _read(f, columns=["episode_index"])
-            per_file.append(set() if t is None else set(t.column(0).to_pylist()) & meta_set)
-        present_ids = sorted(set().union(*per_file))
-        targets = _spread(present_ids, max_episodes)
-    value_set = pa.array(targets)
+        present_ids: set[int] = set()
+        for _, _, ranges in files:
+            for rng in ranges:
+                present_ids.update(_candidates(rng).tolist())
+        targets = _spread(sorted(present_ids), max_episodes)
+    value_set = pa.array(targets, type=pa.int64())
+    tgt = np.asarray(sorted(targets), dtype=np.int64)
     tables: list[pa.Table] = []
-    want = set(targets)
-    for i, f in enumerate(data_files):
-        if per_file is not None and not (per_file[i] & want):
+    for f, pf, ranges in files:
+        groups = [g for g, rng in enumerate(ranges)
+                  if rng is None or np.searchsorted(tgt, rng[1], side="right") > np.searchsorted(tgt, rng[0])]
+        if not groups:
             continue
-        t = _read(f)
-        if t is None:
+        cols = [c for c in wanted_cols if c in pf.schema_arrow.names]
+        try:
+            t = pf.read_row_groups(groups, columns=cols)
+        except (OSError, pa.ArrowInvalid) as e:  # truncated / corrupt data pages
+            _bad(f, e)
             continue
-        t = t.filter(pc.is_in(t.column("episode_index"), value_set=value_set))
+        t = t.filter(pc.is_in(t.column("episode_index").cast(pa.int64()), value_set=value_set))
         if t.num_rows:
             tables.append(t)
     if not tables and unreadable:
@@ -394,7 +451,7 @@ def load_dataset(
     # partial downloads: restrict episode metadata to episodes whose frames
     # are actually present BEFORE capping, so a sample holding later shards
     # still audits the episodes it has instead of capping to absent ones
-    present = set(table.column("episode_index").to_pylist())
+    present = set(np.unique(_ints(table, "episode_index")).tolist())
     if len(present) < len(episodes):
         episodes = [e for e in episodes if e.index in present]
         truncated = True
@@ -413,19 +470,19 @@ def load_dataset(
             "(partial download without overlapping episodes)"
         )
 
-    episode_index = np.asarray(table.column("episode_index").to_pylist(), dtype=np.int64)
+    episode_index = _ints(table, "episode_index")
     frame_index = (
-        np.asarray(table.column("frame_index").to_pylist(), dtype=np.int64)
+        _ints(table, "frame_index")
         if "frame_index" in table.column_names
         else np.zeros_like(episode_index)
     )
     timestamp = (
-        np.asarray(table.column("timestamp").to_pylist(), dtype=np.float64)
+        table.column("timestamp").to_numpy().astype(np.float64, copy=False)
         if "timestamp" in table.column_names
         else np.zeros(len(episode_index), dtype=np.float64)
     )
     task_index = (
-        np.asarray(table.column("task_index").to_pylist(), dtype=np.int64)
+        _ints(table, "task_index")
         if "task_index" in table.column_names
         else None
     )

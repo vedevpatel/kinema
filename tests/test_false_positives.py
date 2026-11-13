@@ -406,3 +406,55 @@ def test_unreadable_data_file_is_reported_not_a_crash(base, tmp_path):
 def test_sampled_episodes_are_spread_not_first(base):
     ctx = load_dataset(str(base), max_episodes=4)
     assert ctx.episode_ids() == [0, 8, 15, 23]
+
+
+# --- commanded but not followed ---------------------------------------------
+
+def test_dead_follower_motor_is_flagged(base):
+    # the leader moves joint 3, the follower's measured position stays put
+    def dead(s, a, ep):
+        s = s.copy()
+        rows = np.flatnonzero(ep == 5)
+        s[rows, 3] = s[rows[0], 3]
+        return s, a
+    _rewrite_data(base, dead)
+    res = run("stuck-actuator", load_dataset(str(base)))
+    hit = [f for f in res.findings if f.details.get("kind") == "not_followed"]
+    assert hit and hit[0].details["joint"] == 3 and hit[0].details["episodes"] == [5]
+    assert hit[0].severity == Severity.WARN
+
+
+def test_follower_never_moving_across_dataset_is_flagged_by_name(base):
+    def never(s, a, ep):
+        s = s.copy()
+        s[:, 2] = 0.0
+        return s, a
+    _rewrite_data(base, never)
+    res = run("stuck-actuator", load_dataset(str(base)))
+    assert any(f.details.get("kind") == "never_followed" and f.details["joint"] == 2 for f in res.findings)
+
+
+def test_delta_actions_with_mostly_generic_names_are_not_paired(base):
+    # berkeley_rpt: motor_0..motor_4 + "gripper"; one real name must not vouch
+    # for the whole list - delta actions vs joint positions are different spaces
+    def delta(s, a, ep):
+        return s, 0.01 * np.r_[np.zeros((1, s.shape[1])), np.diff(s, axis=0)]
+    _rewrite_data(base, delta)
+    _set_names(base, [f"motor_{i}" for i in range(5)] + ["gripper"],
+               [f"motor_{i}" for i in range(5)] + ["gripper"])
+    res = run("stuck-actuator", load_dataset(str(base)))
+    assert not any(f.details.get("kind") in ("not_followed", "never_followed") for f in res.findings)
+
+
+def test_brief_command_blip_is_not_a_dead_motor(base):
+    # Dongkkka linear_x: a 2-frame base command the follower lags behind
+    def blip(s, a, ep):
+        a, s = a.copy(), s.copy()
+        rows = np.flatnonzero(ep == 5)
+        s[rows, 3] = s[rows[0], 3]
+        a[rows, 3] = a[rows[0], 3]
+        a[rows[20:22], 3] += 3 * np.ptp(a[:, 3])
+        return s, a
+    _rewrite_data(base, blip)
+    res = run("stuck-actuator", load_dataset(str(base)))
+    assert not any(f.details.get("kind") == "not_followed" and 5 in f.details["episodes"] for f in res.findings)
