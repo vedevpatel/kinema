@@ -8,11 +8,15 @@ leader and follower arm, episodes that are mostly the robot sitting still, times
 the sampling grid. kinema finds those before you burn the GPU hours.
 
 ```bash
-pip install kinema
+# not on PyPI yet - install from the repo
+pip install "git+https://github.com/vedevpatel/kinema"
+# or from source: git clone https://github.com/vedevpatel/kinema && pip install -e kinema
+
 kinema check lerobot/pusht                 # straight off the Hugging Face Hub
 kinema check ./my-dataset --policy pi0     # local dataset, deployment checks for pi0
 kinema check hf://owner/name --json out.json --markdown report.md
 kinema check owner/name@<commit> --video  # pinned revision; + blur/exposure from the MP4s
+kinema check lerobot/droid_1.0.1 --max-episodes 50   # spread sample; downloads only the shards it reads
 ```
 
 No `lerobot` dependency. Installs in seconds: `pyarrow`, `numpy`, `huggingface-hub`, `rich`.
@@ -76,13 +80,34 @@ action chunk, stats.json covering what the normalizer consumes, `q01/q99` quanti
 the policy normalizes that way (openpi does), and that declared shapes and timestamps
 match what the policy's data loader will assume.
 
+## Tuning the thresholds
+
+Every threshold lives in `CheckConfig` with a conservative default. Override any
+of them without editing code - a JSON file of field names to values:
+
+```bash
+kinema check ./my-dataset --config tuning.json
+```
+
+```json
+{
+  "stats_std_fail": 0.4,
+  "idle_min_seconds": 5,
+  "calib_fail_range_frac": 0.2
+}
+```
+
+Unknown keys and non-numeric values are rejected, so a typo fails loudly instead
+of silently tuning nothing. `kinema check --help` lists the rest of the flags.
+
 ## The leaderboard
 
 The most-downloaded LeRobot datasets on Hugging Face, audited nightly:
 **[vedevpatel.github.io/kinema](https://vedevpatel.github.io/kinema/)**
 
-Board audits load the first 50 episodes per dataset (`--max-episodes 50`) to keep a
-nightly run of 200 datasets feasible; a local `kinema check` scans the full dataset.
+Board audits a sample of 50 episodes per dataset (`--max-episodes 50`), spread
+evenly across the dataset, to keep a nightly run of 200 datasets feasible; a
+local `kinema check` scans the full dataset.
 Sampled and full scans can score differently - for example pusht scores 67 on the
 board and 84 on a full local scan, because a 50-episode sample's recomputed stats
 are compared against stats.json values computed over all 206 episodes.

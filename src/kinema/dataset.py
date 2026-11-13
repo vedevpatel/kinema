@@ -130,7 +130,45 @@ class DatasetContext:
         return self._meta_index.get(int(ep_index))
 
 
-def _resolve_source(source: str, video: bool = False) -> tuple[Path, str | None]:
+def _target_data_files(root: Path, max_episodes: int) -> list[str] | None:
+    """Repo-relative data files holding a spread sample of episodes, so a
+    sampled Hub audit downloads only the shards it will read.
+
+    v3.0 records each episode's shard in meta/episodes (data/chunk_index,
+    data/file_index); v2.1 names one parquet per episode. None when the
+    layout says neither - the caller falls back to a full download."""
+    try:
+        episodes = _load_episode_meta(root)
+    except DatasetError:
+        return None
+    ids = sorted({e.index for e in episodes})
+    if not ids or max_episodes >= len(ids):
+        return ["data/**"]
+    wanted = set(_spread(ids, max_episodes))
+    ep_dir = root / "meta" / "episodes"
+    if ep_dir.is_dir():
+        files: set[str] = set()
+        cols = ("episode_index", "data/chunk_index", "data/file_index")
+        for f in sorted(ep_dir.glob("**/*.parquet")):
+            try:
+                names = pq.read_schema(f).names
+                if not all(c in names for c in cols):
+                    return None  # episodes parquet without shard locations
+                t = pq.read_table(f, columns=list(cols)).to_pydict()
+            except (OSError, pa.ArrowInvalid, ValueError):
+                return None  # unreadable meta: targeting is best-effort
+            for ep, ch, fi in zip(t[cols[0]], t[cols[1]], t[cols[2]]):
+                if int(ep) in wanted and ch is not None and fi is not None:
+                    files.add(f"data/chunk-{int(ch):03d}/file-{int(fi):03d}.parquet")
+        return sorted(files) if files else None
+    if (root / "meta" / "episodes.jsonl").exists():
+        return [f"data/**/episode_{i:06d}.parquet" for i in sorted(wanted)]
+    return None
+
+
+def _resolve_source(
+    source: str, video: bool = False, max_episodes: int | None = None
+) -> tuple[Path, str | None]:
     """Return (local_root, repo_id). Downloads from the Hub when needed."""
     src = source.strip()
     if src.startswith("hf://"):
@@ -161,16 +199,30 @@ def _resolve_source(source: str, video: bool = False) -> tuple[Path, str | None]
     revision = None
     if "@" in src:
         src, revision = src.rsplit("@", 1)
-    patterns = ["meta/**", "data/**", "*.json", "*.jsonl"]
+    patterns = ["meta/**", "*.json", "*.jsonl"]
     if video:
         patterns.append("videos/**")
+    if max_episodes is None:
+        patterns.append("data/**")
     try:
-        local = snapshot_download(
-            repo_id=src, repo_type="dataset", allow_patterns=patterns, revision=revision
+        local = Path(
+            snapshot_download(
+                repo_id=src, repo_type="dataset", allow_patterns=patterns, revision=revision
+            )
         )
+        if max_episodes is not None:
+            # sampled audit: fetch only the shards the sampled episodes live
+            # in (droid's full data/ is ~14 GB; a 50-episode sample is not)
+            targets = _target_data_files(local, max_episodes) or ["data/**"]
+            snapshot_download(
+                repo_id=src,
+                repo_type="dataset",
+                allow_patterns=targets,
+                revision=revision,
+            )
     except Exception as e:  # noqa: BLE001 - surface a clean message
         raise DatasetError(f"could not download {src} from the Hugging Face Hub: {e}")
-    return Path(local), src
+    return local, src
 
 
 def _load_episode_meta(root: Path) -> list[EpisodeMeta]:
@@ -356,7 +408,7 @@ def load_dataset(
     max_episodes: int | None = None,
     video: bool = False,
 ) -> DatasetContext:
-    root, repo_id = _resolve_source(source, video=video)
+    root, repo_id = _resolve_source(source, video=video, max_episodes=max_episodes)
     info_path = root / "meta" / "info.json"
     if not info_path.exists():
         raise DatasetError(f"{root} is not a LeRobot dataset (meta/info.json missing)")

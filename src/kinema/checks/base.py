@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import json
+from dataclasses import dataclass, field, fields
 from enum import IntEnum
 from typing import TYPE_CHECKING, Any
 
@@ -86,6 +87,34 @@ class CheckConfig:
     saturation_warn_fraction: float = 0.05
     # outliers
     outlier_iqr_k: float = 1.5
+
+
+# runtime flags live on CheckConfig but are not thresholds: --video/--policy
+_CONFIG_ONLY = ("video", "policy")
+
+
+def load_config_overrides(path: str) -> dict[str, float]:
+    """Threshold overrides from a JSON file (`kinema check --config`).
+
+    Keys are CheckConfig field names; unknown keys, non-numeric values and
+    the runtime flags are rejected so a typo never silently tunes nothing."""
+    with open(path) as f:
+        data = json.load(f)
+    known = {f.name for f in fields(CheckConfig)} - set(_CONFIG_ONLY)
+    if not isinstance(data, dict):
+        raise ValueError(f"{path}: expected a JSON object of threshold overrides")
+    unknown = sorted(set(data) - known)
+    if unknown:
+        raise ValueError(
+            f"{path}: unknown config keys: {', '.join(unknown)} "
+            f"(valid: {', '.join(sorted(known))})"
+        )
+    bad = sorted(
+        k for k, v in data.items() if isinstance(v, bool) or not isinstance(v, (int, float))
+    )
+    if bad:
+        raise ValueError(f"{path}: values must be numbers: {', '.join(bad)}")
+    return dict(data)
 
 
 class Check:

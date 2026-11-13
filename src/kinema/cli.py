@@ -1,6 +1,6 @@
 """Command-line interface.
 
-  <name> check DATASET [--policy pi0] [--video] [--max-episodes N]
+  <name> check DATASET [--policy pi0] [--video] [--max-episodes N] [--config PATH]
                       [--json [PATH]] [--markdown [PATH]] [--fail-on fail|warn]
   <name> report REPORT.json [--markdown [PATH]]
   <name> synth PATH [--episodes N] [--defects a,b,c]
@@ -16,7 +16,7 @@ import json
 import sys
 
 from kinema import __version__
-from kinema.checks import ALL_CHECKS, CheckConfig, Severity
+from kinema.checks import ALL_CHECKS, CheckConfig, Severity, load_config_overrides
 from kinema.dataset import DatasetError, load_dataset
 from kinema.report import (
     DatasetReport,
@@ -28,7 +28,12 @@ from kinema.report import (
 
 
 def _run_checks(args) -> int:
-    cfg = CheckConfig(video=args.video, policy=args.policy)
+    try:
+        overrides = load_config_overrides(args.config) if args.config else {}
+    except (OSError, ValueError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+    cfg = CheckConfig(video=args.video, policy=args.policy, **overrides)
     try:
         ctx = load_dataset(args.source, max_episodes=args.max_episodes, video=args.video)
     except DatasetError as e:
@@ -108,7 +113,8 @@ def main(argv=None) -> int:
     p_check.add_argument("source", help="local dir, .zip, or Hub repo id (owner/name)")
     p_check.add_argument("--policy", default=None, help="target policy: act, diffusion, smolvla, pi0, pi0_fast")
     p_check.add_argument("--video", action="store_true", help="include video checks (needs the video extra)")
-    p_check.add_argument("--max-episodes", type=int, default=None, help="load only the first N episodes")
+    p_check.add_argument("--max-episodes", type=int, default=None, help="audit a sample of N episodes, spread across the dataset (Hub downloads fetch only the shards they live in)")
+    p_check.add_argument("--config", default=None, help="JSON file of threshold overrides (CheckConfig field names)")
     p_check.add_argument("--json", nargs="?", const="-", default=None, help="write JSON report (to PATH, or stdout)")
     p_check.add_argument("--markdown", nargs="?", const="-", default=None, help="write markdown report (to PATH, or stdout)")
     p_check.add_argument("--fail-on", choices=["fail", "warn"], default="fail", help="exit 1 on this severity or worse (default: fail)")
