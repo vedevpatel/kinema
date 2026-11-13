@@ -95,17 +95,133 @@ def find_lerobot_datasets(limit: int) -> list[dict]:
     return out
 
 
-def _range_read_parquet(repo_id: str, name: str, dest: Path, min_rows: int = 20000,
-                        max_bytes: int = 150 * 1024 * 1024) -> None:
-    """Materialize the leading row groups of a remote parquet via HTTP range
-    reads (footer first, then only the needed row groups) - no full download.
-    Used when every data shard exceeds the sample cap."""
+def _classic_resolve_download(repo_id: str, name: str, dest: Path) -> None:
+    """Plain HTTP GET on the classic resolve endpoint - the fallback when the
+    Xet CAS backend cannot reconstruct a file (upstream 404s)."""
+    import os
+    import shutil
+    import urllib.request
+
+    url = f"https://huggingface.co/datasets/{repo_id}/resolve/main/{name}"
+    req = urllib.request.Request(url)
+    tok = os.environ.get("HF_TOKEN")
+    if tok:
+        req.add_header("Authorization", f"Bearer {tok}")
+    out = dest / name
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with urllib.request.urlopen(req) as r, open(out, "wb") as w:
+        shutil.copyfileobj(r, w)
+
+
+def _hub_download(repo_id: str, name: str, dest: Path) -> None:
+    from huggingface_hub import hf_hub_download
+
+    try:
+        hf_hub_download(repo_id, name, repo_type="dataset", local_dir=str(dest))
+    except Exception as e:  # noqa: BLE001
+        msg = f"{type(e).__name__}: {e}"
+        if "reconstruction" in msg or "cas-server" in msg or "Xet" in msg:
+            try:
+                _classic_resolve_download(repo_id, name, dest)
+            except Exception:
+                raise e from None  # fallback failed too; surface the original
+        else:
+            raise
+
+
+def _meta_episode_indices(root: Path) -> list[int] | None:
+    """Episode indices from an already-downloaded meta/, either format."""
+    import json as _json
+
+    import pyarrow.parquet as _pq
+
+    ep_dir = root / "meta" / "episodes"
+    jsonl = root / "meta" / "episodes.jsonl"
+    try:
+        if ep_dir.is_dir():
+            files = sorted(ep_dir.glob("**/*.parquet"))
+            if files:
+                idx: list[int] = []
+                for f in files:
+                    idx.extend(_pq.read_table(f, columns=["episode_index"]).column(0).to_pylist())
+                return [int(i) for i in idx]
+        if jsonl.exists():
+            return [
+                int(_json.loads(line)["episode_index"])
+                for line in jsonl.read_text().splitlines()
+                if line.strip()
+            ]
+    except Exception:  # noqa: BLE001 - targeting is best-effort
+        return None
+    return None
+
+
+def _range_read_parquet(repo_id: str, name: str, dest: Path, episodes: list[int] | None = None,
+                        min_rows: int = 20000, max_bytes: int = 150 * 1024 * 1024) -> None:
+    """Materialize row groups of a remote parquet via HTTP range reads (footer
+    first, then only the needed row groups) - no full download. Used when every
+    data shard exceeds the sample cap. When episode indices are known, prefer
+    row groups whose episode_index statistics overlap them, streaming batchwise
+    so one giant row group cannot exhaust memory; falls back to leading row
+    groups."""
     from huggingface_hub import HfFileSystem
     import pyarrow.parquet as pq
 
     fs = HfFileSystem()
-    with fs.open(f"datasets/{repo_id}/{name}", "rb") as f:
-        pf = pq.ParquetFile(f)
+    # open via filesystem+path (not a stream handle) so pyarrow issues true
+    # range requests instead of buffering the whole remote file
+    pf = pq.ParquetFile(f"datasets/{repo_id}/{name}", filesystem=fs)
+    # project out pixel columns: frames embedded as images dominate these
+    # shards, and v0 runs no visual checks
+    columns = [
+        n for n in pf.schema_arrow.names
+        if "image" not in n.lower() and "video" not in n.lower()
+    ] or None
+    table = None
+    if episodes:
+        want = sorted(set(episodes))
+        groups, total, stats_ok = [], 0, True
+        for i in range(pf.metadata.num_row_groups):
+            rg = pf.metadata.row_group(i)
+            bounds = None
+            for j in range(rg.num_columns):
+                col = rg.column(j)
+                if col.path_in_schema == "episode_index":
+                    if col.is_stats_set and col.statistics is not None:
+                        bounds = (col.statistics.min, col.statistics.max)
+                    break
+            if bounds is None:
+                stats_ok = False
+                break
+            lo, hi = bounds
+            if any(lo <= e <= hi for e in want):
+                groups.append(i)
+                total += rg.total_byte_size
+                if total >= max_bytes:
+                    break
+        if stats_ok and groups:
+            # stream batchwise: a single row group can dwarf memory, so filter
+            # to catalogued episodes per batch and stop once the sample
+            # covers enough of them
+            import pyarrow as pa
+            import pyarrow.compute as pc
+
+            value_set = pa.array(want)
+            kept, seen = [], set()
+            for i in groups:
+                for batch in pf.iter_batches(batch_size=1024, row_groups=[i], columns=columns):
+                    t = pa.Table.from_batches([batch])
+                    t = t.filter(pc.is_in(t.column("episode_index"), value_set=value_set))
+                    if t.num_rows:
+                        kept.append(t)
+                        seen.update(t.column("episode_index").to_pylist())
+                    if len(seen) >= 50:
+                        break
+                if len(seen) >= 50:
+                    break
+            if kept:
+                table = pa.concat_tables(kept)
+    if table is None:
         groups, rows, total = [], 0, 0
         for i in range(pf.metadata.num_row_groups):
             rg = pf.metadata.row_group(i)
@@ -114,11 +230,10 @@ def _range_read_parquet(repo_id: str, name: str, dest: Path, min_rows: int = 200
             total += rg.total_byte_size
             if rows >= min_rows or total >= max_bytes:
                 break
-        table = pf.read_row_groups(groups)
+        table = pf.read_row_groups(groups, columns=columns)
     out = dest / name
     out.parent.mkdir(parents=True, exist_ok=True)
     pq.write_table(table, out)
-
 
 def download_sample(repo_id: str, cap_bytes: int, dest: Path) -> Path:
     """meta/** in full plus data files in name order until cap_bytes.
@@ -127,38 +242,51 @@ def download_sample(repo_id: str, cap_bytes: int, dest: Path) -> Path:
     real sample; v2.1 keeps one parquet per episode, so the first files
     are the first episodes. Either way the audit covers actual data.
     """
-    from huggingface_hub import dataset_info, hf_hub_download
+    from huggingface_hub import dataset_info
 
     sib = [
         (s.rfilename, s.size or 0)
         for s in (dataset_info(repo_id, files_metadata=True).siblings or [])
     ]
     picked = [n for n, _ in sib if n.startswith("meta/")]
+    # meta always comes down first: every branch needs it, both to audit and
+    # to target range reads at row groups overlapping catalogued episodes
+    for name in picked:
+        _hub_download(repo_id, name, dest)
     budget = cap_bytes
     data_files = sorted((n, sz) for n, sz in sib if n.startswith("data/"))
     # cap file count too: v2.1 keeps one small parquet per episode, and
     # hundreds of per-file requests are what trips the Hub's rate limits
+    chosen = []
     for name, size in data_files[:40]:
         if size > budget:
             continue
-        picked.append(name)
+        chosen.append(name)
         budget -= size
-    if not any(n.startswith("data/") for n in picked):
+    if not chosen:
         if not data_files:
             raise DatasetError(f"{repo_id}: no data files listed on the Hub")
         smallest, ssize = min(data_files, key=lambda x: x[1])
         try:
-            _range_read_parquet(repo_id, smallest, dest, max_bytes=cap_bytes)
+            # bound range-read memory: decompressed arrow tables run several
+            # times the compressed size, and workers share one process
+            _range_read_parquet(
+                repo_id, smallest, dest,
+                episodes=_meta_episode_indices(dest),
+                max_bytes=min(cap_bytes, 64 * 1024 * 1024),
+            )
         except Exception as e:  # noqa: BLE001
+            msg = f"{type(e).__name__}: {e}"
+            if "reconstruction" in msg or "cas-server" in msg or "Xet" in msg:
+                _classic_resolve_download(repo_id, smallest, dest)
+                return dest
             raise DatasetError(
                 f"smallest data shard is {ssize / 1e6:.0f} MB and range-read "
-                f"sampling failed: {type(e).__name__}: {e}"
+                f"sampling failed: {msg}"
             )
         return dest
-    for name in picked:
-        hf_hub_download(
-            repo_id, name, repo_type="dataset", local_dir=str(dest)
-        )
+    for name in chosen:
+        _hub_download(repo_id, name, dest)
     return dest
 
 
@@ -167,6 +295,24 @@ def _clean_reason(msg: str) -> str:
     import re
 
     return re.sub(r"/[\w./-]*kinema-leaderboard-[\w-]+/?\S*", "<sample>", msg)
+
+
+# failure taxonomy: permanent states stay on the board as-is, transient
+# errors are retried on the next run (see the resume filter in main)
+def _classify_reason(reason: str) -> str:
+    low = reason.lower()
+    if "gatedrepoerror" in low or "gated repo" in low:
+        return "gated"
+    if "not a lerobot dataset" in low or "no episode metadata" in low:
+        return "unsupported"
+    return "error"
+
+
+_STATUS_LABELS = {
+    "gated": "gated",
+    "unsupported": "unsupported format",
+    "error": "audit failed - retry queued",
+}
 
 
 def audit_one(repo_id: str, max_episodes: int, cap_bytes: int) -> DatasetReport:
@@ -240,7 +386,9 @@ def render_index(entries: list[dict], generated: str) -> str:
             link = esc(e["id"])
             score = '<span class=dim>-</span>'
             verdict = badge("NA")
-            checks = f"<span class=dim>{esc(e.get('reason', 'not audited'))}</span>"
+            label = _STATUS_LABELS.get(e.get("status") or "error", _STATUS_LABELS["error"])
+            detail = esc(e.get("reason", ""))
+            checks = f'<span class=dim title="{detail}">{label}</span>'
         rows.append(
             f"<tr><td>{i}</td><td>{link}</td><td>{e['downloads']:,}</td>"
             f"<td>{score}</td><td>{verdict}</td><td>{checks}</td></tr>"
@@ -317,7 +465,12 @@ def main() -> int:
     if data_json.exists():
         try:
             prev = json.loads(data_json.read_text()).get("datasets", [])
-            entries = [e for e in prev if e.get("report") or e.get("reason")]
+            entries = [
+                e
+                for e in prev
+                if e.get("report")
+                or (e.get("reason") and e.get("status") in ("gated", "unsupported"))
+            ]
             done_ids = {e["id"] for e in entries}
             print(f"resuming: {len(done_ids)} already done")
         except Exception:
@@ -339,8 +492,10 @@ def main() -> int:
             print(f"    {d['id']}: score {rep.score}/100 ({rep.verdict.name})", flush=True)
         except DatasetError as e:
             entry["reason"] = _clean_reason(str(e))
+            entry["status"] = _classify_reason(entry["reason"])
         except Exception as e:  # noqa: BLE001
             entry["reason"] = _clean_reason(f"audit error: {type(e).__name__}: {e}")
+            entry["status"] = _classify_reason(entry["reason"])
         return entry
 
     started = time.monotonic()

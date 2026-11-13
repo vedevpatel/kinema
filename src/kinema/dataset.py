@@ -223,7 +223,9 @@ def load_dataset(
     if not tables:
         raise DatasetError(
             f"no frames in {root} match the episode metadata "
-            "(partial download without overlapping episodes)"
+            f"(metadata catalogues episodes {meta_ids[0]}-{meta_ids[-1]}; "
+            f"data files hold none of them - the dataset's metadata and data "
+            "disagree on episode indexing)"
         )
     table = pa.concat_tables(tables) if len(tables) > 1 else tables[0]
 
