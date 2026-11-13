@@ -1,0 +1,27 @@
+name: leaderboard
+
+on:
+  schedule:
+    - cron: "43 10 * * *"  # nightly, ~02:43 PT
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e .
+      - run: python scripts/leaderboard.py --limit 50 --out docs
+      - name: commit site
+        run: |
+          git config user.name "Ved Patel"
+          git config user.email "130187703+vedevpatel@users.noreply.github.com"
+          git add docs
+          git diff --cached --quiet || git commit -m "leaderboard: nightly audit"
+          git push
