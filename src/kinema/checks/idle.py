@@ -31,51 +31,89 @@ class IdleSegmentsCheck(Check):
     id = "idle-segments"
     title = "Idle segments (policy learns to do nothing)"
 
+    # A frame is idle when the command does not change AND (when state is
+    # recorded) the robot does not move: a held command while the arm is
+    # still travelling, or a constant velocity command, is not idling.
+    # Where the idle sits matters: a long still start teaches the policy to
+    # wait at t=0 (the "robot never starts" postmortem); stopping after the
+    # task is done is correct behaviour unless it dominates the episode.
+
     def run(self, ctx, cfg: CheckConfig) -> CheckResult:
         res = CheckResult(self.id, self.title)
         action = ctx.action
         if action is None:
             return self.skip("action column missing")
         fps = ctx.fps or 30.0
-        eps = np.maximum(1e-8, cfg.idle_eps_frac * action.std(axis=0))
+        eps = np.maximum(1e-8, cfg.idle_eps_frac * np.nanstd(action, axis=0))
+        state = ctx.state
+        # the robot "did not move" over a run when every state dim stays
+        # within a sliver of its dataset range (robust to sensor jitter,
+        # which defeats a per-frame test)
+        srange = None
+        if state is not None:
+            srange = np.nanpercentile(state, 99, axis=0) - np.nanpercentile(state, 1, axis=0)
+            live_s = srange > 1e-8
         min_run = max(2, int(round(cfg.idle_min_seconds * fps)))
 
         n_flagged = 0
         worst_frac = 0.0
+        n_eps = 0
         for ep in ctx.episode_ids():
             rows = ctx.rows_for(ep)
             if len(rows) < 3:
                 continue
-            a = action[rows]
-            da = np.abs(np.diff(a, axis=0))
-            idle = np.r_[False, (da < eps).all(axis=1)]
+            n_eps += 1
+            still = (np.abs(np.diff(action[rows], axis=0)) < eps).all(axis=1)
+            idle = np.r_[still[0], still]  # frame 0 idles iff the first step does
             runs = [(s, e) for s, e in _runs(idle) if e - s >= min_run]
+            if srange is not None and live_s.any():
+                st = state[rows]
+
+                def robot_still(s0: int, e0: int) -> bool:
+                    seg = st[s0:e0][:, live_s]
+                    moved = np.nanmax(seg, axis=0) - np.nanmin(seg, axis=0)
+                    return bool((moved <= cfg.idle_state_frac * srange[live_s]).all())
+
+                runs = [(s0, e0) for s0, e0 in runs if robot_still(s0, e0)]
+            n = len(rows)
             idle_frames = sum(e - s for s, e in runs)
-            frac = idle_frames / len(rows)
+            frac = idle_frames / n
             worst_frac = max(worst_frac, frac)
-            ends_idle = bool(runs and runs[-1][1] == len(rows))
-            if frac > cfg.idle_warn_fraction or ends_idle:
+            lead_s = (runs[0][1] / fps) if runs and runs[0][0] == 0 else 0.0
+            trail_s = ((runs[-1][1] - runs[-1][0]) / fps) if runs and runs[-1][1] == n else 0.0
+            heavy = frac > cfg.idle_warn_fraction
+            starts_idle = lead_s > 0 and lead_s < n / fps  # all-idle episodes are stuck-actuator's
+            if not (heavy or starts_idle or trail_s):
+                continue
+            parts = []
+            if heavy:
+                parts.append(f"{frac:.0%} of frames idle in runs >= {cfg.idle_min_seconds:g}s")
+            if starts_idle:
+                parts.append(f"starts idle for {lead_s:.1f}s (teaches waiting at the start)")
+            if trail_s:
+                parts.append(f"ends with {trail_s:.1f}s idle")
+            sev = Severity.WARN if (heavy or starts_idle) else Severity.INFO
+            if sev == Severity.WARN:
                 n_flagged += 1
-                parts = []
-                if frac > cfg.idle_warn_fraction:
-                    parts.append(
-                        f"{frac:.0%} of frames idle in runs >= {cfg.idle_min_seconds:g}s"
-                    )
-                if ends_idle:
-                    parts.append("episode ends idle (teaches stopping early)")
-                res.findings.append(
-                    Finding(
-                        self.id,
-                        Severity.WARN,
-                        f"episode {ep}: " + "; ".join(parts),
-                        episode_index=ep,
-                        details={"idle_fraction": frac, "idle_runs": len(runs), "ends_idle": ends_idle},
-                    )
+            res.findings.append(
+                Finding(
+                    self.id,
+                    sev,
+                    f"episode {ep}: " + "; ".join(parts)
+                    + ("" if sev == Severity.WARN else " - trim if you want shorter episodes"),
+                    episode_index=ep,
+                    details={"idle_fraction": frac, "idle_runs": len(runs),
+                             "leading_idle_s": lead_s, "trailing_idle_s": trail_s},
                 )
-        if not res.findings:
-            res.summary = f"no idle runs >= {cfg.idle_min_seconds:g}s at >= {cfg.idle_warn_fraction:.0%} of an episode"
+            )
+        n_tail = sum(1 for f in res.findings if f.severity == Severity.INFO)
+        if not n_flagged:
+            res.summary = (
+                f"no episode starts idle or idles >= {cfg.idle_warn_fraction:.0%}"
+                + (f"; {n_tail} end with a still tail" if n_tail else "")
+            )
         else:
-            res.summary = f"{n_flagged}/{ctx.total_episodes} episodes flagged; worst {worst_frac:.0%} idle"
+            res.summary = f"{n_flagged}/{n_eps} episodes flagged; worst {worst_frac:.0%} idle"
         return res
 
 

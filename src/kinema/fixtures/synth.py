@@ -88,6 +88,7 @@ def make_dataset(
         if "idle-segments" in defects and ep == 2:
             idle = int(n * 0.6)
             action[n - idle:] = action[n - idle - 1]  # ends idle
+            state[n - idle:] = state[n - idle - 1]  # and the follower stops with it
         if "stuck-actuator" in defects and ep == 3:
             action[:, 4] = action[0, 4]
         if "nan" in defects and ep == 5:

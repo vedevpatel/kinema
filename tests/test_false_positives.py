@@ -221,3 +221,117 @@ def test_binary_gripper_and_near_limit_motion_are_not_saturation(base):
         return s, a
     _rewrite_data(base, benign)
     assert gated(run("action-saturation", load_dataset(str(base)))) == []
+
+
+# --- idle-segments ------------------------------------------------------------
+
+def _freeze(a, s, ep, e, sl):
+    rows = np.flatnonzero(ep == e)[sl]
+    a[rows] = a[rows[0]]
+    s[rows] = s[rows[0]]
+
+
+def test_short_still_tail_is_info_not_warn(base):
+    # stopping after the task is done is correct behaviour (synth episodes
+    # are 6s, so use a 1s minimum run and a 1.2s = 20% tail)
+    def tail(s, a, ep):
+        a, s = a.copy(), s.copy()
+        _freeze(a, s, ep, 3, slice(-12, None))
+        return s, a
+    _rewrite_data(base, tail)
+    res = run("idle-segments", load_dataset(str(base)), CheckConfig(idle_min_seconds=1.0))
+    assert gated(res) == []
+    assert any(f.episode_index == 3 and f.severity == Severity.INFO for f in res.findings)
+
+
+def test_idle_start_is_flagged(base):
+    def start(s, a, ep):
+        a, s = a.copy(), s.copy()
+        _freeze(a, s, ep, 3, slice(0, 25))
+        return s, a
+    _rewrite_data(base, start)
+    res = run("idle-segments", load_dataset(str(base)))
+    assert any(f.episode_index == 3 and f.severity == Severity.WARN and "starts idle" in f.message
+               for f in res.findings)
+
+
+def test_held_command_while_arm_moves_is_not_idle(base):
+    # action held constant (target pose) while the follower is still travelling
+    def hold(s, a, ep):
+        a = a.copy()
+        rows = np.flatnonzero(ep == 3)[:40]
+        a[rows] = a[rows[0]]
+        return s, a
+    _rewrite_data(base, hold)
+    res = run("idle-segments", load_dataset(str(base)))
+    assert not any(f.episode_index == 3 for f in res.findings)
+
+
+def test_frames_ordered_by_timestamp_when_frame_index_is_broken(base):
+    # converters that write frame_index=0 everywhere: fall back to time order
+    f = base / "data" / "chunk-000" / "file-000.parquet"
+    t = pq.read_table(f).to_pydict()
+    t["frame_index"] = [0] * len(t["frame_index"])
+    order = np.random.default_rng(0).permutation(len(t["frame_index"]))
+    t = {k: [v[i] for i in order] for k, v in t.items()}
+    pq.write_table(pa.table(t), f)
+    ctx = load_dataset(str(base))
+    for e in ctx.episode_ids():
+        assert (np.diff(ctx.timestamp[ctx.rows_for(e)]) > 0).all()
+
+
+# --- outlier-episodes -----------------------------------------------------------
+
+def test_single_frame_spike_is_flagged(base):
+    # columbia_cairlab_pusht_real: a -27 sigma / +25 sigma one-frame glitch
+    def spike(s, a, ep):
+        a = a.copy()
+        r = np.flatnonzero(ep == 7)[30]
+        a[r, 1] += 30 * a[:, 1].std()
+        return s, a
+    _rewrite_data(base, spike)
+    res = run("outlier-episodes", load_dataset(str(base)))
+    assert any(f.episode_index == 7 and f.severity == Severity.WARN for f in res.findings)
+
+
+def test_smooth_or_typical_episodes_are_not_outliers(base):
+    # pusht ep40 / taco ep39: flagged for LOW jerk or an end pose CLOSER
+    # to the median than usual - the harmless direction
+    def smooth(s, a, ep):
+        a, s = a.copy(), s.copy()
+        rows = np.flatnonzero(ep == 7)
+        a[rows] = a[rows].mean(axis=0) + 0.05 * (a[rows] - a[rows].mean(axis=0))
+        return s, a
+    _rewrite_data(base, smooth)
+    res = run("outlier-episodes", load_dataset(str(base)))
+    assert not any(f.episode_index == 7 and f.severity == Severity.WARN for f in res.findings)
+
+
+def test_gripper_toggles_do_not_dominate_velocity(base):
+    def toggles(s, a, ep):
+        a = a.copy()
+        a[:, 5] = 0.0
+        a[ep == 7, 5] = np.where(np.arange((ep == 7).sum()) % 6 < 3, 0.0, 50.0)  # open/shut
+        return s, a
+    _rewrite_data(base, toggles)
+    res = run("outlier-episodes", load_dataset(str(base)))
+    assert not any(f.episode_index == 7 and "velocity" in f.message for f in res.findings)
+
+
+def test_multitask_end_poses_compared_within_task(base):
+    # different tasks end in different places; only a within-task deviation counts
+    mf = base / "meta" / "episodes" / "chunk-000" / "file-000.parquet"
+    m = pq.read_table(mf).to_pydict()
+    left = {0, 5, 10, 15, 20}  # a minority task: globally these look like outliers
+    m["tasks"] = [["place left"] if e in left else ["place right"] for e in m["episode_index"]]
+    pq.write_table(pa.table(m), mf)
+
+    def ends(s, a, ep):
+        s = s.copy()
+        for e in np.unique(ep):
+            r = np.flatnonzero(ep == e)[-5:]
+            s[r] = 5.0 if e in left else -5.0
+        return s, a
+    _rewrite_data(base, ends)
+    res = run("outlier-episodes", load_dataset(str(base)))
+    assert not any("end_pose" in f.message for f in res.findings)

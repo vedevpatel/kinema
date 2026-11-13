@@ -30,16 +30,16 @@ format v3.0 | 206 episodes | 25650 frames | fps 10.0
  timestamp-grid        PASS     all episodes on the 10 fps grid and monotonic
  dropped-frames        INFO     frame_index contiguous and episode lengths match the data
  calibration-drift     PASS     max joint offset 0.0% of range (joint 1) over 2 comparable joints
- idle-segments         PASS     no idle runs >= 2s at >= 30% of an episode
+ idle-segments         PASS     no episode starts idle or idles >= 30%
  stuck-actuator        PASS     every joint moves wherever the dataset uses it
  action-saturation     PASS     no continuous action dim pinned at a limit above 5% (2 dims checked)
  nan-and-normalization PASS     no NaN/Inf; all dims have usable variance
  duplicate-and-leakage PASS     no exact or near duplicates
- outlier-episodes      WARN     23/206 episodes flagged; worst: [15, 116, 159, 3, 4, ...]
+ outlier-episodes      WARN     3 episode(s) to review, 22 mild, of 206; worst: [107, 159, 50, ...]
  visual-quality        SKIP     pass --video to run (downloads MP4s; needs the video extra)
  deployment-readiness  WARN     1/206 episodes shorter than smolvla's action chunk
 
-verdict: WARN (0 fail, 4 warn, 21 info)
+verdict: WARN (0 fail, 4 warn, 23 info)
 ```
 
 Exit code is `1` on any FAIL (`--fail-on warn` to also gate on warnings), so it drops
@@ -53,12 +53,12 @@ straight into CI as a pre-training gate.
 | `timestamp-grid` | timestamps off the 1/fps grid, non-monotonic runs | `delta_timestamps` sampling returns misaligned windows |
 | `dropped-frames` | `frame_index` gaps, metadata length vs data mismatch | corrupt episodes; the metadata lie blocks training outright |
 | `calibration-drift` | mean action-state offset on still frames, per joint, independent of position. Only on dims where action is a position command for the same joint (names agree, action tracks state); grippers excluded | leader/follower drift (the 17-degree case from LeRobot PR #3762) survives recording *and* training |
-| `idle-segments` | runs where the robot does nothing for >2s; episodes that end idle | teaches the policy to do nothing - the classic "robot stays still at inference" postmortem |
+| `idle-segments` | episodes that start idle, or idle >30% of the time in runs >2s (command held AND robot still); a still tail after the task is INFO | teaches the policy to do nothing - the classic "robot stays still at inference" postmortem |
 | `stuck-actuator` | episodes where nothing moves; a joint that moves in most episodes but not in a few; gripper never firing on pick/place | the policy learns to ignore that joint |
 | `action-saturation` | >5% of commands during motion pinned at exactly the min/max of a continuous, non-gripper dim | clipped commands the policy will imitate |
 | `nan-and-normalization` | NaN/Inf, zero-variance dims, std < 1e-6 | one NaN poisons the loss for the whole batch |
 | `duplicate-and-leakage` | exact-copy episodes, near-duplicates | silent metric inflation |
-| `outlier-episodes` | duration/jerk/velocity/static/end-pose IQR outliers | a handful of broken episodes dominate the gradient |
+| `outlier-episodes` | IQR outliers on the harmful side only: duration and end pose within a task, jerk/velocity per dim in std units without grippers. WARN when two independent signals agree or one is far out (Tukey k=3, >=3x median) | a handful of broken episodes dominate the gradient |
 | `visual-quality` | blur (variance of Laplacian), lighting, per camera | bad visuals cost ~30% of training loss ([HF GIGO](https://huggingface.co/blog/robotdata/gigo)). Needs `--video` and the `video` extra |
 | `deployment-readiness` | episode length vs action chunk, stats coverage, quantile-norm support, declared shapes, timestamp grid | the openpi #906 failure mode: low loss, failed robot |
 

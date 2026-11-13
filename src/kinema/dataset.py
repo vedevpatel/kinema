@@ -105,7 +105,9 @@ class DatasetContext:
                 e = int(sorted_eps[s])
                 end = int(starts[i + 1]) if i + 1 < len(starts) else len(order)
                 rows = order[s:end]
-                rows = rows[np.argsort(self.frame_index[rows], kind="stable")]
+                # timestamp breaks ties: some converters write frame_index=0
+                # for every frame, and file order is not time order
+                rows = rows[np.lexsort((self.timestamp[rows], self.frame_index[rows]))]
                 self._row_slices[e] = rows
         return self._row_slices.get(int(ep_index), np.empty(0, dtype=int))
 

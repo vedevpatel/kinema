@@ -50,6 +50,7 @@ def test_clean_dataset_all_clear(clean, cfg):
         "action-saturation",
         "nan-and-normalization",
         "duplicate-and-leakage",
+        "outlier-episodes",
         "deployment-readiness",
     ):
         res = run(check_id, clean, cfg)
@@ -101,7 +102,8 @@ def test_calibration_clean_is_quiet(clean, cfg):
 def test_idle_segments(tmp_path, cfg):
     ctx = defective(tmp_path, "idle-segments")
     res = run("idle-segments", ctx, cfg)
-    assert any(f.episode_index == 2 and "ends idle" in f.message for f in res.findings)
+    assert any(f.episode_index == 2 and f.severity == Severity.WARN and "ends with" in f.message
+               for f in res.findings)
 
 
 def test_stuck_actuator(tmp_path, cfg):

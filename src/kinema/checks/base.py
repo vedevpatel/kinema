@@ -67,6 +67,7 @@ class CheckConfig:
     idle_eps_frac: float = 0.01  # fraction of per-joint action std
     idle_min_seconds: float = 2.0
     idle_warn_fraction: float = 0.30
+    idle_state_frac: float = 0.02  # state moves < 2% of its range over an idle run
     stuck_range_frac: float = 0.005  # episode range < 0.5% of the dataset range
     stuck_warn_share: float = 0.25  # stuck in <= 25% of episodes: anomalous
     stuck_unused_share: float = 0.90  # stuck in >= 90%: unused DOF (INFO)
