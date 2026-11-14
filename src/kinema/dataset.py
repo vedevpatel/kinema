@@ -12,7 +12,9 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import tempfile
+import weakref
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -48,6 +50,74 @@ def _resolve_keys(info: dict) -> dict[str, str]:
 
 class DatasetError(Exception):
     pass
+
+
+class CancelledError(Exception):
+    """The caller cancelled the load (or the run built on it) - raised at
+    the next cooperative checkpoint: after the download, between row groups
+    while reading, between checks."""
+
+
+def _raise_if_cancelled(cancelled, where: str) -> None:
+    if cancelled is not None and cancelled.is_set():
+        raise CancelledError(f"cancelled {where}")
+
+
+def _remove_quietly(path: str) -> None:
+    for rm in (os.unlink, lambda q: os.rmdir(os.path.dirname(q))):
+        try:
+            rm(path)
+        except OSError:
+            pass
+
+
+def _spill_map(path: str, dtype, shape) -> np.memmap:
+    """A writable memmap whose disk space goes away with its last view.
+
+    POSIX: the file is unlinked as soon as it is mapped. The mapping keeps
+    the data reachable, and the kernel frees the space when the last array
+    view is gone - even if the process is killed. Without this, a
+    long-lived MCP server left one full frame copy in the temp dir per
+    large load. Windows cannot unlink a mapped file, so there removal is
+    deferred until the map is garbage-collected (best effort)."""
+    m = np.memmap(path, dtype=dtype, mode="w+", shape=shape)
+    if os.name == "posix":
+        os.unlink(path)
+    else:
+        weakref.finalize(m, _remove_quietly, path)
+    return m
+
+
+def _extract_zip(p: Path) -> Path:
+    """Extract a .zip dataset once per (path, size, mtime) and reuse it.
+
+    A long-lived MCP server sees the same archive many times; extracting to
+    a fresh temp dir per call leaked one full copy per call. Extraction
+    lands in a scratch dir and is renamed into place, so the final dir
+    existing means the extraction completed."""
+    import hashlib
+    import zipfile
+
+    st = p.stat()
+    key = hashlib.sha1(f"{p.resolve()}:{st.st_size}:{st.st_mtime_ns}".encode()).hexdigest()[:16]
+    final = Path(tempfile.gettempdir()) / f"kinema-zip-{key}"
+    if not final.is_dir():
+        scratch = Path(tempfile.mkdtemp(prefix=f"kinema-zip-{key}-partial-"))
+        try:
+            with zipfile.ZipFile(p) as z:
+                z.extractall(scratch)
+            try:
+                os.rename(scratch, final)
+            except OSError:
+                if not final.is_dir():  # not a lost race with a concurrent extraction
+                    raise
+        finally:
+            shutil.rmtree(scratch, ignore_errors=True)
+    # unwrap a single top-level directory
+    children = list(final.iterdir())
+    if len(children) == 1 and children[0].is_dir():
+        return children[0]
+    return final
 
 
 _FRAME_BUDGET_ENV = "KINEMA_FRAME_BUDGET_BYTES"
@@ -283,17 +353,7 @@ def _resolve_source(
     p = Path(src).expanduser()
     if p.exists():
         if p.suffix == ".zip":
-            import zipfile
-            import tempfile
-
-            out = Path(tempfile.mkdtemp(prefix="kinema-ds-"))
-            with zipfile.ZipFile(p) as z:
-                z.extractall(out)
-            # unwrap a single top-level directory
-            children = list(out.iterdir())
-            if len(children) == 1 and children[0].is_dir():
-                out = children[0]
-            return out, None
+            return _extract_zip(p), None
         return p, None
     # Treat as a Hub repo id.
     if "/" not in src:
@@ -524,8 +584,14 @@ def load_dataset(
     source: str,
     max_episodes: int | None = None,
     video: bool = False,
+    cancelled=None,
 ) -> DatasetContext:
+    """Load a LeRobot dataset. `cancelled` (a threading.Event) is checked
+    cooperatively - after the download and between row groups - and raises
+    CancelledError; a Hub download in flight is not interrupted."""
+    _raise_if_cancelled(cancelled, "before loading")
     root, repo_id = _resolve_source(source, video=video, max_episodes=max_episodes)
+    _raise_if_cancelled(cancelled, "after download")
     info_path = root / "meta" / "info.json"
     if not info_path.exists():
         raise DatasetError(f"{root} is not a LeRobot dataset (meta/info.json missing)")
@@ -658,9 +724,9 @@ def load_dataset(
             arr = arr.reshape(-1, 1)
         if spill:
             if name not in maps:
-                maps[name] = np.memmap(
+                maps[name] = _spill_map(
                     os.path.join(spill_dir, name.replace("/", "_") + ".dat"),
-                    dtype=dtypes[name], mode="w+", shape=(row_bound, arr.shape[1]),
+                    dtypes[name], (row_bound, arr.shape[1]),
                 )
             m = maps[name]
             m[n:n + arr.shape[0]] = arr
@@ -676,39 +742,48 @@ def load_dataset(
     # arrays. Reading whole row groups at once spikes to the full
     # (decompressed) group - on huge shards (DROID-scale, finding #11)
     # that alone OOMs small machines even when the frame arrays spill.
-    for f, pf, groups in plan:
-        cols = [c for c in wanted_cols if c in pf.schema_arrow.names]
-        for g in groups:
-            try:
-                for t in pf.iter_batches(batch_size=_READ_BATCH_ROWS, row_groups=[g], columns=cols):
-                    t = t.filter(pc.is_in(t.column("episode_index").cast(pa.int64()), value_set=value_set))
-                    if not t.num_rows:
-                        continue
-                    for name in ("episode_index", "frame_index", "task_index"):
-                        if name in t.column_names:
-                            seen.add(name)
-                            _put(name, _ints(t, name))
-                    if "timestamp" in t.column_names:
-                        seen.add("timestamp")
-                        _put("timestamp", t.column("timestamp").to_numpy().astype(np.float64, copy=False))
-                    for extra in (reward_col, done_col):
-                        if extra and extra in t.column_names:
-                            seen.add(extra)
-                            # zero_copy_only=False: boolean columns (done) have no
-                            # zero-copy numpy form
-                            _put(extra, t.column(extra).to_numpy(zero_copy_only=False).astype(np.float64, copy=False))
-                    for canon in (STATE_KEY, ACTION_KEY):
-                        name = keys[canon]
-                        if name in t.column_names:
-                            arr = _column(t, name)
-                            if arr is not None:
+    try:
+        for f, pf, groups in plan:
+            cols = [c for c in wanted_cols if c in pf.schema_arrow.names]
+            for g in groups:
+                if cancelled is not None and cancelled.is_set():
+                    raise CancelledError(f"cancelled while reading {f.name}")
+                try:
+                    for t in pf.iter_batches(batch_size=_READ_BATCH_ROWS, row_groups=[g], columns=cols):
+                        t = t.filter(pc.is_in(t.column("episode_index").cast(pa.int64()), value_set=value_set))
+                        if not t.num_rows:
+                            continue
+                        for name in ("episode_index", "frame_index", "task_index"):
+                            if name in t.column_names:
                                 seen.add(name)
-                                widths.setdefault(name, arr.shape[1] if arr.ndim > 1 else 1)
-                                _put(name, arr)
-                    n += t.num_rows
-            except (OSError, pa.ArrowInvalid) as e:  # truncated / corrupt data pages
-                _bad(f, e)
-                break
+                                _put(name, _ints(t, name))
+                        if "timestamp" in t.column_names:
+                            seen.add("timestamp")
+                            _put("timestamp", t.column("timestamp").to_numpy().astype(np.float64, copy=False))
+                        for extra in (reward_col, done_col):
+                            if extra and extra in t.column_names:
+                                seen.add(extra)
+                                # zero_copy_only=False: boolean columns (done) have no
+                                # zero-copy numpy form
+                                _put(extra, t.column(extra).to_numpy(zero_copy_only=False).astype(np.float64, copy=False))
+                        for canon in (STATE_KEY, ACTION_KEY):
+                            name = keys[canon]
+                            if name in t.column_names:
+                                arr = _column(t, name)
+                                if arr is not None:
+                                    seen.add(name)
+                                    widths.setdefault(name, arr.shape[1] if arr.ndim > 1 else 1)
+                                    _put(name, arr)
+                        n += t.num_rows
+                except (OSError, pa.ArrowInvalid) as e:  # truncated / corrupt data pages
+                    _bad(f, e)
+                    break
+    except BaseException:
+        maps.clear()  # drop the maps now so their space is released with them
+        raise
+    finally:
+        if spill_dir:  # POSIX: already empty, the spill files were unlinked when mapped
+            shutil.rmtree(spill_dir, ignore_errors=True)
 
     if n == 0 and unreadable:
         raise DatasetError(

@@ -53,3 +53,29 @@ def test_clusters_have_keywords_and_checks():
     for name, cluster in CAUSES["clusters"].items():
         assert cluster["keywords"], name
         assert cluster["checks"], name
+
+
+def test_confidence_follows_the_severity_rule():
+    """The spec's mapping: FAIL -> high, WARN -> medium. A WARN-level cause
+    claiming high confidence (review finding 5) contradicts it."""
+    rule = {"FAIL": "high", "WARN": "medium"}
+    for cause in CAUSES["causes"]:
+        for sev, conf in cause["confidence"].items():
+            assert conf == rule[sev], f"{cause['id']}: {sev} -> {conf}"
+
+
+def test_every_message_needle_is_emitted_by_its_check():
+    """message_contains is matched against finding text at runtime; a check
+    whose wording changed would silently stop matching and demote its cause
+    to 'outside coverage'. The needle must appear in the source of the
+    module that defines the check (review finding 14)."""
+    import inspect
+
+    by_id = {c.id: c for c in ALL_CHECKS}
+    for cause in CAUSES["causes"]:
+        needle = cause["indicates"].get("message_contains")
+        if not needle:
+            continue
+        check = by_id[cause["indicates"]["check_id"]]
+        src = inspect.getsource(inspect.getmodule(type(check)))
+        assert needle in src, f"{cause['id']}: {needle!r} not emitted by {check.id}"

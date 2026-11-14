@@ -210,3 +210,75 @@ def test_video_targets_none_without_video_path(tmp_path):
     _v21_meta(tmp_path, list(range(10)))
     (tmp_path / "meta" / "info.json").write_text(json.dumps({"features": {}}))
     assert _target_video_files(tmp_path, 5) is None
+
+
+def _spill_dirs(tmp):
+    return [p for p in tmp.iterdir() if p.name.startswith("kinema-frames-")]
+
+
+def test_spilled_load_leaves_nothing_in_the_temp_dir(tmp_path, monkeypatch):
+    """Regression: every spilled load left its full frame copy under
+    kinema-frames-* forever - gigabytes per call in a long-lived MCP server.
+    On POSIX the files are unlinked as soon as they are mapped, so nothing
+    is on disk even while the context is alive."""
+    import gc
+    import os
+    import tempfile
+
+    import numpy as np
+
+    from kinema.dataset import load_dataset
+    from kinema.fixtures.synth import make_dataset
+
+    root = make_dataset(tmp_path / "ds", episodes=12)
+    tmp = tmp_path / "tmp"
+    tmp.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp))
+    monkeypatch.setenv("KINEMA_FRAME_BUDGET_BYTES", "0")
+    a = load_dataset(str(root))
+    monkeypatch.setenv("KINEMA_FRAME_BUDGET_BYTES", "1")
+    b = load_dataset(str(root))
+    assert isinstance(b.state, np.memmap) or isinstance(b.episode_index, np.memmap)
+    if os.name == "posix":
+        assert _spill_dirs(tmp) == []  # gone while the arrays are still in use
+    np.testing.assert_array_equal(a.state, np.asarray(b.state))  # data still readable
+    np.testing.assert_array_equal(a.action, np.asarray(b.action))
+    del b
+    gc.collect()
+    assert _spill_dirs(tmp) == []
+
+
+def test_cancelled_spilled_load_leaves_nothing(tmp_path, monkeypatch):
+    import tempfile
+
+    import pyarrow.parquet as pq
+    import pytest
+
+    from kinema.dataset import CancelledError, load_dataset
+    from kinema.fixtures.synth import make_dataset
+
+    root = make_dataset(tmp_path / "ds", episodes=12)
+    # several row groups, so the cancel lands after some frames were spilled
+    for f in (root / "data").rglob("*.parquet"):
+        pq.write_table(pq.read_table(f), f, row_group_size=50)
+    tmp = tmp_path / "tmp"
+    tmp.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp))
+    monkeypatch.setenv("KINEMA_FRAME_BUDGET_BYTES", "1")
+
+    class CancelAt:
+        """is_set() turns true on call `at`; counts calls otherwise."""
+
+        def __init__(self, at=None):
+            self.at, self.calls = at, 0
+
+        def is_set(self):
+            self.calls += 1
+            return self.at is not None and self.calls >= self.at
+
+    probe = CancelAt()
+    load_dataset(str(root), cancelled=probe)
+    assert probe.calls > 4  # 2 pre-read checkpoints + one per row group
+    with pytest.raises(CancelledError, match="while reading"):
+        load_dataset(str(root), cancelled=CancelAt(at=probe.calls))  # the last row group
+    assert _spill_dirs(tmp) == []

@@ -2,11 +2,11 @@
   "version": 1,
   "clusters": {
     "normalization": {
-      "keywords": ["normaliz", "stats", "scale", "scaling", "scaled", "quantile", "q01", "q99", "drift", "distribution"],
+      "keywords": ["normaliz", "stats", "statistics", "wrong scale", "scale mismatch", "scaling", "scaled", "rescal", "quantile", "q01", "q99", "mean/std", "z-score"],
       "checks": ["stats-drift", "nan-and-normalization", "deployment-readiness"]
     },
     "idle": {
-      "keywords": ["doesn't move", "does not move", "not moving", "stays still", "stands still", "no movement", "frozen", "freezes", "freeze", "won't move", "wont move", "barely moves", "static"],
+      "keywords": ["doesn't move", "does not move", "not moving", "stays still", "stands still", "no movement", "frozen", "freezes", "freeze", "won't move", "wont move", "barely moves", "stays static", "remains static", "idle", "does nothing"],
       "checks": ["idle-segments", "stuck-actuator"]
     }
   },
@@ -17,7 +17,7 @@
       "title": "Stored normalization stats disagree with the data",
       "indicates": {"check_id": "stats-drift", "min_severity": "WARN"},
       "confidence": {"FAIL": "high", "WARN": "medium"},
-      "explanation": "Every training run and every inference call normalizes with the numbers in meta/stats.json. When those numbers drift from the data, the policy trains on wrong-scaled inputs and fails with a clean loss curve - the openpi #906 pattern, the top community diagnosis for 'low loss, failed robot' on {policy}.",
+      "explanation": "A pipeline that normalizes from the dataset's stored stats trains and infers with these numbers. When they drift from the data, the policy trains on wrong-scaled inputs and fails with a clean loss curve - the openpi #906 pattern, the top community diagnosis for 'low loss, failed robot' on {policy}.",
       "docs_section": "stats-drift",
       "next_step": "Recompute meta/stats.json from the data (LeRobot aggregation, or openpi's compute_norm_stats.py for openpi training) and retrain; if the stats came from a converter, fix the converter."
     },
@@ -26,10 +26,10 @@
       "cluster": "normalization",
       "title": "The policy normalizes with q01/q99 but the stats have none",
       "indicates": {"check_id": "deployment-readiness", "min_severity": "WARN", "message_contains": "q01/q99"},
-      "confidence": {"WARN": "high"},
-      "explanation": "{policy} normalizes with q01/q99 quantiles. Without them in the stats the run either crashes on the missing keys or silently falls back to an estimate computed differently than LeRobot would - inputs land in a different range than training assumed.",
+      "confidence": {"WARN": "medium"},
+      "explanation": "{policy} normalizes with q01/q99 quantiles. If your training pipeline normalizes from the dataset's stats, missing quantiles mean the run either fails on the missing keys or normalizes with quantiles computed elsewhere, by different code - inputs land in a different range than training assumed. Pipelines that compute their own norm stats at train time do not read these, and for them this finding does not explain the failure.",
       "docs_section": "deployment-readiness",
-      "next_step": "Recompute stats with quantiles (openpi reads meta/stats.json directly), or confirm the training config recomputes its own norm stats at train time - in which case this finding does not apply."
+      "next_step": "Check where your training pipeline gets its norm stats. If from the dataset, recompute meta/stats.json with q01/q99 and retrain; if it computes its own at train time, this finding does not apply - look at the other causes."
     },
     {
       "id": "missing-stats",

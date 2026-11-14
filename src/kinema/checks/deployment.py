@@ -46,6 +46,26 @@ OVERRIDEABLE_POLICY_FIELDS = (
 )
 
 
+def _override_problem(key: str, val) -> str | None:
+    """Why an override value has the wrong type, or None when it is fine.
+    Types are checked, not coerced: a string "false" is truthy, so an
+    unchecked quantile_norm="false" would silently keep quantile norm on."""
+    if key == "chunk_size":
+        if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+            return "a positive integer"
+    elif key in ("quantile_norm", "needs_images", "needs_language"):
+        if not isinstance(val, bool):
+            return "a boolean (true/false, not a string)"
+    elif key == "typical_resolution":
+        if not (
+            isinstance(val, (list, tuple))
+            and len(val) == 2
+            and all(isinstance(v, int) and not isinstance(v, bool) and v > 0 for v in val)
+        ):
+            return "a [width, height] pair of positive integers"
+    return None
+
+
 def canonical_policy_name(name: str) -> str:
     """Resolve an alias (pi0.5) to the canonical policies.json key (pi05)."""
     low = name.lower()
@@ -71,6 +91,9 @@ def resolve_policy(name: str | None, overrides: dict | None = None):
                 f"unknown policy override {key!r} "
                 f"(valid: {', '.join(OVERRIDEABLE_POLICY_FIELDS)})"
             )
+        problem = _override_problem(key, val)
+        if problem:
+            raise ValueError(f"policy override {key!r} must be {problem}, got {val!r}")
         merged[key] = val
     return canon, merged
 
@@ -100,12 +123,15 @@ class DeploymentReadinessCheck(Check):
     title = "Deployment readiness (would this dataset serve a policy?)"
 
     def _quantile_entry(self, ctx, feat: str) -> dict:
-        """The stats entry a quantile normalizer actually consumes.
+        """The stats entry to test for q01/q99.
 
-        openpi reads meta/stats.json directly, so the raw file wins when it
-        carries quantiles; the effective stats (per-episode aggregates on
-        v2.1) keep only mean/std/min/max/count and would cry wolf about
-        missing quantiles on datasets whose stats.json ships them."""
+        The raw meta/stats.json wins when it carries quantiles: the
+        effective stats (per-episode aggregates on v2.1) keep only
+        mean/std/min/max/count and would report quantiles missing from a
+        dataset whose stats.json ships them. Which file a given training
+        pipeline actually reads varies by pipeline and is not something
+        this check can see - pipelines that compute their own norm stats
+        read neither."""
         raw = ctx.stats_json.get(feat) if getattr(ctx, "stats_json", None) else None
         if isinstance(raw, dict) and "q01" in raw and "q99" in raw:
             return raw
@@ -160,8 +186,8 @@ class DeploymentReadinessCheck(Check):
                             Severity.WARN,
                             f"{pname} normalizes with q01/q99 quantiles but "
                             f"{ctx.stats_source} has none for {feat} - recompute stats "
-                            "with quantiles or the openpi normalizer will estimate "
-                            "them itself",
+                            "with quantiles, unless your training pipeline computes its "
+                            "own norm stats",
                             details={"feature": feat, "policy": pname, "stats": sorted(entry)},
                         )
                     )
