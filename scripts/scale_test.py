@@ -45,6 +45,17 @@ DEFAULT_LADDER = [
 ]
 
 
+def peak_rss_mb(ru_maxrss: int, platform: str | None = None) -> float:
+    """Peak RSS in MiB from rusage.ru_maxrss. The units are platform-specific:
+    Linux reports KiB, macOS (darwin) reports BYTES - labeling bytes as KiB
+    under-reads by 1024x (caught on Ved's machine: 'RSS display is
+    mislabeled on macOS')."""
+    platform = platform or sys.platform
+    if platform == "darwin":
+        return ru_maxrss / (1024 * 1024)
+    return ru_maxrss / 1024
+
+
 def run_one(repo: str, episodes: int, out: Path, frame_budget: int | None) -> dict:
     tag = f"{repo.split('/')[-1].replace('.', '_')}_{episodes}"
     env = dict(os.environ)
@@ -62,7 +73,7 @@ def run_one(repo: str, episodes: int, out: Path, frame_budget: int | None) -> di
         "max_episodes": episodes,
         "exit": os.waitstatus_to_exitcode(status),
         "wall_s": round(time.time() - start, 1),
-        "peak_rss_mb": round(ru.ru_maxrss / 1024, 1),
+        "peak_rss_mb": round(peak_rss_mb(ru.ru_maxrss), 1),
         "user_s": round(ru.ru_utime, 1),
         "sys_s": round(ru.ru_stime, 1),
     }
