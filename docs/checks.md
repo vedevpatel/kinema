@@ -73,10 +73,54 @@ its basis in report JSON (`weight`, `weight_basis`):
 | outlier-episodes | 3 | placeholder |
 | any other check (task-strings, reward-done, ...) | 8 | placeholder |
 
+Measurements for placeholder weights come from the [harm table](#harm-table)
+(stuck-actuator is the placeholder it measures today); the table is evidence,
+and re-anchoring a weight on it is a separate decision.
+
 Placeholder weights are the hand-tuned legacy values, kept until the harm
 study measures them. Limit: every measured number is one linear-BC MSE
 delta, not rollout success; tiers are re-checked against success-rate
 deltas when the GPU protocol runs.
+
+## Harm table
+
+The harm study v0 numbers above are one linear model's held-out MSE. The
+harm table (v1) re-measures defects on a real policy, with rollouts:
+`scripts/harm_table.py` writes `docs/harm-table.json` (schema
+`kinema.harm-table/v1`), and the leaderboard renders it as
+`harm-table.html`.
+
+- Dataset: `lerobot/pusht` at `7628202a2180972f291ba1bc6723834921e72c19`,
+  the harm study split: kinema's 144-episode sample (ids spread evenly over
+  the 206 episodes), the first 120 for training, the last 24 held out. The
+  table records both id lists.
+- Arms: clean plus four defects, each the target of one check -
+  `duplicates_20pct` (duplicate-and-leakage), `idle_start_30f`
+  (idle-segments), `scale_mismatch_0.5x_25pct` (calibration-drift), with the
+  recipes imported unchanged from `scripts/harm_study.py`, and
+  `stuck_joint_30pct` (stuck-actuator): one action dim, drawn once per
+  dataset, frozen to its episode-start value in 30% of episodes.
+- Policy: LeRobot's diffusion-policy pusht example
+  (`examples/training/train_policy.py`, `lerobot==0.5.1`): `DiffusionConfig`
+  defaults (`num_inference_steps` at its default), Adam lr 1e-4, 5000
+  optimizer steps, batch 32 for every arm, normalization stats from each
+  arm's own training frames. Seeds 0, 1, 2; a seed fixes the defect draw and
+  the training randomness.
+- Outcomes, defect vs clean under the same seed: held-out action MSE delta
+  (%, the action the policy executes at each held-out frame, raw units) and
+  rollout success delta (points, 20 `gym_pusht` episodes, LeRobot's own eval
+  loop, env seeds identical across arms).
+- Compute: every GPU run is on a manifest; completed runs are resumed, never
+  retrained; an arm whose projected cumulative GPU time exceeds 15 GPU-hours
+  is refused before it launches.
+- `--dry-run` reruns the four recipes through the harm study's ridge-BC math
+  on CPU (no rollouts) as a reproducibility check of the v0 numbers.
+
+Limit: 3 seeds, 20 eval episodes and 5k steps make the table indicative
+ordering evidence, not claim-grade; one rollout is 5 points of success, so
+success deltas are coarse. `stuck_joint_30pct` freezes a joint in more
+than `stuck_warn_share` (25%) of episodes, so stuck-actuator reports that
+joint as INFO, not WARN - its row measures harm the score does not charge.
 
 ## stats-drift
 

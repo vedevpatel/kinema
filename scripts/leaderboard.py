@@ -399,7 +399,7 @@ def render_dataset_page(rep: DatasetReport, audited: str | None = None) -> str:
     return page(f"{rep.source} - kinema audit", body)
 
 
-def render_index(entries: list[dict], generated: str) -> str:
+def render_index(entries: list[dict], generated: str, harm_table: bool = False) -> str:
     engine = engine_version()
     rows = []
     n_stale = 0
@@ -448,7 +448,9 @@ def render_index(entries: list[dict], generated: str) -> str:
         "check and a per-check weight for each warning check (10 / 6 / 2 by measured "
         "training harm where the harm study has measured it, hand-tuned otherwise; "
         "<a href='https://github.com/vedevpatel/kinema/blob/main/docs/checks.md#health-score'>"
-        "details</a>). Ranked by health score; downloads break ties. Scores are not "
+        "details</a>"
+        + ("; <a href='harm-table.html'>harm table</a>" if harm_table else "")
+        + "). Ranked by health score; downloads break ties. Scores are not "
         "comparable across score models. Video checks are not run "
         "here (MP4s are hundreds of MB per camera); run <code>kinema check --video</code> "
         "locally.</p>"
@@ -474,13 +476,88 @@ def render_index(entries: list[dict], generated: str) -> str:
     return page("LeRobot dataset health leaderboard", body)
 
 
+HARM_TABLE_SCHEMA = "kinema.harm-table/v1"
+_CHECKS_MD = "https://github.com/vedevpatel/kinema/blob/main/docs/checks.md"
+
+
+def _fmt(x, unit: str) -> str:
+    return "-" if x is None else f"{x:+.1f}{unit}"
+
+
+def render_harm_table(doc: dict) -> str:
+    """docs/harm-table.html from docs/harm-table.json (schema v1)."""
+    n_seeds = len(doc.get("seeds", []))
+    steps = doc.get("steps", 0)
+    steps_s = f"{steps / 1000:g}k" if steps >= 1000 else str(steps)
+    evals = doc.get("eval_episodes")
+    scope = (f"{n_seeds} seed{'s' if n_seeds != 1 else ''} / "
+             + (f"{evals} eval episodes / " if evals else "no rollouts / ")
+             + f"{steps_s} steps")
+    pol, ds, comp = doc.get("policy", {}), doc.get("dataset", {}), doc.get("compute", {})
+    rows = []
+    for r in doc.get("rows", []):
+        mse, succ = r["mse_delta_pct"], r["success_delta_pts"]
+        rows.append(
+            f"<tr><td><code>{esc(r['defect'])}</code></td>"
+            f"<td><a href='{_CHECKS_MD}#{esc(r['check'])}'>{esc(r['check'])}</a></td>"
+            f"<td>{esc(r['recipe']['description'])}</td>"
+            f"<td class=score>{_fmt(mse['mean'], '%')}</td>"
+            f"<td class=dim>{' / '.join(_fmt(v, '%') for v in mse['per_seed'])}</td>"
+            f"<td class=score>{_fmt(succ['mean'], ' pts')}</td>"
+            f"<td class=dim>{' / '.join(_fmt(v, '') for v in succ['per_seed'])}</td></tr>"
+        )
+    gpu = ", ".join(comp.get("gpu", [])) if isinstance(comp.get("gpu"), list) else comp.get("gpu", "")
+    body = (
+        "<h1>Harm table</h1>"
+        f"<p><b>{esc(scope)} - indicative ordering evidence, not claim-grade.</b> "
+        "Each injected defect is trained against a clean arm under the same seed; deltas are "
+        "defect minus clean. Health-score weights are not derived from this table yet "
+        f"(<a href='{_CHECKS_MD}#harm-table'>protocol</a>, "
+        f"<a href='{_CHECKS_MD}#health-score'>weights</a>, <a href='index.html'>leaderboard</a>).</p>"
+        f"<p class=dim>Policy: {esc(pol.get('name', ''))} ({esc(pol.get('source', ''))}), "
+        f"batch {esc(pol.get('batch_size', '-'))}. Dataset: <code>{esc(ds.get('repo_id', ''))}"
+        f"@{esc(str(ds.get('revision', ''))[:12])}</code>, {len(ds.get('train_episodes') or [])} train / "
+        f"{len(ds.get('heldout_episodes') or [])} held-out episodes ({esc(ds.get('episode_sample', ''))}). "
+        f"Seeds {esc(doc.get('seeds'))}. "
+        f"Generated {esc(doc.get('generated', ''))}"
+        + (f"; {esc(comp['ledger_gpu_hours'])} GPU-hours on {esc(gpu)}" if "ledger_gpu_hours" in comp else "")
+        + ".</p>"
+        "<table><thead><tr><th>defect</th><th>check</th><th>recipe</th>"
+        "<th>held-out MSE &Delta;</th><th class=dim>per seed</th>"
+        "<th>rollout success &Delta;</th><th class=dim>per seed</th></tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table>"
+    )
+    return page("Harm table", body)
+
+
+def write_harm_table(out: Path) -> bool:
+    """Render harm-table.html when harm-table.json is present (absent: skip
+    silently); True when the page exists."""
+    src = out / "harm-table.json"
+    if not src.exists():
+        return False
+    try:
+        doc = json.loads(src.read_text())
+        if doc.get("schema") != HARM_TABLE_SCHEMA:
+            raise ValueError(f"schema {doc.get('schema')!r}")
+        text = render_harm_table(doc)
+    except Exception as e:  # noqa: BLE001 - a bad table must not take the board down
+        print(f"harm table not rendered: {type(e).__name__}: {e}")
+        return False
+    tmp = out / ".harm-table.html.tmp"
+    tmp.write_text(text)
+    tmp.replace(out / "harm-table.html")
+    return True
+
+
 def _write(out: Path, entries: list, generated: str) -> None:
     """Atomic writes so a kill mid-run never leaves a corrupt or missing site."""
     data = json.dumps(
         {"generated": generated, "score_model": SCORE_MODEL, "datasets": entries},
         indent=2, default=str,
     )
-    idx = render_index(entries, generated)
+    idx = render_index(entries, generated, harm_table=write_harm_table(out))
     for name, text in (("data.json", data), ("index.html", idx)):
         tmp = out / f".{name}.tmp"
         tmp.write_text(text)
