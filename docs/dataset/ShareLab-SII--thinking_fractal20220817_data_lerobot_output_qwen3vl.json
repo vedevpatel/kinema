@@ -1,117 +1,35 @@
 {
   "source": "ShareLab-SII/thinking_fractal20220817_data_lerobot_output_qwen3vl",
   "format_version": "v2.0",
-  "episodes": 29,
-  "frames": 1350,
+  "episodes": 30,
+  "frames": 1388,
   "fps": 3.0,
   "truncated": true,
-  "score": 43,
-  "verdict": "FAIL",
+  "score": 100,
+  "verdict": "INFO",
   "checks": [
     {
       "id": "stats-drift",
-      "title": "Stats drift (meta/stats.json vs actual data)",
-      "verdict": "FAIL",
-      "summary": "worst relative error 1460.1%",
+      "title": "Stats drift (stored normalization stats vs actual data)",
+      "verdict": "INFO",
+      "summary": "data matches stored range (worst 0% of the FAIL threshold)",
       "skipped": false,
       "skip_reason": "",
       "details": {},
       "findings": [
         {
-          "severity": "FAIL",
-          "message": "observation.state.mean: off by 10.4% on dim 3 (stored -0.247526, actual -0.273352). Normalization at training and inference will disagree.",
+          "severity": "INFO",
+          "message": "sampled subset and no per-episode stats: only range containment is checked (mean/std of a sample are not comparable to whole-dataset stats)",
           "episode_index": null,
-          "details": {
-            "feature": "observation.state",
-            "stat": "mean",
-            "dim": 3,
-            "rel_err": 0.10433576600366597
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "observation.state.std: off by 6.4% on dim 0 (stored 0.124403, actual 0.116443). Normalization at training and inference will disagree.",
-          "episode_index": null,
-          "details": {
-            "feature": "observation.state",
-            "stat": "std",
-            "dim": 0,
-            "rel_err": 0.06398983639104083
-          }
-        },
-        {
-          "severity": "FAIL",
-          "message": "observation.state.min: off by 1460.1% on dim 2 (stored -0.00657916, actual 0.0894826). Normalization at training and inference will disagree.",
-          "episode_index": null,
-          "details": {
-            "feature": "observation.state",
-            "stat": "min",
-            "dim": 2,
-            "rel_err": 14.600921589577815
-          }
-        },
-        {
-          "severity": "FAIL",
-          "message": "observation.state.max: off by 45.9% on dim 5 (stored 0.955437, actual 0.517123). Normalization at training and inference will disagree.",
-          "episode_index": null,
-          "details": {
-            "feature": "observation.state",
-            "stat": "max",
-            "dim": 5,
-            "rel_err": 0.45875810034104464
-          }
-        },
-        {
-          "severity": "FAIL",
-          "message": "action.mean: off by 59.9% on dim 5 (stored 0.000913372, actual 0.000366011). Normalization at training and inference will disagree.",
-          "episode_index": null,
-          "details": {
-            "feature": "action",
-            "stat": "mean",
-            "dim": 5,
-            "rel_err": 0.5992753853295496
-          }
-        },
-        {
-          "severity": "FAIL",
-          "message": "action.std: off by 25.4% on dim 1 (stored 0.0598757, actual 0.0446564). Normalization at training and inference will disagree.",
-          "episode_index": null,
-          "details": {
-            "feature": "action",
-            "stat": "std",
-            "dim": 1,
-            "rel_err": 0.2541805871658999
-          }
-        },
-        {
-          "severity": "FAIL",
-          "message": "action.min: off by 96.9% on dim 1 (stored -5.4979, actual -0.171165). Normalization at training and inference will disagree.",
-          "episode_index": null,
-          "details": {
-            "feature": "action",
-            "stat": "min",
-            "dim": 1,
-            "rel_err": 0.968867249183885
-          }
-        },
-        {
-          "severity": "FAIL",
-          "message": "action.max: off by 99.1% on dim 1 (stored 22.0905, actual 0.194903). Normalization at training and inference will disagree.",
-          "episode_index": null,
-          "details": {
-            "feature": "action",
-            "stat": "max",
-            "dim": 1,
-            "rel_err": 0.9911770885075799
-          }
+          "details": {}
         }
       ]
     },
     {
       "id": "timestamp-grid",
-      "title": "Timestamp grid (on-grid, monotonic, low jitter)",
+      "title": "Timestamp grid (spacing, monotonic, start at 0)",
       "verdict": "PASS",
-      "summary": "all episodes on the 3 fps grid and monotonic",
+      "summary": "evenly spaced at 3 fps and monotonic",
       "skipped": false,
       "skip_reason": "",
       "details": {},
@@ -121,14 +39,14 @@
       "id": "dropped-frames",
       "title": "Dropped / duplicated frames",
       "verdict": "INFO",
-      "summary": "frame_index contiguous and episode lengths match the data",
+      "summary": "frame_index contiguous; episode lengths match the data",
       "skipped": false,
       "skip_reason": "",
       "details": {},
       "findings": [
         {
           "severity": "INFO",
-          "message": "video frame counts not checked (pass --video to include MP4s)",
+          "message": "no per-episode video segments in the metadata (v2.x or no videos): video frame counts not cross-checked",
           "episode_index": null,
           "details": {}
         }
@@ -136,443 +54,43 @@
     },
     {
       "id": "calibration-drift",
-      "title": "Calibration drift (action vs state offset on still frames)",
+      "title": "Calibration drift (action vs state on still frames)",
       "verdict": "SKIP",
       "summary": "",
       "skipped": true,
-      "skip_reason": "state dim 8 != action dim 7 (cannot compare joints)",
+      "skip_reason": "no dim where action is a position command for the same joint: 3 delta command; 1 gripper in different units",
       "details": {},
       "findings": []
     },
     {
       "id": "idle-segments",
       "title": "Idle segments (policy learns to do nothing)",
-      "verdict": "WARN",
-      "summary": "1/29 episodes flagged; worst 7% idle",
+      "verdict": "PASS",
+      "summary": "no episode starts idle or idles >= 30%",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [
-        {
-          "severity": "WARN",
-          "message": "episode 7: episode ends idle (teaches stopping early)",
-          "episode_index": 7,
-          "details": {
-            "idle_fraction": 0.06741573033707865,
-            "idle_runs": 1,
-            "ends_idle": true
-          }
-        }
-      ]
+      "findings": []
     },
     {
       "id": "stuck-actuator",
       "title": "Stuck actuators (joints that never move)",
-      "verdict": "WARN",
-      "summary": "29/29 episodes with stuck joints",
+      "verdict": "PASS",
+      "summary": "every joint moves wherever the dataset uses it",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [
-        {
-          "severity": "WARN",
-          "message": "episode 0: joint 6 static for 96% of frames - dead actuator or disabled motor?",
-          "episode_index": 0,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9649122807017544
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 0: gripper (action dim 6) never actuates on a pick/place task",
-          "episode_index": 0,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9649122807017544
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 1: joint 6 static for 98% of frames - dead actuator or disabled motor?",
-          "episode_index": 1,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9846153846153847
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 2: joint 6 static for 96% of frames - dead actuator or disabled motor?",
-          "episode_index": 2,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9583333333333334
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 2: gripper (action dim 6) never actuates on a pick/place task",
-          "episode_index": 2,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9583333333333334
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 3: joint 6 static for 90% of frames - dead actuator or disabled motor?",
-          "episode_index": 3,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9047619047619048
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 4: joint 6 static for 95% of frames - dead actuator or disabled motor?",
-          "episode_index": 4,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9473684210526315
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 5: joint 6 static for 97% of frames - dead actuator or disabled motor?",
-          "episode_index": 5,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.96875
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 5: gripper (action dim 6) never actuates on a pick/place task",
-          "episode_index": 5,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.96875
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 6: joint 6 static for 95% of frames - dead actuator or disabled motor?",
-          "episode_index": 6,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9487179487179487
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 7: joint 6 static for 95% of frames - dead actuator or disabled motor?",
-          "episode_index": 7,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9545454545454546
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 8: joint 6 static for 98% of frames - dead actuator or disabled motor?",
-          "episode_index": 8,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9777777777777777
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 8: gripper (action dim 6) never actuates on a pick/place task",
-          "episode_index": 8,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9777777777777777
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 9: joint 6 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 9,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9428571428571428
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 10: joint 6 static for 96% of frames - dead actuator or disabled motor?",
-          "episode_index": 10,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9642857142857143
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 10: gripper (action dim 6) never actuates on a pick/place task",
-          "episode_index": 10,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9642857142857143
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 11: joint 6 static for 95% of frames - dead actuator or disabled motor?",
-          "episode_index": 11,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.95
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 12: joint 6 static for 93% of frames - dead actuator or disabled motor?",
-          "episode_index": 12,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9310344827586207
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 13: joint 6 static for 98% of frames - dead actuator or disabled motor?",
-          "episode_index": 13,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9772727272727273
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 13: gripper (action dim 6) never actuates on a pick/place task",
-          "episode_index": 13,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9772727272727273
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 14: joint 6 static for 96% of frames - dead actuator or disabled motor?",
-          "episode_index": 14,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.96
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 14: gripper (action dim 6) never actuates on a pick/place task",
-          "episode_index": 14,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.96
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 15: joint 6 static for 97% of frames - dead actuator or disabled motor?",
-          "episode_index": 15,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9692307692307692
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 15: gripper (action dim 6) never actuates on a pick/place task",
-          "episode_index": 15,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9692307692307692
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 16: joint 6 static for 97% of frames - dead actuator or disabled motor?",
-          "episode_index": 16,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9661016949152542
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 16: gripper (action dim 6) never actuates on a pick/place task",
-          "episode_index": 16,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9661016949152542
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 17: joint 6 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 17,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9411764705882353
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 18: joint 6 static for 88% of frames - dead actuator or disabled motor?",
-          "episode_index": 18,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.875
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 19: joint 6 static for 98% of frames - dead actuator or disabled motor?",
-          "episode_index": 19,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9795918367346939
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 19: gripper (action dim 6) never actuates on a pick/place task",
-          "episode_index": 19,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9795918367346939
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 20: joint 6 static for 95% of frames - dead actuator or disabled motor?",
-          "episode_index": 20,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9545454545454546
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 20: gripper (action dim 6) never actuates on a pick/place task",
-          "episode_index": 20,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9545454545454546
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 21: joint 6 static for 97% of frames - dead actuator or disabled motor?",
-          "episode_index": 21,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9672131147540983
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 21: gripper (action dim 6) never actuates on a pick/place task",
-          "episode_index": 21,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9672131147540983
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 22: joint 6 static for 93% of frames - dead actuator or disabled motor?",
-          "episode_index": 22,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9285714285714286
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 23: joint 6 static for 90% of frames - dead actuator or disabled motor?",
-          "episode_index": 23,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 24: joint 6 static for 96% of frames - dead actuator or disabled motor?",
-          "episode_index": 24,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9565217391304348
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 24: gripper (action dim 6) never actuates on a pick/place task",
-          "episode_index": 24,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9565217391304348
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 25: joint 6 static for 95% of frames - dead actuator or disabled motor?",
-          "episode_index": 25,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.95
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 26: joint 6 static for 96% of frames - dead actuator or disabled motor?",
-          "episode_index": 26,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9622641509433962
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 27: joint 6 static for 95% of frames - dead actuator or disabled motor?",
-          "episode_index": 27,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9473684210526315
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 28: joint 6 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 28,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9411764705882353
-          }
-        }
-      ]
+      "findings": []
     },
     {
       "id": "action-saturation",
       "title": "Action saturation (commands clipped at the limits)",
-      "verdict": "WARN",
-      "summary": "1 dim(s) saturated",
+      "verdict": "PASS",
+      "summary": "no continuous action dim pinned at a limit above 5% (6 dims checked)",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [
-        {
-          "severity": "WARN",
-          "message": "action dim 6: 100.0% of commands sit at the min/max limit - clipped commands the policy will imitate",
-          "episode_index": null,
-          "details": {
-            "dim": 6,
-            "saturated_fraction": 1.0
-          }
-        }
-      ]
+      "findings": []
     },
     {
       "id": "nan-and-normalization",
@@ -588,7 +106,7 @@
       "id": "duplicate-and-leakage",
       "title": "Duplicate episodes / train-eval leakage",
       "verdict": "PASS",
-      "summary": "no exact or near duplicates",
+      "summary": "no exact, partial or near duplicates",
       "skipped": false,
       "skip_reason": "",
       "details": {},
@@ -598,250 +116,288 @@
       "id": "outlier-episodes",
       "title": "Outlier episodes (duration, jerk, velocity, static, end-pose)",
       "verdict": "INFO",
-      "summary": "6/29 episodes flagged; worst: [0, 1, 7, 8, 13, 19]. Review or drop these episodes before training: [0, 1, 7, 8, 13, 19]",
+      "summary": "0 episode(s) to review, 2 mild, of 30; worst: [8945, 29070]; duration/end pose skipped for 30 episodes whose task has < 5 episodes",
       "skipped": false,
       "skip_reason": "",
       "details": {
         "metrics": {
           "duration_s": {
-            "0": 38.333333333333336,
-            "1": 22.0,
-            "2": 8.333333333333334,
-            "3": 7.333333333333333,
-            "4": 13.0,
-            "5": 21.666666666666668,
-            "6": 13.333333333333334,
-            "7": 29.666666666666668,
-            "8": 15.333333333333334,
-            "9": 12.0,
-            "10": 9.666666666666666,
-            "11": 7.0,
-            "12": 10.0,
-            "13": 15.0,
-            "14": 17.0,
-            "15": 22.0,
-            "16": 20.0,
-            "17": 11.666666666666666,
-            "18": 16.333333333333332,
-            "19": 16.666666666666668,
-            "20": 7.666666666666667,
-            "21": 20.666666666666668,
-            "22": 9.666666666666666,
-            "23": 13.666666666666666,
-            "24": 15.666666666666666,
-            "25": 13.666666666666666,
-            "26": 18.0,
-            "27": 13.0,
-            "28": 11.666666666666666
+            "0": null,
+            "2236": null,
+            "4472": null,
+            "6709": null,
+            "8945": null,
+            "11181": null,
+            "13417": null,
+            "15653": null,
+            "17889": null,
+            "20126": null,
+            "22362": null,
+            "24598": null,
+            "26834": null,
+            "29070": null,
+            "31307": null,
+            "33543": null,
+            "35779": null,
+            "38015": null,
+            "40251": null,
+            "42487": null,
+            "44724": null,
+            "46960": null,
+            "49196": null,
+            "51432": null,
+            "53668": null,
+            "55904": null,
+            "58141": null,
+            "60377": null,
+            "62613": null,
+            "64849": null
           },
           "p95_jerk": {
-            "0": 1.0,
-            "1": 0.30474533997476094,
-            "2": 0.9254997961223115,
-            "3": 1.0,
-            "4": 1.0,
-            "5": 0.9300363942980756,
-            "6": 1.0,
-            "7": 1.0,
-            "8": 0.4782757334411145,
-            "9": 1.0,
-            "10": 0.8403537437319752,
-            "11": 1.0,
-            "12": 1.0,
-            "13": 0.23644874095916749,
-            "14": 1.0,
-            "15": 0.9757368467748156,
-            "16": 1.0,
-            "17": 1.0,
-            "18": 1.0,
-            "19": 0.29512288533151143,
-            "20": 1.0,
-            "21": 1.0,
-            "22": 1.0,
-            "23": 1.0,
-            "24": 1.0,
-            "25": 1.0,
-            "26": 1.0,
-            "27": 1.0,
-            "28": 1.0
+            "0": 2.8582509753768908,
+            "2236": 2.8511202666835307,
+            "4472": 1.1385666544277848,
+            "6709": 1.3682693856446566,
+            "8945": 1.423471061079298,
+            "11181": 1.7764677255143173,
+            "13417": 1.3768461496468811,
+            "15653": 1.9807795799435977,
+            "17889": 1.8876448635314753,
+            "20126": null,
+            "22362": 0.9825196372595995,
+            "24598": 3.6826416401407553,
+            "26834": 1.1085825728550927,
+            "29070": 2.75629862183059,
+            "31307": 1.9581374016532613,
+            "33543": 2.3628690436060675,
+            "35779": 1.322913518568921,
+            "38015": 1.0934983986395501,
+            "40251": 1.0440657420737798,
+            "42487": 2.2523187819007684,
+            "44724": 2.4265969683884,
+            "46960": 3.1287391103030617,
+            "49196": 1.478002757910253,
+            "51432": 1.6039256445177335,
+            "53668": 1.539195543869421,
+            "55904": 1.0011687769321422,
+            "58141": 2.459616284135091,
+            "60377": 1.519166409444819,
+            "62613": 1.9513098349409137,
+            "64849": 2.1037162714101085
           },
           "peak_velocity": {
-            "0": 1.0,
-            "1": 1.0,
-            "2": 1.0,
-            "3": 1.0,
-            "4": 1.0,
-            "5": 1.0,
-            "6": 1.0,
-            "7": 1.0,
-            "8": 1.0,
-            "9": 1.0,
-            "10": 1.0,
-            "11": 1.0,
-            "12": 1.0,
-            "13": 1.0,
-            "14": 1.0,
-            "15": 1.0,
-            "16": 1.0,
-            "17": 1.0,
-            "18": 1.0,
-            "19": 1.0,
-            "20": 1.0,
-            "21": 1.0,
-            "22": 1.0,
-            "23": 1.0,
-            "24": 1.0,
-            "25": 1.0,
-            "26": 1.0,
-            "27": 1.0,
-            "28": 1.0
+            "0": 2.6077841827358412,
+            "2236": 2.9876146320860895,
+            "4472": 1.035033801419173,
+            "6709": 1.538634563916674,
+            "8945": 1.7030552090193083,
+            "11181": 2.0954703233218677,
+            "13417": 1.6178136693847784,
+            "15653": 3.2975711950218387,
+            "17889": 2.221808949023152,
+            "20126": null,
+            "22362": 1.2141235070743495,
+            "24598": 3.610661827463787,
+            "26834": 1.5370100907152409,
+            "29070": 6.161198055869009,
+            "31307": 3.3189251433370375,
+            "33543": 4.85465998140174,
+            "35779": 1.6373861828803853,
+            "38015": 1.8981374471195058,
+            "40251": 1.3533620049247777,
+            "42487": 2.5248942645305195,
+            "44724": 2.411039132714337,
+            "46960": 3.28108791828265,
+            "49196": 1.413461161530466,
+            "51432": 2.523480371288172,
+            "53668": 1.5963466146245007,
+            "55904": 1.7205705024983096,
+            "58141": 4.330079073176657,
+            "60377": 1.625506625431158,
+            "62613": 2.0053203788547673,
+            "64849": 2.7170949224644936
+          },
+          "velocity_spike": {
+            "0": 1.1546878933399483,
+            "2236": 0.9820283511415615,
+            "4472": 0.7231227572946342,
+            "6709": 0.45681155141602753,
+            "8945": 0.9260182074163286,
+            "11181": 1.0675659766387477,
+            "13417": 1.091393529749013,
+            "15653": 2.2303140595022204,
+            "17889": 0.6946780313523525,
+            "20126": 0.5214958735666486,
+            "22362": 0.8200225294519509,
+            "24598": 1.387749385956587,
+            "26834": 0.5801020671996953,
+            "29070": 1.6951465197467919,
+            "31307": 0.8137109898540563,
+            "33543": 1.5899831050636513,
+            "35779": 2.1382663175187395,
+            "38015": 0.8301226281216559,
+            "40251": 0.5298767195160652,
+            "42487": 1.1841913907643173,
+            "44724": 1.328052922831272,
+            "46960": 1.5320341974735094,
+            "49196": 0.8478070074217465,
+            "51432": 0.8934474199493166,
+            "53668": 1.346956722163868,
+            "55904": 0.4652885148196847,
+            "58141": 0.8723210663076099,
+            "60377": 0.4962791376712459,
+            "62613": 1.027863490542294,
+            "64849": 2.004034666686271
           },
           "static_fraction": {
-            "0": 0.10526315789473684,
-            "1": 0.09230769230769231,
-            "2": 0.125,
-            "3": 0.047619047619047616,
-            "4": 0.13157894736842105,
-            "5": 0.015625,
-            "6": 0.02564102564102564,
-            "7": 0.11363636363636363,
-            "8": 0.06666666666666667,
-            "9": 0.02857142857142857,
-            "10": 0.03571428571428571,
-            "11": 0.05,
-            "12": 0.034482758620689655,
-            "13": 0.045454545454545456,
-            "14": 0.02,
-            "15": 0.015384615384615385,
-            "16": 0.01694915254237288,
-            "17": 0.08823529411764706,
-            "18": 0.041666666666666664,
-            "19": 0.061224489795918366,
-            "20": 0.045454545454545456,
-            "21": 0.03278688524590164,
-            "22": 0.10714285714285714,
-            "23": 0.025,
-            "24": 0.021739130434782608,
-            "25": 0.125,
-            "26": 0.16981132075471697,
-            "27": 0.13157894736842105,
-            "28": 0.08823529411764706
+            "0": 0.09649122807017543,
+            "2236": 0.021739130434782608,
+            "4472": 0.022727272727272728,
+            "6709": 0.03571428571428571,
+            "8945": 0.225,
+            "11181": 0.014925373134328358,
+            "13417": 0.043478260869565216,
+            "15653": 0.030303030303030304,
+            "17889": 0.02631578947368421,
+            "20126": 0.058823529411764705,
+            "22362": 0.15625,
+            "24598": 0.030303030303030304,
+            "26834": 0.03225806451612903,
+            "29070": 0.027777777777777776,
+            "31307": 0.10526315789473684,
+            "33543": 0.06666666666666667,
+            "35779": 0.11940298507462686,
+            "38015": 0.025,
+            "40251": 0.03571428571428571,
+            "42487": 0.06896551724137931,
+            "44724": 0.12903225806451613,
+            "46960": 0.07547169811320754,
+            "49196": 0.05128205128205128,
+            "51432": 0.041666666666666664,
+            "53668": 0.025,
+            "55904": 0.018518518518518517,
+            "58141": 0.08247422680412371,
+            "60377": 0.06666666666666667,
+            "62613": 0.020833333333333332,
+            "64849": 0.017241379310344827
           },
           "end_pose_deviation": {
-            "0": 0.7360429074048567,
-            "1": 0.8150697946548462,
-            "2": 1.0,
-            "3": 0.1474480840053399,
-            "4": 0.5236628750328475,
-            "5": 0.3675196293547724,
-            "6": 0.714264173803243,
-            "7": 0.7706856705542721,
-            "8": 1.0,
-            "9": 0.1908349054738252,
-            "10": 1.0,
-            "11": 1.0,
-            "12": 0.7751605537790007,
-            "13": 1.0,
-            "14": 0.3776484445041609,
-            "15": 0.625862985212112,
-            "16": 0.3864471720790202,
-            "17": 0.3296075410285797,
-            "18": 0.32279635797711026,
-            "19": 1.0,
-            "20": 1.0,
-            "21": 0.46996107039335083,
-            "22": 0.7591882901552728,
-            "23": 0.8023685529501432,
-            "24": 0.3568273940455596,
-            "25": 0.5067074184817152,
-            "26": 0.5082867715214313,
-            "27": 0.7263627254944593,
-            "28": 0.22999274689433102
+            "0": null,
+            "2236": null,
+            "4472": null,
+            "6709": null,
+            "8945": null,
+            "11181": null,
+            "13417": null,
+            "15653": null,
+            "17889": null,
+            "20126": null,
+            "22362": null,
+            "24598": null,
+            "26834": null,
+            "29070": null,
+            "31307": null,
+            "33543": null,
+            "35779": null,
+            "38015": null,
+            "40251": null,
+            "42487": null,
+            "44724": null,
+            "46960": null,
+            "49196": null,
+            "51432": null,
+            "53668": null,
+            "55904": null,
+            "58141": null,
+            "60377": null,
+            "62613": null,
+            "64849": null
           }
         },
         "flagged": {
-          "0": [
-            "duration_s"
+          "8945": [
+            "static_fraction"
           ],
-          "1": [
-            "p95_jerk"
-          ],
-          "7": [
-            "duration_s"
-          ],
-          "8": [
-            "p95_jerk"
-          ],
-          "13": [
-            "p95_jerk"
-          ],
-          "19": [
-            "p95_jerk"
+          "29070": [
+            "peak_velocity"
           ]
         }
       },
       "findings": [
         {
           "severity": "INFO",
-          "message": "episode 0: IQR outlier on duration_s",
-          "episode_index": 0,
+          "message": "episode 8945: IQR outlier on static_fraction",
+          "episode_index": 8945,
           "details": {
             "metrics": [
-              "duration_s"
-            ]
+              "static_fraction"
+            ],
+            "far_out": false
           }
         },
         {
           "severity": "INFO",
-          "message": "episode 1: IQR outlier on p95_jerk",
-          "episode_index": 1,
+          "message": "episode 29070: IQR outlier on peak_velocity",
+          "episode_index": 29070,
           "details": {
             "metrics": [
-              "p95_jerk"
-            ]
+              "peak_velocity"
+            ],
+            "far_out": false
           }
-        },
+        }
+      ]
+    },
+    {
+      "id": "embedded-images",
+      "title": "Embedded images in the parquet shards",
+      "verdict": "INFO",
+      "summary": "1 embedded image feature(s)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
         {
           "severity": "INFO",
-          "message": "episode 7: IQR outlier on duration_s",
-          "episode_index": 7,
+          "message": "1 image feature(s) embedded in the parquet shards (observation.images.image_future): shards are big and every frame decodes on read - the video layout (dtype \"video\", MP4 chunks) streams far better for training",
+          "episode_index": null,
           "details": {
-            "metrics": [
-              "duration_s"
-            ]
-          }
-        },
-        {
-          "severity": "INFO",
-          "message": "episode 8: IQR outlier on p95_jerk",
-          "episode_index": 8,
-          "details": {
-            "metrics": [
-              "p95_jerk"
-            ]
-          }
-        },
-        {
-          "severity": "INFO",
-          "message": "episode 13: IQR outlier on p95_jerk",
-          "episode_index": 13,
-          "details": {
-            "metrics": [
-              "p95_jerk"
-            ]
-          }
-        },
-        {
-          "severity": "INFO",
-          "message": "episode 19: IQR outlier on p95_jerk",
-          "episode_index": 19,
-          "details": {
-            "metrics": [
-              "p95_jerk"
+            "features": [
+              "observation.images.image_future"
             ]
           }
         }
       ]
+    },
+    {
+      "id": "camera-coverage",
+      "title": "Per-episode camera coverage",
+      "verdict": "SKIP",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "video files not downloaded (pass --video) and the metadata records no segments",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "task-strings",
+      "title": "Task strings",
+      "verdict": "PASS",
+      "summary": "30 episodes, 0 tasks in meta/tasks; 0 finding(s)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "reward-done",
+      "title": "Reward / done fields",
+      "verdict": "SKIP",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "no reward/done fields (position-control datasets rarely have them)",
+      "details": {},
+      "findings": []
     },
     {
       "id": "visual-quality",
@@ -856,31 +412,12 @@
     {
       "id": "deployment-readiness",
       "title": "Deployment readiness (would this dataset serve a policy?)",
-      "verdict": "WARN",
-      "summary": "0 blocker(s), 2 warning(s)",
+      "verdict": "PASS",
+      "summary": "no deployment blockers found",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [
-        {
-          "severity": "WARN",
-          "message": "observation.state: 0.18% of values sit >3 sigma from the stored normalization stats - at inference the policy sees inputs outside the range it trained on (the openpi #906 failure mode)",
-          "episode_index": null,
-          "details": {
-            "feature": "observation.state",
-            "ood_fraction": 0.0017592592592592592
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "action: 1.37% of values sit >3 sigma from the stored normalization stats - at inference the policy sees inputs outside the range it trained on (the openpi #906 failure mode)",
-          "episode_index": null,
-          "details": {
-            "feature": "action",
-            "ood_fraction": 0.013650793650793651
-          }
-        }
-      ]
+      "findings": []
     }
   ]
 }

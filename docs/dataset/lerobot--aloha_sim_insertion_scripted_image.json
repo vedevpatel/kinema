@@ -5,113 +5,24 @@
   "frames": 7200,
   "fps": 50.0,
   "truncated": true,
-  "score": 26,
-  "verdict": "FAIL",
+  "score": 94,
+  "verdict": "WARN",
   "checks": [
     {
       "id": "stats-drift",
-      "title": "Stats drift (meta/stats.json vs actual data)",
-      "verdict": "FAIL",
-      "summary": "worst relative error 107.2%",
+      "title": "Stats drift (stored normalization stats vs actual data)",
+      "verdict": "PASS",
+      "summary": "data matches per-episode stats of the loaded episodes (worst 0% of the FAIL threshold)",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [
-        {
-          "severity": "FAIL",
-          "message": "observation.state.mean: off by 107.2% on dim 10 (stored 0.0195785, actual 0.0405735). Normalization at training and inference will disagree.",
-          "episode_index": null,
-          "details": {
-            "feature": "observation.state",
-            "stat": "mean",
-            "dim": 10,
-            "rel_err": 1.072350558252576
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "observation.state.std: off by 6.8% on dim 7 (stored 0.156293, actual 0.145666). Normalization at training and inference will disagree.",
-          "episode_index": null,
-          "details": {
-            "feature": "observation.state",
-            "stat": "std",
-            "dim": 7,
-            "rel_err": 0.06799184651927959
-          }
-        },
-        {
-          "severity": "FAIL",
-          "message": "observation.state.min: off by 14.3% on dim 7 (stored -0.49022, actual -0.420069). Normalization at training and inference will disagree.",
-          "episode_index": null,
-          "details": {
-            "feature": "observation.state",
-            "stat": "min",
-            "dim": 7,
-            "rel_err": 0.1431009866524247
-          }
-        },
-        {
-          "severity": "FAIL",
-          "message": "observation.state.max: off by 13.9% on dim 1 (stored 0.0723759, actual 0.0623311). Normalization at training and inference will disagree.",
-          "episode_index": null,
-          "details": {
-            "feature": "observation.state",
-            "stat": "max",
-            "dim": 1,
-            "rel_err": 0.13878612907177482
-          }
-        },
-        {
-          "severity": "FAIL",
-          "message": "action.mean: off by 96.1% on dim 10 (stored 0.0220526, actual 0.0432541). Normalization at training and inference will disagree.",
-          "episode_index": null,
-          "details": {
-            "feature": "action",
-            "stat": "mean",
-            "dim": 10,
-            "rel_err": 0.9614073826593899
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "action.std: off by 6.8% on dim 7 (stored 0.157022, actual 0.146359). Normalization at training and inference will disagree.",
-          "episode_index": null,
-          "details": {
-            "feature": "action",
-            "stat": "std",
-            "dim": 7,
-            "rel_err": 0.06790734330796816
-          }
-        },
-        {
-          "severity": "FAIL",
-          "message": "action.min: off by 14.4% on dim 6 (stored -0.490614, actual -0.420074). Normalization at training and inference will disagree.",
-          "episode_index": null,
-          "details": {
-            "feature": "action",
-            "stat": "min",
-            "dim": 6,
-            "rel_err": 0.1437783925844955
-          }
-        },
-        {
-          "severity": "FAIL",
-          "message": "action.max: off by 13.9% on dim 1 (stored 0.0714005, actual 0.0614935). Normalization at training and inference will disagree.",
-          "episode_index": null,
-          "details": {
-            "feature": "action",
-            "stat": "max",
-            "dim": 1,
-            "rel_err": 0.1387530930375468
-          }
-        }
-      ]
+      "findings": []
     },
     {
       "id": "timestamp-grid",
-      "title": "Timestamp grid (on-grid, monotonic, low jitter)",
+      "title": "Timestamp grid (spacing, monotonic, start at 0)",
       "verdict": "PASS",
-      "summary": "all episodes on the 50 fps grid and monotonic",
+      "summary": "evenly spaced at 50 fps and monotonic",
       "skipped": false,
       "skip_reason": "",
       "details": {},
@@ -121,14 +32,14 @@
       "id": "dropped-frames",
       "title": "Dropped / duplicated frames",
       "verdict": "INFO",
-      "summary": "frame_index contiguous and episode lengths match the data",
+      "summary": "frame_index contiguous; episode lengths match the data",
       "skipped": false,
       "skip_reason": "",
       "details": {},
       "findings": [
         {
           "severity": "INFO",
-          "message": "video frame counts not checked (pass --video to include MP4s)",
+          "message": "no per-episode video segments in the metadata (v2.x or no videos): video frame counts not cross-checked",
           "episode_index": null,
           "details": {}
         }
@@ -136,76 +47,151 @@
     },
     {
       "id": "calibration-drift",
-      "title": "Calibration drift (action vs state offset on still frames)",
-      "verdict": "FAIL",
-      "summary": "worst joint 6: offset 62.8% of its range",
+      "title": "Calibration drift (action vs state on still frames)",
+      "verdict": "PASS",
+      "summary": "12 joint(s) + 2 gripper(s) agree; worst offset +2.9% of range (joint 6)",
       "skipped": false,
       "skip_reason": "",
       "details": {
-        "mean_offset_per_joint": [
-          -3.39150693621547e-06,
-          -0.001925659979451666,
-          -0.0036648373317400263,
-          0.0025206843941143753,
-          -0.007416740333040555,
-          3.3221193564562964e-05,
-          -0.5493236032002432,
-          9.197047993644168e-06,
-          -0.002002084296744013,
-          -0.003799598382578956,
-          0.0024985109703878393,
-          -0.007327079590823915,
-          -6.224033666521972e-05,
-          -0.29888699936059615
-        ],
-        "range_fraction_per_joint": [
-          3.675238271639824e-06,
-          0.001156721807902358,
-          0.004791091238892943,
-          0.0014928631105946483,
-          0.006810211475227371,
-          1.3509603361313628e-05,
-          0.6277063860652078,
-          1.0291232295943432e-05,
-          0.001188737947256241,
-          0.004861616348310403,
-          0.0015205123140928489,
-          0.006620085144548839,
-          2.5984595970873286e-05,
-          0.3416101810196032
-        ],
-        "still_frame_share": 0.25
-      },
-      "findings": [
-        {
-          "severity": "FAIL",
-          "message": "joint 6: mean action-state offset -0.5493 on still frames = 62.8% of its range. Leader/follower calibration has drifted; the policy is learning a shifted target.",
-          "episode_index": null,
-          "details": {
+        "per_joint": {
+          "0": {
+            "joint": 0,
+            "offset_fraction": 1.7442560441482369e-06,
+            "scale_error": 0.0013693603613982698,
+            "r2": 0.07089857293389645,
+            "line_vs_step": 1.0252926794460506,
+            "still_frames": 2880
+          },
+          "1": {
+            "joint": 1,
+            "offset_fraction": -0.00046301092667189853,
+            "scale_error": 0.0021612889677099303,
+            "r2": 0.004789045045495377,
+            "line_vs_step": 0.9797837988329706,
+            "still_frames": 2880
+          },
+          "2": {
+            "joint": 2,
+            "offset_fraction": -0.004922165181835667,
+            "scale_error": 0.0024920896614489896,
+            "r2": 0.059010164160062994,
+            "line_vs_step": 0.9811445102449985,
+            "still_frames": 2880
+          },
+          "3": {
+            "joint": 3,
+            "offset_fraction": 0.0014567346507735612,
+            "scale_error": 0.004948913173021046,
+            "r2": 0.20886873461927458,
+            "line_vs_step": 0.8058635889633234,
+            "still_frames": 2880
+          },
+          "4": {
+            "joint": 4,
+            "offset_fraction": -0.0061814725698598055,
+            "scale_error": -0.011014467973500636,
+            "r2": 0.24432594417780717,
+            "line_vs_step": 0.6362502609801031,
+            "still_frames": 2880
+          },
+          "5": {
+            "joint": 5,
+            "offset_fraction": -4.671184162503439e-06,
+            "scale_error": 0.0002529560151354775,
+            "r2": 0.006770781635892065,
+            "line_vs_step": 0.8980139382480327,
+            "still_frames": 2880
+          },
+          "7": {
+            "joint": 7,
+            "offset_fraction": 2.7640648477593387e-05,
+            "scale_error": 0.0017568471333542514,
+            "r2": 0.08482796048253716,
+            "line_vs_step": 1.0363901297347589,
+            "still_frames": 2880
+          },
+          "8": {
+            "joint": 8,
+            "offset_fraction": -0.000513821410618248,
+            "scale_error": 0.0021433395009980032,
+            "r2": 0.004678051168770625,
+            "line_vs_step": 0.9800618349141031,
+            "still_frames": 2880
+          },
+          "9": {
+            "joint": 9,
+            "offset_fraction": -0.004952307757566087,
+            "scale_error": 0.002144601204679069,
+            "r2": 0.04815240191724934,
+            "line_vs_step": 0.9879353002457334,
+            "still_frames": 2880
+          },
+          "10": {
+            "joint": 10,
+            "offset_fraction": 0.001482236348295088,
+            "scale_error": 0.007383466886774635,
+            "r2": 0.39458855234898127,
+            "line_vs_step": 1.13209446103272,
+            "still_frames": 2880
+          },
+          "11": {
+            "joint": 11,
+            "offset_fraction": -0.00628074993419419,
+            "scale_error": -0.006659804495371095,
+            "r2": 0.13143021182708148,
+            "line_vs_step": 0.5194079220032642,
+            "still_frames": 2880
+          },
+          "12": {
+            "joint": 12,
+            "offset_fraction": -5.376297118113295e-06,
+            "scale_error": 0.0004507609646877942,
+            "r2": 0.025210445826034267,
+            "line_vs_step": 0.8534994649188457,
+            "still_frames": 2880
+          },
+          "6": {
             "joint": 6,
-            "mean_offset": -0.5493236032002432,
-            "range_fraction": 0.6277063860652078,
-            "still_frames": 1799
+            "free_end": "high",
+            "offset_fraction": 0.029135043374923786,
+            "still_frames": 455,
+            "kind": "gripper"
+          },
+          "13": {
+            "joint": 13,
+            "free_end": "high",
+            "offset_fraction": 0.028991576258526813,
+            "still_frames": 443,
+            "kind": "gripper"
           }
         },
-        {
-          "severity": "FAIL",
-          "message": "joint 13: mean action-state offset -0.2989 on still frames = 34.2% of its range. Leader/follower calibration has drifted; the policy is learning a shifted target.",
-          "episode_index": null,
-          "details": {
-            "joint": 13,
-            "mean_offset": -0.29888699936059615,
-            "range_fraction": 0.3416101810196032,
-            "still_frames": 1800
-          }
-        }
-      ]
+        "compared_joints": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
+        ],
+        "compared_grippers": [
+          6,
+          13
+        ],
+        "excluded_joints": {}
+      },
+      "findings": []
     },
     {
       "id": "idle-segments",
       "title": "Idle segments (policy learns to do nothing)",
       "verdict": "PASS",
-      "summary": "no idle runs >= 2s at >= 30% of an episode",
+      "summary": "no episode starts idle or idles >= 30%",
       "skipped": false,
       "skip_reason": "",
       "details": {},
@@ -215,216 +201,33 @@
       "id": "stuck-actuator",
       "title": "Stuck actuators (joints that never move)",
       "verdict": "WARN",
-      "summary": "7/18 episodes with stuck joints",
+      "summary": "1/18 episodes with stuck joints",
       "skipped": false,
       "skip_reason": "",
       "details": {},
       "findings": [
         {
           "severity": "WARN",
-          "message": "episode 0: joint 7 static for 100% of frames - dead actuator or disabled motor?",
-          "episode_index": 0,
+          "message": "joint 7 (right_waist) does not move in 1/18 episodes [17] - it moves in the others - dead or disabled motor during those recordings?",
+          "episode_index": null,
           "details": {
             "joint": 7,
-            "static_fraction": 1.0
+            "episodes": [
+              17
+            ],
+            "share": 0.05555555555555555
           }
         },
         {
           "severity": "WARN",
-          "message": "episode 0: joint 10 static for 96% of frames - dead actuator or disabled motor?",
-          "episode_index": 0,
-          "details": {
-            "joint": 10,
-            "static_fraction": 0.9649122807017544
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 0: joint 12 static for 99% of frames - dead actuator or disabled motor?",
-          "episode_index": 0,
+          "message": "joint 12 (right_wrist_rotate) does not move in 1/18 episodes [17] - it moves in the others - dead or disabled motor during those recordings?",
+          "episode_index": null,
           "details": {
             "joint": 12,
-            "static_fraction": 0.9874686716791979
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 1: joint 0 static for 100% of frames - dead actuator or disabled motor?",
-          "episode_index": 1,
-          "details": {
-            "joint": 0,
-            "static_fraction": 1.0
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 1: joint 3 static for 93% of frames - dead actuator or disabled motor?",
-          "episode_index": 1,
-          "details": {
-            "joint": 3,
-            "static_fraction": 0.9323308270676691
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 1: joint 5 static for 96% of frames - dead actuator or disabled motor?",
-          "episode_index": 1,
-          "details": {
-            "joint": 5,
-            "static_fraction": 0.9649122807017544
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 3: joint 7 static for 100% of frames - dead actuator or disabled motor?",
-          "episode_index": 3,
-          "details": {
-            "joint": 7,
-            "static_fraction": 1.0
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 3: joint 10 static for 89% of frames - dead actuator or disabled motor?",
-          "episode_index": 3,
-          "details": {
-            "joint": 10,
-            "static_fraction": 0.8947368421052632
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 3: joint 12 static for 92% of frames - dead actuator or disabled motor?",
-          "episode_index": 3,
-          "details": {
-            "joint": 12,
-            "static_fraction": 0.924812030075188
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 4: joint 0 static for 81% of frames - dead actuator or disabled motor?",
-          "episode_index": 4,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.8070175438596491
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 4: joint 5 static for 82% of frames - dead actuator or disabled motor?",
-          "episode_index": 4,
-          "details": {
-            "joint": 5,
-            "static_fraction": 0.8170426065162907
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 7: joint 7 static for 100% of frames - dead actuator or disabled motor?",
-          "episode_index": 7,
-          "details": {
-            "joint": 7,
-            "static_fraction": 1.0
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 7: joint 10 static for 90% of frames - dead actuator or disabled motor?",
-          "episode_index": 7,
-          "details": {
-            "joint": 10,
-            "static_fraction": 0.9047619047619048
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 7: joint 12 static for 93% of frames - dead actuator or disabled motor?",
-          "episode_index": 7,
-          "details": {
-            "joint": 12,
-            "static_fraction": 0.9348370927318296
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 9: joint 0 static for 100% of frames - dead actuator or disabled motor?",
-          "episode_index": 9,
-          "details": {
-            "joint": 0,
-            "static_fraction": 1.0
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 9: joint 3 static for 92% of frames - dead actuator or disabled motor?",
-          "episode_index": 9,
-          "details": {
-            "joint": 3,
-            "static_fraction": 0.9172932330827067
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 9: joint 5 static for 95% of frames - dead actuator or disabled motor?",
-          "episode_index": 9,
-          "details": {
-            "joint": 5,
-            "static_fraction": 0.9523809523809523
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 9: joint 7 static for 96% of frames - dead actuator or disabled motor?",
-          "episode_index": 9,
-          "details": {
-            "joint": 7,
-            "static_fraction": 0.9573934837092731
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 9: joint 10 static for 84% of frames - dead actuator or disabled motor?",
-          "episode_index": 9,
-          "details": {
-            "joint": 10,
-            "static_fraction": 0.8370927318295739
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 9: joint 12 static for 87% of frames - dead actuator or disabled motor?",
-          "episode_index": 9,
-          "details": {
-            "joint": 12,
-            "static_fraction": 0.87468671679198
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 17: joint 7 static for 100% of frames - dead actuator or disabled motor?",
-          "episode_index": 17,
-          "details": {
-            "joint": 7,
-            "static_fraction": 1.0
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 17: joint 10 static for 100% of frames - dead actuator or disabled motor?",
-          "episode_index": 17,
-          "details": {
-            "joint": 10,
-            "static_fraction": 1.0
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 17: joint 12 static for 100% of frames - dead actuator or disabled motor?",
-          "episode_index": 17,
-          "details": {
-            "joint": 12,
-            "static_fraction": 1.0
+            "episodes": [
+              17
+            ],
+            "share": 0.05555555555555555
           }
         }
       ]
@@ -432,49 +235,12 @@
     {
       "id": "action-saturation",
       "title": "Action saturation (commands clipped at the limits)",
-      "verdict": "WARN",
-      "summary": "4 dim(s) saturated",
+      "verdict": "PASS",
+      "summary": "no continuous action dim pinned at a limit above 5% (12 dims checked)",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [
-        {
-          "severity": "WARN",
-          "message": "action dim 2: 11.7% of commands sit at the min/max limit - clipped commands the policy will imitate",
-          "episode_index": null,
-          "details": {
-            "dim": 2,
-            "saturated_fraction": 0.11680555555555555
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "action dim 6: 58.5% of commands sit at the min/max limit - clipped commands the policy will imitate",
-          "episode_index": null,
-          "details": {
-            "dim": 6,
-            "saturated_fraction": 0.585
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "action dim 9: 11.7% of commands sit at the min/max limit - clipped commands the policy will imitate",
-          "episode_index": null,
-          "details": {
-            "dim": 9,
-            "saturated_fraction": 0.11666666666666667
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "action dim 13: 58.5% of commands sit at the min/max limit - clipped commands the policy will imitate",
-          "episode_index": null,
-          "details": {
-            "dim": 13,
-            "saturated_fraction": 0.585
-          }
-        }
-      ]
+      "findings": []
     },
     {
       "id": "nan-and-normalization",
@@ -490,7 +256,7 @@
       "id": "duplicate-and-leakage",
       "title": "Duplicate episodes / train-eval leakage",
       "verdict": "PASS",
-      "summary": "no exact or near duplicates",
+      "summary": "no exact, partial or near duplicates",
       "skipped": false,
       "skip_reason": "",
       "details": {},
@@ -506,84 +272,104 @@
       "details": {
         "metrics": {
           "duration_s": {
-            "0": 8.0,
-            "1": 8.0,
-            "2": 8.0,
-            "3": 8.0,
-            "4": 8.0,
-            "5": 8.0,
-            "6": 8.0,
-            "7": 8.0,
-            "8": 8.0,
-            "9": 8.0,
-            "10": 8.0,
-            "11": 8.0,
-            "12": 8.0,
-            "13": 8.0,
-            "14": 8.0,
-            "15": 8.0,
-            "16": 8.0,
-            "17": 8.0
+            "0": 1.0,
+            "1": 1.0,
+            "2": 1.0,
+            "3": 1.0,
+            "4": 1.0,
+            "5": 1.0,
+            "6": 1.0,
+            "7": 1.0,
+            "8": 1.0,
+            "9": 1.0,
+            "10": 1.0,
+            "11": 1.0,
+            "12": 1.0,
+            "13": 1.0,
+            "14": 1.0,
+            "15": 1.0,
+            "16": 1.0,
+            "17": 1.0
           },
           "p95_jerk": {
-            "0": 0.0019962772727012625,
-            "1": 0.0022232197225093837,
-            "2": 0.001754721999168391,
-            "3": 0.0017195403575897177,
-            "4": 0.002124145627021786,
-            "5": 0.0016678214073181138,
-            "6": 0.0023002520203590387,
-            "7": 0.0017955303192138637,
-            "8": 0.0019581466913223254,
-            "9": 0.001420545578002929,
-            "10": 0.0015614360570907568,
-            "11": 0.0016329258680343592,
-            "12": 0.001802006363868711,
-            "13": 0.0022432118654251076,
-            "14": 0.0025864183902740423,
-            "15": 0.001678335666656493,
-            "16": 0.0017258346080780004,
-            "17": 0.001746702194213867
+            "0": 0.007482297304073814,
+            "1": 0.00934792551658373,
+            "2": 0.007485987963072665,
+            "3": 0.007514171419482525,
+            "4": 0.008375245507295811,
+            "5": 0.00743833407781005,
+            "6": 0.00865030836115796,
+            "7": 0.007627319304882686,
+            "8": 0.00811797358630752,
+            "9": 0.006417278504952471,
+            "10": 0.007465350420223165,
+            "11": 0.007446821949274513,
+            "12": 0.0074498054635468445,
+            "13": 0.008301407380034693,
+            "14": 0.01028002928279586,
+            "15": 0.007377288801668473,
+            "16": 0.007225541569961622,
+            "17": 0.007466082640992176
           },
           "peak_velocity": {
-            "0": 0.24456284195184708,
-            "1": 0.24492382258176804,
-            "2": 0.2448679879307747,
-            "3": 0.24442694336175919,
-            "4": 0.24471312016248703,
-            "5": 0.24485310167074203,
-            "6": 0.24468816071748734,
-            "7": 0.24424264580011368,
-            "8": 0.24486862868070602,
-            "9": 0.24434437602758408,
-            "10": 0.2446056678891182,
-            "11": 0.2444019690155983,
-            "12": 0.24447355419397354,
-            "13": 0.24414243549108505,
-            "14": 0.24477312713861465,
-            "15": 0.24438927322626114,
-            "16": 0.24433092027902603,
-            "17": 0.24464259296655655
+            "0": 1.3423220857512264,
+            "1": 1.340923791934671,
+            "2": 1.341483813273,
+            "3": 1.3424156272373742,
+            "4": 1.3439873369849418,
+            "5": 1.3427600039422825,
+            "6": 1.343850257379257,
+            "7": 1.3386344397618797,
+            "8": 1.3448414043072858,
+            "9": 1.3419339254110694,
+            "10": 1.340714939902607,
+            "11": 1.341524732558279,
+            "12": 1.3426716182860798,
+            "13": 1.340853083409709,
+            "14": 1.3443169009085791,
+            "15": 1.3419295879668298,
+            "16": 1.341888259488698,
+            "17": 1.3397962201095222
+          },
+          "velocity_spike": {
+            "0": null,
+            "1": null,
+            "2": null,
+            "3": null,
+            "4": null,
+            "5": null,
+            "6": null,
+            "7": null,
+            "8": null,
+            "9": null,
+            "10": null,
+            "11": null,
+            "12": null,
+            "13": null,
+            "14": null,
+            "15": null,
+            "16": null,
+            "17": null
           },
           "static_fraction": {
-            "0": 0.3283208020050125,
-            "1": 0.3107769423558897,
-            "2": 0.2681704260651629,
-            "3": 0.3583959899749373,
-            "4": 0.3082706766917293,
-            "5": 0.2731829573934837,
-            "6": 0.3057644110275689,
-            "7": 0.38596491228070173,
-            "8": 0.3358395989974937,
-            "9": 0.37343358395989973,
-            "10": 0.3157894736842105,
-            "11": 0.3182957393483709,
-            "12": 0.3483709273182957,
-            "13": 0.3533834586466165,
-            "14": 0.3233082706766917,
-            "15": 0.3107769423558897,
-            "16": 0.3483709273182957,
-            "17": 0.3609022556390977
+            "0": 0.18295739348370926,
+            "1": 0.14536340852130325,
+            "2": 0.14536340852130325,
+            "3": 0.18546365914786966,
+            "4": 0.14536340852130325,
+            "5": 0.15288220551378445,
+            "6": 0.15037593984962405,
+            "7": 0.18796992481203006,
+            "8": 0.14536340852130325,
+            "9": 0.19047619047619047,
+            "10": 0.18295739348370926,
+            "11": 0.17794486215538846,
+            "12": 0.16290726817042606,
+            "13": 0.17293233082706766,
+            "14": 0.14536340852130325,
+            "15": 0.17293233082706766,
+            "16": 0.17794486215538846,
+            "17": 0.18295739348370926
           },
           "end_pose_deviation": {
             "0": 0.6713717660574762,
@@ -611,6 +397,57 @@
       "findings": []
     },
     {
+      "id": "embedded-images",
+      "title": "Embedded images in the parquet shards",
+      "verdict": "INFO",
+      "summary": "1 embedded image feature(s)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "1 image feature(s) embedded in the parquet shards (observation.images.top): shards are big and every frame decodes on read - the video layout (dtype \"video\", MP4 chunks) streams far better for training",
+          "episode_index": null,
+          "details": {
+            "features": [
+              "observation.images.top"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "camera-coverage",
+      "title": "Per-episode camera coverage",
+      "verdict": "SKIP",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "no video cameras declared",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "task-strings",
+      "title": "Task strings",
+      "verdict": "PASS",
+      "summary": "18 episodes, 0 tasks in meta/tasks; 0 finding(s)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "reward-done",
+      "title": "Reward / done fields",
+      "verdict": "PASS",
+      "summary": "reward absent, done present",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
       "id": "visual-quality",
       "title": "Visual quality (blur, lighting)",
       "verdict": "SKIP",
@@ -623,31 +460,12 @@
     {
       "id": "deployment-readiness",
       "title": "Deployment readiness (would this dataset serve a policy?)",
-      "verdict": "WARN",
-      "summary": "0 blocker(s), 2 warning(s)",
+      "verdict": "PASS",
+      "summary": "no deployment blockers found",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [
-        {
-          "severity": "WARN",
-          "message": "observation.state: 0.67% of values sit >3 sigma from the stored normalization stats - at inference the policy sees inputs outside the range it trained on (the openpi #906 failure mode)",
-          "episode_index": null,
-          "details": {
-            "feature": "observation.state",
-            "ood_fraction": 0.006746031746031746
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "action: 0.57% of values sit >3 sigma from the stored normalization stats - at inference the policy sees inputs outside the range it trained on (the openpi #906 failure mode)",
-          "episode_index": null,
-          "details": {
-            "feature": "action",
-            "ood_fraction": 0.005704365079365079
-          }
-        }
-      ]
+      "findings": []
     }
   ]
 }

@@ -1,0 +1,751 @@
+{
+  "source": "lerobot/stanford_kuka_multimodal_dataset",
+  "format_version": "v3.0",
+  "episodes": 50,
+  "frames": 2499,
+  "fps": 20.0,
+  "truncated": true,
+  "score": 91,
+  "verdict": "WARN",
+  "checks": [
+    {
+      "id": "stats-drift",
+      "title": "Stats drift (stored normalization stats vs actual data)",
+      "verdict": "PASS",
+      "summary": "data matches per-episode stats of the loaded episodes (worst 0% of the FAIL threshold)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "timestamp-grid",
+      "title": "Timestamp grid (spacing, monotonic, start at 0)",
+      "verdict": "PASS",
+      "summary": "evenly spaced at 20 fps and monotonic",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "dropped-frames",
+      "title": "Dropped / duplicated frames",
+      "verdict": "PASS",
+      "summary": "frame_index contiguous; episode lengths and video segments match the data",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "calibration-drift",
+      "title": "Calibration drift (action vs state on still frames)",
+      "verdict": "SKIP",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "no dim where action is a position command for the same joint: 4 different space; 3 no motion",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "idle-segments",
+      "title": "Idle segments (policy learns to do nothing)",
+      "verdict": "PASS",
+      "summary": "no episode starts idle or idles >= 30%",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "stuck-actuator",
+      "title": "Stuck actuators (joints that never move)",
+      "verdict": "PASS",
+      "summary": "every joint moves wherever the dataset uses it",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "action-saturation",
+      "title": "Action saturation (commands clipped at the limits)",
+      "verdict": "WARN",
+      "summary": "4 dim(s) saturated",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "WARN",
+          "message": "action dim 0 (motor_0): 7.2% of commands during motion are pinned at exactly its max (0.05) - clipped commands the policy will imitate",
+          "episode_index": null,
+          "details": {
+            "dim": 0,
+            "saturated_fraction": 0.07214345287739783,
+            "side": "max"
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "action dim 1 (motor_1): 7.3% of commands during motion are pinned at exactly its max (0.05) - clipped commands the policy will imitate",
+          "episode_index": null,
+          "details": {
+            "dim": 1,
+            "saturated_fraction": 0.0725604670558799,
+            "side": "max"
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "action dim 2 (motor_2): 6.0% of commands during motion are pinned at exactly its max (0.05) - clipped commands the policy will imitate",
+          "episode_index": null,
+          "details": {
+            "dim": 2,
+            "saturated_fraction": 0.060050041701417846,
+            "side": "max"
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "action dim 6 (motor_6): 6.6% of commands during motion are pinned at exactly its max (0.15) - clipped commands the policy will imitate",
+          "episode_index": null,
+          "details": {
+            "dim": 6,
+            "saturated_fraction": 0.06630525437864887,
+            "side": "max"
+          }
+        }
+      ]
+    },
+    {
+      "id": "nan-and-normalization",
+      "title": "NaN / Inf and normalization hazards",
+      "verdict": "INFO",
+      "summary": "",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "action dim 3: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 3
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 4: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 4
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 5: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "duplicate-and-leakage",
+      "title": "Duplicate episodes / train-eval leakage",
+      "verdict": "PASS",
+      "summary": "no exact, partial or near duplicates",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "outlier-episodes",
+      "title": "Outlier episodes (duration, jerk, velocity, static, end-pose)",
+      "verdict": "WARN",
+      "summary": "3 episode(s) to review, 9 mild, of 50; worst: [734, 1653, 2693, 184, 428, 490, 1040, 1775, 2203, 2265]",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "metrics": {
+          "duration_s": {
+            "0": 1.0,
+            "61": 1.0,
+            "122": 1.0,
+            "184": 1.0,
+            "245": 1.0,
+            "306": 1.0,
+            "367": 1.0,
+            "428": 1.0,
+            "490": 1.0,
+            "551": 1.0,
+            "612": 1.0,
+            "673": 1.0,
+            "734": 1.0,
+            "796": 1.0,
+            "857": 1.0,
+            "918": 1.0,
+            "979": 1.0,
+            "1040": 1.0,
+            "1102": 1.0,
+            "1163": 1.0,
+            "1224": 1.0,
+            "1285": 1.0,
+            "1346": 1.0,
+            "1408": 1.0,
+            "1469": 1.0,
+            "1530": 1.0,
+            "1591": 1.0,
+            "1653": 1.0,
+            "1714": 1.0,
+            "1775": 1.0,
+            "1836": 1.0,
+            "1897": 1.0,
+            "1959": 1.0,
+            "2020": 1.0,
+            "2081": 1.0,
+            "2142": 1.0,
+            "2203": 1.0,
+            "2265": 1.0,
+            "2326": 1.0,
+            "2387": 1.0,
+            "2448": 1.0,
+            "2509": 1.0,
+            "2571": 1.0,
+            "2632": 1.0,
+            "2693": 1.0,
+            "2754": 1.0,
+            "2815": 1.0,
+            "2877": 1.0,
+            "2938": 1.0,
+            "2999": 0.9800000000000001
+          },
+          "p95_jerk": {
+            "0": 2.214851264334084,
+            "61": 2.302111506624305,
+            "122": 2.125773505088204,
+            "184": 7.090763557020266,
+            "245": 2.445711630700816,
+            "306": 2.6339007428804093,
+            "367": 2.256667342372181,
+            "428": 6.774577091108155,
+            "490": 6.97024671215445,
+            "551": 2.578823197317302,
+            "612": 2.525281559590563,
+            "673": 2.388730244421434,
+            "734": 7.495409175096684,
+            "796": 2.4022764088456317,
+            "857": 2.3957570897578786,
+            "918": 2.437164822932389,
+            "979": 2.4148407688172573,
+            "1040": 7.175294748263539,
+            "1102": 1.846240370537044,
+            "1163": 2.462400545769078,
+            "1224": 2.38141637681419,
+            "1285": 2.0302992178211188,
+            "1346": 2.1502269261665505,
+            "1408": 2.423698842506318,
+            "1469": 2.248501061214887,
+            "1530": 2.1084518975192617,
+            "1591": 2.396822331921461,
+            "1653": 7.300472002572248,
+            "1714": 2.7017165554941363,
+            "1775": 6.478420502721059,
+            "1836": 2.2028667572091116,
+            "1897": 1.684371317348306,
+            "1959": 2.5218939446139164,
+            "2020": 2.117948138649992,
+            "2081": 2.50972972345428,
+            "2142": 2.88727199227474,
+            "2203": 6.856839728788638,
+            "2265": 6.017669229348571,
+            "2326": 6.698814842697411,
+            "2387": 2.333713660126803,
+            "2448": 2.2450036950007943,
+            "2509": 2.213642416042553,
+            "2571": 2.256024013034821,
+            "2632": 2.4049556135413845,
+            "2693": 7.377759874660085,
+            "2754": 2.2611291636447017,
+            "2815": 2.7455207760093203,
+            "2877": 2.1566631011737725,
+            "2938": 1.9612396045527223,
+            "2999": 6.985717432684559
+          },
+          "peak_velocity": {
+            "0": 1.969958652269401,
+            "61": 2.340463143213411,
+            "122": 2.1000446037446077,
+            "184": 4.1125416271996995,
+            "245": 1.8769047682939004,
+            "306": 2.341021338261171,
+            "367": 1.7982871538571634,
+            "428": 4.1125416271996995,
+            "490": 4.1125416271996995,
+            "551": 2.1068854630123974,
+            "612": 2.015115587656126,
+            "673": 1.9425814002956336,
+            "734": 4.1125416271996995,
+            "796": 1.788701364076005,
+            "857": 2.35458490892385,
+            "918": 1.7563574673206732,
+            "979": 2.314132827359604,
+            "1040": 4.1125416271996995,
+            "1102": 1.5304641607414187,
+            "1163": 2.2067602636140893,
+            "1224": 2.2563968130153045,
+            "1285": 1.6307629169803621,
+            "1346": 1.9412281471490804,
+            "1408": 2.081856508328554,
+            "1469": 2.110038241655859,
+            "1530": 2.034635706816502,
+            "1591": 1.913019443979601,
+            "1653": 4.1125416271996995,
+            "1714": 2.1812809739287804,
+            "1775": 4.1125416271996995,
+            "1836": 2.175745422105401,
+            "1897": 1.932193580135536,
+            "1959": 2.5847357727957045,
+            "2020": 1.7941977594372576,
+            "2081": 2.0850376913310558,
+            "2142": 2.1362411002903356,
+            "2203": 4.1125416271996995,
+            "2265": 4.1125416271996995,
+            "2326": 4.1125416271996995,
+            "2387": 1.858951807387354,
+            "2448": 2.3067567893396115,
+            "2509": 2.0366496060069643,
+            "2571": 1.7806421383675974,
+            "2632": 1.8585191096354516,
+            "2693": 4.1125416271996995,
+            "2754": 2.0246950822619625,
+            "2815": 2.140757917032731,
+            "2877": 2.1292709643129326,
+            "2938": 1.6393358577282446,
+            "2999": 4.1125416271996995
+          },
+          "velocity_spike": {
+            "0": 0.32858942099778427,
+            "61": 0.4438156090347737,
+            "122": 0.8751325263272757,
+            "184": 1.020657629389113,
+            "245": 0.3224108000673219,
+            "306": 0.8814928724278669,
+            "367": 0.0448181237571393,
+            "428": 1.020657629389113,
+            "490": 1.020657629389113,
+            "551": 0.9740774312505855,
+            "612": 0.9999452248468071,
+            "673": 0.05998475910322854,
+            "734": 0.928299000012646,
+            "796": 0.03569340672249074,
+            "857": 0.8498962857607141,
+            "918": 0.0898231461151178,
+            "979": 0.7431941656697661,
+            "1040": 1.020657629389113,
+            "1102": 0.04405808452402075,
+            "1163": 0.044579742351914975,
+            "1224": 0.028137810887016817,
+            "1285": 0.7031371638200319,
+            "1346": 0.03307508381277772,
+            "1408": 0.5207943949036176,
+            "1469": 0.5482623192910115,
+            "1530": 0.7182542974902318,
+            "1591": 0.3369096632199045,
+            "1653": 1.020657629389113,
+            "1714": 0.7531112845943498,
+            "1775": 0.9403234756570296,
+            "1836": 0.8256850799689224,
+            "1897": 0.2838365853658721,
+            "1959": 0.60089505272028,
+            "2020": 0.6093089284141013,
+            "2081": 0.6519864507528088,
+            "2142": 0.82477385908551,
+            "2203": 1.020657629389113,
+            "2265": 1.020657629389113,
+            "2326": 1.020657629389113,
+            "2387": 0.04324936268213196,
+            "2448": 0.4554468690912544,
+            "2509": 0.46711131007953627,
+            "2571": 1.0063147470339622,
+            "2632": 0.8080666895867732,
+            "2693": 1.020657629389113,
+            "2754": 0.8918369835573322,
+            "2815": 0.6076627524261248,
+            "2877": 0.12144312293110138,
+            "2938": 0.031146589290829155,
+            "2999": 1.020657629389113
+          },
+          "static_fraction": {
+            "0": 0.02040816326530612,
+            "61": 0.02040816326530612,
+            "122": 0.02040816326530612,
+            "184": 0.02040816326530612,
+            "245": 0.02040816326530612,
+            "306": 0.02040816326530612,
+            "367": 0.02040816326530612,
+            "428": 0.02040816326530612,
+            "490": 0.02040816326530612,
+            "551": 0.02040816326530612,
+            "612": 0.02040816326530612,
+            "673": 0.02040816326530612,
+            "734": 0.02040816326530612,
+            "796": 0.02040816326530612,
+            "857": 0.02040816326530612,
+            "918": 0.02040816326530612,
+            "979": 0.02040816326530612,
+            "1040": 0.04081632653061224,
+            "1102": 0.02040816326530612,
+            "1163": 0.02040816326530612,
+            "1224": 0.02040816326530612,
+            "1285": 0.02040816326530612,
+            "1346": 0.02040816326530612,
+            "1408": 0.02040816326530612,
+            "1469": 0.02040816326530612,
+            "1530": 0.02040816326530612,
+            "1591": 0.02040816326530612,
+            "1653": 0.02040816326530612,
+            "1714": 0.02040816326530612,
+            "1775": 0.02040816326530612,
+            "1836": 0.02040816326530612,
+            "1897": 0.02040816326530612,
+            "1959": 0.02040816326530612,
+            "2020": 0.02040816326530612,
+            "2081": 0.02040816326530612,
+            "2142": 0.02040816326530612,
+            "2203": 0.02040816326530612,
+            "2265": 0.02040816326530612,
+            "2326": 0.02040816326530612,
+            "2387": 0.02040816326530612,
+            "2448": 0.02040816326530612,
+            "2509": 0.02040816326530612,
+            "2571": 0.02040816326530612,
+            "2632": 0.02040816326530612,
+            "2693": 0.02040816326530612,
+            "2754": 0.02040816326530612,
+            "2815": 0.02040816326530612,
+            "2877": 0.02040816326530612,
+            "2938": 0.02040816326530612,
+            "2999": 0.020833333333333332
+          },
+          "end_pose_deviation": {
+            "0": 0.6911211412667088,
+            "61": 0.5655591452484537,
+            "122": 0.1739780336492992,
+            "184": 0.5988758556070869,
+            "245": 0.6019743340910225,
+            "306": 0.467267784676878,
+            "367": 0.2392886533882031,
+            "428": 0.6773882943288378,
+            "490": 0.3912134492706392,
+            "551": 0.20065114393856395,
+            "612": 0.31072913796579577,
+            "673": 0.1698873354154266,
+            "734": 0.6281390800126117,
+            "796": 0.3743108275124626,
+            "857": 0.3519911595684862,
+            "918": 0.18455902528066961,
+            "979": 0.5326095316917882,
+            "1040": 0.5083524986778137,
+            "1102": 0.1562831755237953,
+            "1163": 0.31628783876832056,
+            "1224": 0.2193647588601394,
+            "1285": 0.5225657317104271,
+            "1346": 0.20645159550460748,
+            "1408": 0.5552438079441224,
+            "1469": 0.4537169107989171,
+            "1530": 0.11107083395570647,
+            "1591": 0.7141297103195539,
+            "1653": 0.6086643248713411,
+            "1714": 0.2347434758915575,
+            "1775": 0.7858047092715771,
+            "1836": 0.42117671934555756,
+            "1897": 0.4284395730649863,
+            "1959": 0.13484964136507213,
+            "2020": 0.3215900935199117,
+            "2081": 0.24408769814235282,
+            "2142": 0.8068891103338826,
+            "2203": 0.40498343453143754,
+            "2265": 0.5604787394987897,
+            "2326": 0.708570595848335,
+            "2387": 0.30349905263591737,
+            "2448": 0.2661684932974741,
+            "2509": 0.9628102672320027,
+            "2571": 0.4121529931983786,
+            "2632": 0.40028525941119253,
+            "2693": 0.792237018419072,
+            "2754": 0.18324920760858526,
+            "2815": 0.28905491929068644,
+            "2877": 0.20653199334140346,
+            "2938": 0.281577185648457,
+            "2999": 0.5179180079229471
+          }
+        },
+        "flagged": {
+          "184": [
+            "p95_jerk",
+            "peak_velocity"
+          ],
+          "428": [
+            "p95_jerk",
+            "peak_velocity"
+          ],
+          "490": [
+            "p95_jerk",
+            "peak_velocity"
+          ],
+          "734": [
+            "p95_jerk",
+            "peak_velocity"
+          ],
+          "1040": [
+            "p95_jerk",
+            "peak_velocity"
+          ],
+          "1653": [
+            "p95_jerk",
+            "peak_velocity"
+          ],
+          "1775": [
+            "p95_jerk",
+            "peak_velocity"
+          ],
+          "2203": [
+            "p95_jerk",
+            "peak_velocity"
+          ],
+          "2265": [
+            "p95_jerk",
+            "peak_velocity"
+          ],
+          "2326": [
+            "p95_jerk",
+            "peak_velocity"
+          ],
+          "2693": [
+            "p95_jerk",
+            "peak_velocity"
+          ],
+          "2999": [
+            "p95_jerk",
+            "peak_velocity"
+          ]
+        }
+      },
+      "findings": [
+        {
+          "severity": "WARN",
+          "message": "episode 734: IQR outlier on p95_jerk, peak_velocity (far out)",
+          "episode_index": 734,
+          "details": {
+            "metrics": [
+              "p95_jerk",
+              "peak_velocity"
+            ],
+            "far_out": true
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 1653: IQR outlier on p95_jerk, peak_velocity (far out)",
+          "episode_index": 1653,
+          "details": {
+            "metrics": [
+              "p95_jerk",
+              "peak_velocity"
+            ],
+            "far_out": true
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 2693: IQR outlier on p95_jerk, peak_velocity (far out)",
+          "episode_index": 2693,
+          "details": {
+            "metrics": [
+              "p95_jerk",
+              "peak_velocity"
+            ],
+            "far_out": true
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 184: IQR outlier on p95_jerk, peak_velocity",
+          "episode_index": 184,
+          "details": {
+            "metrics": [
+              "p95_jerk",
+              "peak_velocity"
+            ],
+            "far_out": false
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 428: IQR outlier on p95_jerk, peak_velocity",
+          "episode_index": 428,
+          "details": {
+            "metrics": [
+              "p95_jerk",
+              "peak_velocity"
+            ],
+            "far_out": false
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 490: IQR outlier on p95_jerk, peak_velocity",
+          "episode_index": 490,
+          "details": {
+            "metrics": [
+              "p95_jerk",
+              "peak_velocity"
+            ],
+            "far_out": false
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 1040: IQR outlier on p95_jerk, peak_velocity",
+          "episode_index": 1040,
+          "details": {
+            "metrics": [
+              "p95_jerk",
+              "peak_velocity"
+            ],
+            "far_out": false
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 1775: IQR outlier on p95_jerk, peak_velocity",
+          "episode_index": 1775,
+          "details": {
+            "metrics": [
+              "p95_jerk",
+              "peak_velocity"
+            ],
+            "far_out": false
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 2203: IQR outlier on p95_jerk, peak_velocity",
+          "episode_index": 2203,
+          "details": {
+            "metrics": [
+              "p95_jerk",
+              "peak_velocity"
+            ],
+            "far_out": false
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 2265: IQR outlier on p95_jerk, peak_velocity",
+          "episode_index": 2265,
+          "details": {
+            "metrics": [
+              "p95_jerk",
+              "peak_velocity"
+            ],
+            "far_out": false
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 2326: IQR outlier on p95_jerk, peak_velocity",
+          "episode_index": 2326,
+          "details": {
+            "metrics": [
+              "p95_jerk",
+              "peak_velocity"
+            ],
+            "far_out": false
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 2999: IQR outlier on p95_jerk, peak_velocity",
+          "episode_index": 2999,
+          "details": {
+            "metrics": [
+              "p95_jerk",
+              "peak_velocity"
+            ],
+            "far_out": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "embedded-images",
+      "title": "Embedded images in the parquet shards",
+      "verdict": "PASS",
+      "summary": "no image features declared",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "camera-coverage",
+      "title": "Per-episode camera coverage",
+      "verdict": "PASS",
+      "summary": "1 camera(s) over 50 episodes; 0 missing segments",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "task-strings",
+      "title": "Task strings",
+      "verdict": "PASS",
+      "summary": "50 episodes, 0 tasks in meta/tasks; 0 finding(s)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "reward-done",
+      "title": "Reward / done fields",
+      "verdict": "PASS",
+      "summary": "reward and done present",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "visual-quality",
+      "title": "Visual quality (blur, lighting)",
+      "verdict": "SKIP",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "pass --video to run (downloads MP4s; needs the video extra)",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "deployment-readiness",
+      "title": "Deployment readiness (would this dataset serve a policy?)",
+      "verdict": "PASS",
+      "summary": "no deployment blockers found",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    }
+  ]
+}

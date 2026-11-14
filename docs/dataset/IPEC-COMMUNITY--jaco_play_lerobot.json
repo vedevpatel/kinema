@@ -1,0 +1,539 @@
+{
+  "source": "IPEC-COMMUNITY/jaco_play_lerobot",
+  "format_version": "v2.1",
+  "episodes": 40,
+  "frames": 2899,
+  "fps": 10.0,
+  "truncated": true,
+  "score": 88,
+  "verdict": "WARN",
+  "checks": [
+    {
+      "id": "stats-drift",
+      "title": "Stats drift (stored normalization stats vs actual data)",
+      "verdict": "PASS",
+      "summary": "data matches per-episode stats of the loaded episodes (worst 0% of the FAIL threshold)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "timestamp-grid",
+      "title": "Timestamp grid (spacing, monotonic, start at 0)",
+      "verdict": "PASS",
+      "summary": "evenly spaced at 10 fps and monotonic",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "dropped-frames",
+      "title": "Dropped / duplicated frames",
+      "verdict": "INFO",
+      "summary": "frame_index contiguous; episode lengths match the data",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "no per-episode video segments in the metadata (v2.x or no videos): video frame counts not cross-checked",
+          "episode_index": null,
+          "details": {}
+        }
+      ]
+    },
+    {
+      "id": "calibration-drift",
+      "title": "Calibration drift (action vs state on still frames)",
+      "verdict": "SKIP",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "no dim where action is a position command for the same joint: 3 delta command; 1 gripper in different units; 3 no motion",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "idle-segments",
+      "title": "Idle segments (policy learns to do nothing)",
+      "verdict": "PASS",
+      "summary": "no episode starts idle or idles >= 30%",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "stuck-actuator",
+      "title": "Stuck actuators (joints that never move)",
+      "verdict": "WARN",
+      "summary": "2/40 episodes with stuck joints",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "WARN",
+          "message": "joint 0 (x) does not move in 1/40 episodes [575] - it moves in the others - dead or disabled motor during those recordings?",
+          "episode_index": null,
+          "details": {
+            "joint": 0,
+            "episodes": [
+              575
+            ],
+            "share": 0.025
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "joint 1 (y) does not move in 1/40 episodes [575] - it moves in the others - dead or disabled motor during those recordings?",
+          "episode_index": null,
+          "details": {
+            "joint": 1,
+            "episodes": [
+              575
+            ],
+            "share": 0.025
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "gripper (action dim 6) never actuates in 1/40 pick/place episode(s): [25]",
+          "episode_index": null,
+          "details": {
+            "joint": 6,
+            "episodes": [
+              25
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "action-saturation",
+      "title": "Action saturation (commands clipped at the limits)",
+      "verdict": "WARN",
+      "summary": "3 dim(s) saturated",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "WARN",
+          "message": "action dim 0 (x): 14.4% of commands during motion are pinned at exactly its min (-0.2) - clipped commands the policy will imitate",
+          "episode_index": null,
+          "details": {
+            "dim": 0,
+            "saturated_fraction": 0.14395527603074773,
+            "side": "min"
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "action dim 1 (y): 10.4% of commands during motion are pinned at exactly its min (-0.2) - clipped commands the policy will imitate",
+          "episode_index": null,
+          "details": {
+            "dim": 1,
+            "saturated_fraction": 0.10412299091544375,
+            "side": "min"
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "action dim 2 (z): 7.4% of commands during motion are pinned at exactly its max (0.2) - clipped commands the policy will imitate",
+          "episode_index": null,
+          "details": {
+            "dim": 2,
+            "saturated_fraction": 0.07407407407407407,
+            "side": "max"
+          }
+        }
+      ]
+    },
+    {
+      "id": "nan-and-normalization",
+      "title": "NaN / Inf and normalization hazards",
+      "verdict": "INFO",
+      "summary": "",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "observation.state dim 6: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "observation.state",
+            "dim": 6
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 3: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 3
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 4: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 4
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 5: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "duplicate-and-leakage",
+      "title": "Duplicate episodes / train-eval leakage",
+      "verdict": "PASS",
+      "summary": "no exact, partial or near duplicates",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "outlier-episodes",
+      "title": "Outlier episodes (duration, jerk, velocity, static, end-pose)",
+      "verdict": "PASS",
+      "summary": "no IQR outliers across 40 episodes; duration/end pose skipped for 35 episodes whose task has < 5 episodes",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "metrics": {
+          "duration_s": {
+            "0": 1.3,
+            "25": null,
+            "50": 0.9833333333333334,
+            "75": null,
+            "100": 1.0,
+            "125": null,
+            "150": 0.8666666666666667,
+            "175": null,
+            "200": null,
+            "225": null,
+            "250": null,
+            "275": null,
+            "300": null,
+            "325": null,
+            "350": null,
+            "375": null,
+            "400": null,
+            "425": null,
+            "450": null,
+            "475": null,
+            "500": null,
+            "525": null,
+            "550": null,
+            "575": null,
+            "600": null,
+            "625": null,
+            "650": null,
+            "675": null,
+            "700": null,
+            "725": null,
+            "750": null,
+            "775": null,
+            "800": null,
+            "825": null,
+            "850": 1.4333333333333333,
+            "875": null,
+            "900": null,
+            "925": null,
+            "950": null,
+            "975": null
+          },
+          "p95_jerk": {
+            "0": null,
+            "25": null,
+            "50": null,
+            "75": null,
+            "100": null,
+            "125": null,
+            "150": null,
+            "175": null,
+            "200": null,
+            "225": null,
+            "250": null,
+            "275": null,
+            "300": null,
+            "325": null,
+            "350": null,
+            "375": null,
+            "400": null,
+            "425": null,
+            "450": null,
+            "475": null,
+            "500": null,
+            "525": null,
+            "550": null,
+            "575": null,
+            "600": null,
+            "625": null,
+            "650": null,
+            "675": null,
+            "700": null,
+            "725": null,
+            "750": null,
+            "775": null,
+            "800": null,
+            "825": null,
+            "850": null,
+            "875": null,
+            "900": null,
+            "925": null,
+            "950": null,
+            "975": null
+          },
+          "peak_velocity": {
+            "0": null,
+            "25": null,
+            "50": null,
+            "75": null,
+            "100": null,
+            "125": null,
+            "150": null,
+            "175": null,
+            "200": null,
+            "225": null,
+            "250": null,
+            "275": null,
+            "300": null,
+            "325": null,
+            "350": null,
+            "375": null,
+            "400": null,
+            "425": null,
+            "450": null,
+            "475": null,
+            "500": null,
+            "525": null,
+            "550": null,
+            "575": null,
+            "600": null,
+            "625": null,
+            "650": null,
+            "675": null,
+            "700": null,
+            "725": null,
+            "750": null,
+            "775": null,
+            "800": null,
+            "825": null,
+            "850": null,
+            "875": null,
+            "900": null,
+            "925": null,
+            "950": null,
+            "975": null
+          },
+          "velocity_spike": {
+            "0": 1.0430683697002823,
+            "25": 0.9724866947194459,
+            "50": 1.0,
+            "75": 1.0,
+            "100": 1.1047167324112075,
+            "125": 1.14650535893498,
+            "150": 1.058346081503782,
+            "175": 1.1340450995750189,
+            "200": 0.9177455482562863,
+            "225": 1.2494593289062086,
+            "250": 1.2622356671455348,
+            "275": 1.0900090016905994,
+            "300": 0.9701433893918641,
+            "325": 1.2622356671455348,
+            "350": 1.4698323223075795,
+            "375": 1.0,
+            "400": 1.1024692358204684,
+            "425": 1.2622356671455348,
+            "450": 1.0,
+            "475": 1.2622356671455348,
+            "500": 1.1929194182156024,
+            "525": 1.3545302675874824,
+            "550": 1.3545302675874824,
+            "575": 1.0,
+            "600": 1.3545302675874824,
+            "625": 1.0,
+            "650": 0.9999383866789794,
+            "675": 1.3545302675874824,
+            "700": 1.3545302675874824,
+            "725": 1.0,
+            "750": 1.2190651747210686,
+            "775": 0.781321147873741,
+            "800": 1.2622356671455348,
+            "825": 1.1252611258345766,
+            "850": 1.0705199676159316,
+            "875": 0.9440820616620472,
+            "900": 1.0,
+            "925": 1.031221676407053,
+            "950": 1.291741183494349,
+            "975": 1.191654050942126
+          },
+          "static_fraction": {
+            "0": 0.45454545454545453,
+            "25": 0.3170731707317073,
+            "50": 0.4482758620689655,
+            "75": 0.5466666666666666,
+            "100": 0.6779661016949152,
+            "125": 0.42857142857142855,
+            "150": 0.4117647058823529,
+            "175": 0.375,
+            "200": 0.6422018348623854,
+            "225": 0.543859649122807,
+            "250": 0.5348837209302325,
+            "275": 0.6987951807228916,
+            "300": 0.5161290322580645,
+            "325": 0.49382716049382713,
+            "350": 0.3229166666666667,
+            "375": 0.5609756097560976,
+            "400": 0.5957446808510638,
+            "425": 0.5909090909090909,
+            "450": 0.6506024096385542,
+            "475": 0.3050847457627119,
+            "500": 0.32926829268292684,
+            "525": 0.4117647058823529,
+            "550": 0.30927835051546393,
+            "575": 0.7857142857142857,
+            "600": 0.5161290322580645,
+            "625": 0.42857142857142855,
+            "650": 0.5795454545454546,
+            "675": 0.5046728971962616,
+            "700": 0.45098039215686275,
+            "725": 0.5677966101694916,
+            "750": 0.1956521739130435,
+            "775": 0.5555555555555556,
+            "800": 0.5656565656565656,
+            "825": 0.5581395348837209,
+            "850": 0.32941176470588235,
+            "875": 0.5205479452054794,
+            "900": 0.6666666666666666,
+            "925": 0.39285714285714285,
+            "950": 0.4883720930232558,
+            "975": 0.5147058823529411
+          },
+          "end_pose_deviation": {
+            "0": 0.13620333686605535,
+            "25": null,
+            "50": 0.7916228148449606,
+            "75": null,
+            "100": 0.7014833452032083,
+            "125": null,
+            "150": 0.22638579427353564,
+            "175": null,
+            "200": null,
+            "225": null,
+            "250": null,
+            "275": null,
+            "300": null,
+            "325": null,
+            "350": null,
+            "375": null,
+            "400": null,
+            "425": null,
+            "450": null,
+            "475": null,
+            "500": null,
+            "525": null,
+            "550": null,
+            "575": null,
+            "600": null,
+            "625": null,
+            "650": null,
+            "675": null,
+            "700": null,
+            "725": null,
+            "750": null,
+            "775": null,
+            "800": null,
+            "825": null,
+            "850": 0.2682743333109424,
+            "875": null,
+            "900": null,
+            "925": null,
+            "950": null,
+            "975": null
+          }
+        },
+        "flagged": {}
+      },
+      "findings": []
+    },
+    {
+      "id": "embedded-images",
+      "title": "Embedded images in the parquet shards",
+      "verdict": "PASS",
+      "summary": "no image features declared",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "camera-coverage",
+      "title": "Per-episode camera coverage",
+      "verdict": "SKIP",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "video files not downloaded (pass --video) and the metadata records no segments",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "task-strings",
+      "title": "Task strings",
+      "verdict": "PASS",
+      "summary": "40 episodes, 0 tasks in meta/tasks; 0 finding(s)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "reward-done",
+      "title": "Reward / done fields",
+      "verdict": "SKIP",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "no reward/done fields (position-control datasets rarely have them)",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "visual-quality",
+      "title": "Visual quality (blur, lighting)",
+      "verdict": "SKIP",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "pass --video to run (downloads MP4s; needs the video extra)",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "deployment-readiness",
+      "title": "Deployment readiness (would this dataset serve a policy?)",
+      "verdict": "PASS",
+      "summary": "no deployment blockers found",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    }
+  ]
+}

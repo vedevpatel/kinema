@@ -2,27 +2,40 @@
   "source": "jesbu1/libero_90_lerobot",
   "format_version": "v2.0",
   "episodes": 13,
-  "frames": 1682,
+  "frames": 1708,
   "fps": 10.0,
   "truncated": true,
-  "score": 75,
+  "score": 65,
   "verdict": "FAIL",
   "checks": [
     {
       "id": "stats-drift",
-      "title": "Stats drift (meta/stats.json vs actual data)",
-      "verdict": "PASS",
-      "summary": "stats.json matches the data (mean/std/min/max within 1%)",
+      "title": "Stats drift (stored normalization stats vs actual data)",
+      "verdict": "WARN",
+      "summary": "worst error 0.0x the FAIL threshold",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": []
+      "findings": [
+        {
+          "severity": "WARN",
+          "message": "observation.state: no normalization stats (neither meta/stats.json nor per-episode stats) - policies that normalize will fail",
+          "episode_index": null,
+          "details": {}
+        },
+        {
+          "severity": "WARN",
+          "message": "action: no normalization stats (neither meta/stats.json nor per-episode stats) - policies that normalize will fail",
+          "episode_index": null,
+          "details": {}
+        }
+      ]
     },
     {
       "id": "timestamp-grid",
-      "title": "Timestamp grid (on-grid, monotonic, low jitter)",
+      "title": "Timestamp grid (spacing, monotonic, start at 0)",
       "verdict": "PASS",
-      "summary": "all episodes on the 10 fps grid and monotonic",
+      "summary": "evenly spaced at 10 fps and monotonic",
       "skipped": false,
       "skip_reason": "",
       "details": {},
@@ -32,14 +45,14 @@
       "id": "dropped-frames",
       "title": "Dropped / duplicated frames",
       "verdict": "INFO",
-      "summary": "frame_index contiguous and episode lengths match the data",
+      "summary": "frame_index contiguous; episode lengths match the data",
       "skipped": false,
       "skip_reason": "",
       "details": {},
       "findings": [
         {
           "severity": "INFO",
-          "message": "video frame counts not checked (pass --video to include MP4s)",
+          "message": "no per-episode video segments in the metadata (v2.x or no videos): video frame counts not cross-checked",
           "episode_index": null,
           "details": {}
         }
@@ -47,41 +60,41 @@
     },
     {
       "id": "calibration-drift",
-      "title": "Calibration drift (action vs state offset on still frames)",
+      "title": "Calibration drift (action vs state on still frames)",
       "verdict": "SKIP",
       "summary": "",
       "skipped": true,
-      "skip_reason": "observation.state or action column missing",
+      "skip_reason": "state dim 8 != action dim 7 and no names to pair them by",
       "details": {},
       "findings": []
     },
     {
       "id": "idle-segments",
       "title": "Idle segments (policy learns to do nothing)",
-      "verdict": "SKIP",
-      "summary": "",
-      "skipped": true,
-      "skip_reason": "action column missing",
+      "verdict": "PASS",
+      "summary": "no episode starts idle or idles >= 30%",
+      "skipped": false,
+      "skip_reason": "",
       "details": {},
       "findings": []
     },
     {
       "id": "stuck-actuator",
       "title": "Stuck actuators (joints that never move)",
-      "verdict": "SKIP",
-      "summary": "",
-      "skipped": true,
-      "skip_reason": "action column missing",
+      "verdict": "PASS",
+      "summary": "every joint moves wherever the dataset uses it",
+      "skipped": false,
+      "skip_reason": "",
       "details": {},
       "findings": []
     },
     {
       "id": "action-saturation",
       "title": "Action saturation (commands clipped at the limits)",
-      "verdict": "SKIP",
-      "summary": "",
-      "skipped": true,
-      "skip_reason": "action column missing",
+      "verdict": "PASS",
+      "summary": "no continuous action dim pinned at a limit above 5% (6 dims checked)",
+      "skipped": false,
+      "skip_reason": "",
       "details": {},
       "findings": []
     },
@@ -98,85 +111,197 @@
     {
       "id": "duplicate-and-leakage",
       "title": "Duplicate episodes / train-eval leakage",
-      "verdict": "SKIP",
-      "summary": "",
-      "skipped": true,
-      "skip_reason": "action column missing",
+      "verdict": "PASS",
+      "summary": "no exact, partial or near duplicates",
+      "skipped": false,
+      "skip_reason": "",
       "details": {},
       "findings": []
     },
     {
       "id": "outlier-episodes",
       "title": "Outlier episodes (duration, jerk, velocity, static, end-pose)",
-      "verdict": "PASS",
-      "summary": "no IQR outliers across 13 episodes",
+      "verdict": "INFO",
+      "summary": "0 episode(s) to review, 2 mild, of 13; worst: [304, 812]; duration/end pose skipped for 13 episodes whose task has < 5 episodes",
       "skipped": false,
       "skip_reason": "",
       "details": {
         "metrics": {
           "duration_s": {
-            "0": 9.8,
-            "1": 15.6,
-            "2": 17.9,
-            "3": 7.0,
-            "4": 11.5,
-            "5": 16.5,
-            "6": 10.9,
-            "7": 15.8,
-            "8": 10.7,
-            "9": 16.7,
-            "10": 9.5,
-            "11": 15.2,
-            "14": 11.1
+            "0": null,
+            "101": null,
+            "203": null,
+            "304": null,
+            "406": null,
+            "507": null,
+            "609": null,
+            "710": null,
+            "812": null,
+            "913": null,
+            "1015": null,
+            "1116": null,
+            "1319": null
           },
           "p95_jerk": {
-            "0": 0.0,
-            "1": 0.0,
-            "2": 0.0,
-            "3": 0.0,
-            "4": 0.0,
-            "5": 0.0,
-            "6": 0.0,
-            "7": 0.0,
-            "8": 0.0,
-            "9": 0.0,
-            "10": 0.0,
-            "11": 0.0,
-            "14": 0.0
+            "0": 0.27244030658975876,
+            "101": 0.33298267946266163,
+            "203": 0.3027114992754819,
+            "304": 0.44498587301750847,
+            "406": 0.30271145980639735,
+            "507": 0.18162688640892763,
+            "609": 0.27244032961339143,
+            "710": 0.45406718970959603,
+            "812": 0.4949333707152199,
+            "913": 0.3935247924974243,
+            "1015": 0.37233515792302185,
+            "1116": 0.16800488440025524,
+            "1319": 0.34963176883572905
           },
           "peak_velocity": {
-            "0": 0.0,
-            "1": 0.0,
-            "2": 0.0,
-            "3": 0.0,
-            "4": 0.0,
-            "5": 0.0,
-            "6": 0.0,
-            "7": 0.0,
-            "8": 0.0,
-            "9": 0.0,
-            "10": 0.0,
-            "11": 0.0,
-            "14": 0.0
+            "0": 0.36325377281785526,
+            "101": 0.8475921190331802,
+            "203": 0.7265075982611566,
+            "304": 0.5751518025761503,
+            "406": 0.7265075456357105,
+            "507": 0.3329826426248494,
+            "609": 0.4843383988407711,
+            "710": 0.605422939347337,
+            "812": 1.3319306231248436,
+            "913": 0.6962363891299815,
+            "1015": 0.6659652589369757,
+            "1116": 0.3329826426248494,
+            "1319": 0.9081343794191921
+          },
+          "velocity_spike": {
+            "0": 1.5364060392882826,
+            "101": 1.6749997360189732,
+            "203": 1.4693872995812969,
+            "304": 3.3499996458848083,
+            "406": 1.0917598706546154,
+            "507": 0.7959182814444383,
+            "609": 1.598648216762792,
+            "710": 1.3469384904042654,
+            "812": 1.3469385755537433,
+            "913": 1.5714282766491887,
+            "1015": 1.182739763469978,
+            "1116": 1.07499988896075,
+            "1319": 1.6530610810100295
           },
           "static_fraction": {
             "0": 0.0,
-            "1": 0.0,
-            "2": 0.0,
-            "3": 0.0,
-            "4": 0.0,
-            "5": 0.0,
-            "6": 0.0,
-            "7": 0.0,
-            "8": 0.0,
-            "9": 0.0,
-            "10": 0.0,
-            "11": 0.0,
-            "14": 0.0
+            "101": 0.0,
+            "203": 0.025974025974025976,
+            "304": 0.0,
+            "406": 0.0,
+            "507": 0.0,
+            "609": 0.0,
+            "710": 0.0,
+            "812": 0.0,
+            "913": 0.007692307692307693,
+            "1015": 0.0,
+            "1116": 0.0,
+            "1319": 0.0
+          },
+          "end_pose_deviation": {
+            "0": null,
+            "101": null,
+            "203": null,
+            "304": null,
+            "406": null,
+            "507": null,
+            "609": null,
+            "710": null,
+            "812": null,
+            "913": null,
+            "1015": null,
+            "1116": null,
+            "1319": null
           }
         },
-        "flagged": {}
+        "flagged": {
+          "304": [
+            "velocity_spike"
+          ],
+          "812": [
+            "peak_velocity"
+          ]
+        }
       },
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "episode 304: IQR outlier on velocity_spike",
+          "episode_index": 304,
+          "details": {
+            "metrics": [
+              "velocity_spike"
+            ],
+            "far_out": false
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 812: IQR outlier on peak_velocity",
+          "episode_index": 812,
+          "details": {
+            "metrics": [
+              "peak_velocity"
+            ],
+            "far_out": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "embedded-images",
+      "title": "Embedded images in the parquet shards",
+      "verdict": "INFO",
+      "summary": "2 embedded image feature(s)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "2 image feature(s) embedded in the parquet shards (image, wrist_image): shards are big and every frame decodes on read - the video layout (dtype \"video\", MP4 chunks) streams far better for training",
+          "episode_index": null,
+          "details": {
+            "features": [
+              "image",
+              "wrist_image"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "camera-coverage",
+      "title": "Per-episode camera coverage",
+      "verdict": "SKIP",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "no video cameras declared",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "task-strings",
+      "title": "Task strings",
+      "verdict": "PASS",
+      "summary": "13 episodes, 0 tasks in meta/tasks; 0 finding(s)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "reward-done",
+      "title": "Reward / done fields",
+      "verdict": "SKIP",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "no reward/done fields (position-control datasets rarely have them)",
+      "details": {},
       "findings": []
     },
     {
@@ -200,13 +325,13 @@
       "findings": [
         {
           "severity": "FAIL",
-          "message": "observation.state: absent from meta/stats.json - the policy cannot normalize inputs/outputs at inference",
+          "message": "observation.state: no normalization stats (meta/stats.json or per-episode stats) - the policy cannot normalize inputs/outputs at inference",
           "episode_index": null,
           "details": {}
         },
         {
           "severity": "FAIL",
-          "message": "action: absent from meta/stats.json - the policy cannot normalize inputs/outputs at inference",
+          "message": "action: no normalization stats (meta/stats.json or per-episode stats) - the policy cannot normalize inputs/outputs at inference",
           "episode_index": null,
           "details": {}
         }

@@ -5,14 +5,14 @@
   "frames": 65000,
   "fps": 50.0,
   "truncated": false,
-  "score": 84,
-  "verdict": "WARN",
+  "score": 100,
+  "verdict": "INFO",
   "checks": [
     {
       "id": "stats-drift",
-      "title": "Stats drift (meta/stats.json vs actual data)",
+      "title": "Stats drift (stored normalization stats vs actual data)",
       "verdict": "PASS",
-      "summary": "stats.json matches the data (mean/std/min/max within 1%)",
+      "summary": "data matches meta/stats.json (worst 0% of the FAIL threshold)",
       "skipped": false,
       "skip_reason": "",
       "details": {},
@@ -20,9 +20,9 @@
     },
     {
       "id": "timestamp-grid",
-      "title": "Timestamp grid (on-grid, monotonic, low jitter)",
+      "title": "Timestamp grid (spacing, monotonic, start at 0)",
       "verdict": "PASS",
-      "summary": "all episodes on the 50 fps grid and monotonic",
+      "summary": "evenly spaced at 50 fps and monotonic",
       "skipped": false,
       "skip_reason": "",
       "details": {},
@@ -31,61 +31,152 @@
     {
       "id": "dropped-frames",
       "title": "Dropped / duplicated frames",
-      "verdict": "INFO",
-      "summary": "frame_index contiguous and episode lengths match the data",
+      "verdict": "PASS",
+      "summary": "frame_index contiguous; episode lengths and video segments match the data",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [
-        {
-          "severity": "INFO",
-          "message": "video frame counts not checked (pass --video to include MP4s)",
-          "episode_index": null,
-          "details": {}
-        }
-      ]
+      "findings": []
     },
     {
       "id": "calibration-drift",
-      "title": "Calibration drift (action vs state offset on still frames)",
+      "title": "Calibration drift (action vs state on still frames)",
       "verdict": "PASS",
-      "summary": "max joint offset 2.0% of range (joint 13); measured on 71% of frames",
+      "summary": "12 joint(s) + 2 gripper(s) agree; worst offset -1.3% of range (joint 9)",
       "skipped": false,
       "skip_reason": "",
       "details": {
-        "mean_offset_per_joint": [
-          -0.0005157548001597051,
-          0.002252126369417282,
-          -0.012965314326810428,
-          0.00012560286821317813,
-          -0.005805446735855709,
-          -7.089855149299607e-05,
-          -0.0017577670639429162,
-          0.0006726852193129242,
-          -0.014533016927526067,
-          -0.017378221816528903,
-          -0.00021870412268562643,
-          -0.01186758694633297,
-          -5.2182595948616406e-05,
-          0.020388751637867446
+        "per_joint": {
+          "0": {
+            "joint": 0,
+            "offset_fraction": -0.0008082207907816507,
+            "scale_error": 0.005931767604449371,
+            "r2": 0.13408240148486528,
+            "line_vs_step": 0.9599644829134288,
+            "still_frames": 45613
+          },
+          "1": {
+            "joint": 1,
+            "offset_fraction": 0.0006128583008577854,
+            "scale_error": -0.01718573087742063,
+            "r2": 0.6588452378956733,
+            "line_vs_step": 1.1691278821192514,
+            "still_frames": 34258
+          },
+          "2": {
+            "joint": 2,
+            "offset_fraction": -0.009244015790853075,
+            "scale_error": -0.001996812978500032,
+            "r2": 0.005560495569589818,
+            "line_vs_step": 0.9766872462221814,
+            "still_frames": 29769
+          },
+          "3": {
+            "joint": 3,
+            "offset_fraction": 0.0001954184616615595,
+            "scale_error": -0.002869344112957796,
+            "r2": 0.007737545649575517,
+            "line_vs_step": 0.9996573009677246,
+            "still_frames": 43759
+          },
+          "4": {
+            "joint": 4,
+            "offset_fraction": -0.003262076391302227,
+            "scale_error": 0.00039826259997565144,
+            "r2": 0.0021192537513265997,
+            "line_vs_step": 0.9858453127811533,
+            "still_frames": 28890
+          },
+          "5": {
+            "joint": 5,
+            "offset_fraction": -0.00015614415257841555,
+            "scale_error": -0.0073445523705994485,
+            "r2": 0.01988440378265932,
+            "line_vs_step": 1.0000587928791893,
+            "still_frames": 41996
+          },
+          "7": {
+            "joint": 7,
+            "offset_fraction": 0.0005982572814044576,
+            "scale_error": -0.004093915059145911,
+            "r2": 0.029974040915170197,
+            "line_vs_step": 0.9991083679739787,
+            "still_frames": 34037
+          },
+          "8": {
+            "joint": 8,
+            "offset_fraction": -0.007324718914789656,
+            "scale_error": -0.02648437194194681,
+            "r2": 0.7354161996990672,
+            "line_vs_step": 1.6314651245518421,
+            "still_frames": 30058
+          },
+          "9": {
+            "joint": 9,
+            "offset_fraction": -0.012557161302219547,
+            "scale_error": -0.013973213876797556,
+            "r2": 0.13483772219714685,
+            "line_vs_step": 1.0011339890724589,
+            "still_frames": 29601
+          },
+          "10": {
+            "joint": 10,
+            "offset_fraction": -0.00024968987736703367,
+            "scale_error": -0.009924708079094775,
+            "r2": 0.12865688703081812,
+            "line_vs_step": 1.045035775459163,
+            "still_frames": 40709
+          },
+          "11": {
+            "joint": 11,
+            "offset_fraction": -0.008017060869621938,
+            "scale_error": 0.0028412271709753172,
+            "r2": 0.016677846276584196,
+            "line_vs_step": 0.849023099403341,
+            "still_frames": 34204
+          },
+          "12": {
+            "joint": 12,
+            "offset_fraction": -5.274071707920416e-05,
+            "scale_error": -0.003327481972637786,
+            "r2": 0.020967065909315408,
+            "line_vs_step": 0.9992380575208507,
+            "still_frames": 42713
+          },
+          "6": {
+            "joint": 6,
+            "free_end": "low",
+            "offset_fraction": 0.01047861408287665,
+            "still_frames": 30508,
+            "kind": "gripper"
+          },
+          "13": {
+            "joint": 13,
+            "free_end": "high",
+            "offset_fraction": -0.006825900994148414,
+            "still_frames": 1436,
+            "kind": "gripper"
+          }
+        },
+        "compared_joints": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12
         ],
-        "range_fraction_per_joint": [
-          0.0008082207907816506,
-          0.0008600809100763023,
-          0.009257470406892357,
-          0.00019541846166155942,
-          0.0032625542063532483,
-          0.0001561441525784155,
-          0.0017236802414259847,
-          0.0005982572814044577,
-          0.00729896269625887,
-          0.0126296979484591,
-          0.00024968987736703367,
-          0.008017060869621936,
-          5.274071707920414e-05,
-          0.020378006593761818
+        "compared_grippers": [
+          6,
+          13
         ],
-        "still_frame_share": 0.708076923076923
+        "excluded_joints": {}
       },
       "findings": []
     },
@@ -93,7 +184,7 @@
       "id": "idle-segments",
       "title": "Idle segments (policy learns to do nothing)",
       "verdict": "PASS",
-      "summary": "no idle runs >= 2s at >= 30% of an episode",
+      "summary": "no episode starts idle or idles >= 30%",
       "skipped": false,
       "skip_reason": "",
       "details": {},
@@ -102,1603 +193,18 @@
     {
       "id": "stuck-actuator",
       "title": "Stuck actuators (joints that never move)",
-      "verdict": "WARN",
-      "summary": "50/50 episodes with stuck joints",
+      "verdict": "PASS",
+      "summary": "every joint moves wherever the dataset uses it",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [
-        {
-          "severity": "WARN",
-          "message": "episode 0: joint 0 static for 93% of frames - dead actuator or disabled motor?",
-          "episode_index": 0,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9299461123941494
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 0: joint 6 static for 92% of frames - dead actuator or disabled motor?",
-          "episode_index": 0,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9245573518090839
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 0: joint 13 static for 95% of frames - dead actuator or disabled motor?",
-          "episode_index": 0,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.945342571208622
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 1: joint 0 static for 92% of frames - dead actuator or disabled motor?",
-          "episode_index": 1,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9245573518090839
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 1: joint 6 static for 92% of frames - dead actuator or disabled motor?",
-          "episode_index": 1,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9191685912240185
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 1: joint 7 static for 80% of frames - dead actuator or disabled motor?",
-          "episode_index": 1,
-          "details": {
-            "joint": 7,
-            "static_fraction": 0.8044649730561971
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 1: joint 11 static for 80% of frames - dead actuator or disabled motor?",
-          "episode_index": 1,
-          "details": {
-            "joint": 11,
-            "static_fraction": 0.8036951501154734
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 1: joint 13 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 1,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9384141647421094
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 2: joint 0 static for 95% of frames - dead actuator or disabled motor?",
-          "episode_index": 2,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9515011547344111
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 2: joint 6 static for 91% of frames - dead actuator or disabled motor?",
-          "episode_index": 2,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9145496535796767
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 2: joint 7 static for 81% of frames - dead actuator or disabled motor?",
-          "episode_index": 2,
-          "details": {
-            "joint": 7,
-            "static_fraction": 0.8060046189376443
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 2: joint 13 static for 95% of frames - dead actuator or disabled motor?",
-          "episode_index": 2,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9468822170900693
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 3: joint 0 static for 95% of frames - dead actuator or disabled motor?",
-          "episode_index": 3,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9522709776751347
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 3: joint 6 static for 92% of frames - dead actuator or disabled motor?",
-          "episode_index": 3,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.922247882986913
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 3: joint 13 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 3,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.939183987682833
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 4: joint 0 static for 97% of frames - dead actuator or disabled motor?",
-          "episode_index": 4,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.970746728252502
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 4: joint 6 static for 90% of frames - dead actuator or disabled motor?",
-          "episode_index": 4,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.8960739030023095
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 4: joint 13 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 4,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9376443418013857
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 5: joint 0 static for 96% of frames - dead actuator or disabled motor?",
-          "episode_index": 5,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9638183217859893
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 5: joint 6 static for 91% of frames - dead actuator or disabled motor?",
-          "episode_index": 5,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9130100076982294
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 5: joint 13 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 5,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9438029253271748
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 6: joint 0 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 6,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9353348729792148
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 6: joint 6 static for 91% of frames - dead actuator or disabled motor?",
-          "episode_index": 6,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9076212471131639
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 6: joint 13 static for 95% of frames - dead actuator or disabled motor?",
-          "episode_index": 6,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9468822170900693
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 7: joint 0 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 7,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9414934565050038
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 7: joint 6 static for 91% of frames - dead actuator or disabled motor?",
-          "episode_index": 7,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9076212471131639
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 7: joint 13 static for 95% of frames - dead actuator or disabled motor?",
-          "episode_index": 7,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9484218629715165
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 8: joint 0 static for 95% of frames - dead actuator or disabled motor?",
-          "episode_index": 8,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9491916859122402
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 8: joint 6 static for 91% of frames - dead actuator or disabled motor?",
-          "episode_index": 8,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9122401847575058
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 8: joint 7 static for 81% of frames - dead actuator or disabled motor?",
-          "episode_index": 8,
-          "details": {
-            "joint": 7,
-            "static_fraction": 0.8098537336412626
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 8: joint 13 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 8,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9445727482678984
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 9: joint 0 static for 96% of frames - dead actuator or disabled motor?",
-          "episode_index": 9,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.962278675904542
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 9: joint 6 static for 92% of frames - dead actuator or disabled motor?",
-          "episode_index": 9,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9183987682832948
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 9: joint 13 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 9,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9407236335642802
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 10: joint 0 static for 98% of frames - dead actuator or disabled motor?",
-          "episode_index": 10,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9753656658968437
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 10: joint 6 static for 91% of frames - dead actuator or disabled motor?",
-          "episode_index": 10,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9137798306389531
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 10: joint 13 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 10,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9422632794457275
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 11: joint 0 static for 97% of frames - dead actuator or disabled motor?",
-          "episode_index": 11,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9722863741339491
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 11: joint 2 static for 82% of frames - dead actuator or disabled motor?",
-          "episode_index": 11,
-          "details": {
-            "joint": 2,
-            "static_fraction": 0.8244803695150116
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 11: joint 4 static for 83% of frames - dead actuator or disabled motor?",
-          "episode_index": 11,
-          "details": {
-            "joint": 4,
-            "static_fraction": 0.8290993071593533
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 11: joint 6 static for 92% of frames - dead actuator or disabled motor?",
-          "episode_index": 11,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9183987682832948
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 11: joint 8 static for 81% of frames - dead actuator or disabled motor?",
-          "episode_index": 11,
-          "details": {
-            "joint": 8,
-            "static_fraction": 0.8113933795227097
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 11: joint 11 static for 80% of frames - dead actuator or disabled motor?",
-          "episode_index": 11,
-          "details": {
-            "joint": 11,
-            "static_fraction": 0.8013856812933026
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 11: joint 13 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 11,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9399538106235565
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 12: joint 0 static for 92% of frames - dead actuator or disabled motor?",
-          "episode_index": 12,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9207082371054658
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 12: joint 6 static for 88% of frames - dead actuator or disabled motor?",
-          "episode_index": 12,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.8814472671285605
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 12: joint 13 static for 95% of frames - dead actuator or disabled motor?",
-          "episode_index": 12,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9468822170900693
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 13: joint 0 static for 95% of frames - dead actuator or disabled motor?",
-          "episode_index": 13,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9468822170900693
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 13: joint 6 static for 92% of frames - dead actuator or disabled motor?",
-          "episode_index": 13,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9191685912240185
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 13: joint 13 static for 95% of frames - dead actuator or disabled motor?",
-          "episode_index": 13,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9468822170900693
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 14: joint 0 static for 97% of frames - dead actuator or disabled motor?",
-          "episode_index": 14,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9653579676674365
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 14: joint 4 static for 81% of frames - dead actuator or disabled motor?",
-          "episode_index": 14,
-          "details": {
-            "joint": 4,
-            "static_fraction": 0.8137028483448807
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 14: joint 6 static for 91% of frames - dead actuator or disabled motor?",
-          "episode_index": 14,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9137798306389531
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 14: joint 13 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 14,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9422632794457275
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 15: joint 0 static for 95% of frames - dead actuator or disabled motor?",
-          "episode_index": 15,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.945342571208622
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 15: joint 6 static for 91% of frames - dead actuator or disabled motor?",
-          "episode_index": 15,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9114703618167821
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 15: joint 13 static for 95% of frames - dead actuator or disabled motor?",
-          "episode_index": 15,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9484218629715165
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 16: joint 0 static for 96% of frames - dead actuator or disabled motor?",
-          "episode_index": 16,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9638183217859893
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 16: joint 6 static for 92% of frames - dead actuator or disabled motor?",
-          "episode_index": 16,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9237875288683602
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 16: joint 13 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 16,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9407236335642802
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 17: joint 0 static for 93% of frames - dead actuator or disabled motor?",
-          "episode_index": 17,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9314857582755967
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 17: joint 6 static for 91% of frames - dead actuator or disabled motor?",
-          "episode_index": 17,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9114703618167821
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 17: joint 13 static for 93% of frames - dead actuator or disabled motor?",
-          "episode_index": 17,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9314857582755967
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 18: joint 0 static for 92% of frames - dead actuator or disabled motor?",
-          "episode_index": 18,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9176289453425712
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 18: joint 4 static for 81% of frames - dead actuator or disabled motor?",
-          "episode_index": 18,
-          "details": {
-            "joint": 4,
-            "static_fraction": 0.812933025404157
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 18: joint 6 static for 91% of frames - dead actuator or disabled motor?",
-          "episode_index": 18,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9114703618167821
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 18: joint 13 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 18,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9384141647421094
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 19: joint 0 static for 97% of frames - dead actuator or disabled motor?",
-          "episode_index": 19,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.968437259430331
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 19: joint 6 static for 90% of frames - dead actuator or disabled motor?",
-          "episode_index": 19,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9030023094688222
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 19: joint 13 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 19,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9368745188606621
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 20: joint 0 static for 93% of frames - dead actuator or disabled motor?",
-          "episode_index": 20,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9268668206312548
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 20: joint 4 static for 80% of frames - dead actuator or disabled motor?",
-          "episode_index": 20,
-          "details": {
-            "joint": 4,
-            "static_fraction": 0.8013856812933026
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 20: joint 6 static for 92% of frames - dead actuator or disabled motor?",
-          "episode_index": 20,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9207082371054658
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 20: joint 13 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 20,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.939183987682833
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 21: joint 0 static for 97% of frames - dead actuator or disabled motor?",
-          "episode_index": 21,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9653579676674365
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 21: joint 4 static for 80% of frames - dead actuator or disabled motor?",
-          "episode_index": 21,
-          "details": {
-            "joint": 4,
-            "static_fraction": 0.8036951501154734
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 21: joint 6 static for 91% of frames - dead actuator or disabled motor?",
-          "episode_index": 21,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9122401847575058
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 21: joint 13 static for 95% of frames - dead actuator or disabled motor?",
-          "episode_index": 21,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9468822170900693
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 22: joint 0 static for 93% of frames - dead actuator or disabled motor?",
-          "episode_index": 22,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9268668206312548
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 22: joint 6 static for 92% of frames - dead actuator or disabled motor?",
-          "episode_index": 22,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9230177059276367
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 22: joint 7 static for 81% of frames - dead actuator or disabled motor?",
-          "episode_index": 22,
-          "details": {
-            "joint": 7,
-            "static_fraction": 0.8075442648190916
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 22: joint 13 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 22,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9430331023864511
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 23: joint 0 static for 96% of frames - dead actuator or disabled motor?",
-          "episode_index": 23,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9584295612009238
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 23: joint 6 static for 90% of frames - dead actuator or disabled motor?",
-          "episode_index": 23,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.8953040800615858
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 23: joint 13 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 23,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.939183987682833
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 24: joint 0 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 24,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9414934565050038
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 24: joint 6 static for 92% of frames - dead actuator or disabled motor?",
-          "episode_index": 24,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9176289453425712
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 24: joint 13 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 24,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9438029253271748
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 25: joint 0 static for 97% of frames - dead actuator or disabled motor?",
-          "episode_index": 25,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9653579676674365
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 25: joint 6 static for 90% of frames - dead actuator or disabled motor?",
-          "episode_index": 25,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9030023094688222
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 25: joint 13 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 25,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9414934565050038
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 26: joint 0 static for 95% of frames - dead actuator or disabled motor?",
-          "episode_index": 26,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9507313317936874
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 26: joint 6 static for 93% of frames - dead actuator or disabled motor?",
-          "episode_index": 26,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9260969976905312
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 26: joint 7 static for 82% of frames - dead actuator or disabled motor?",
-          "episode_index": 26,
-          "details": {
-            "joint": 7,
-            "static_fraction": 0.821401077752117
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 26: joint 13 static for 93% of frames - dead actuator or disabled motor?",
-          "episode_index": 26,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9322555812163202
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 27: joint 0 static for 96% of frames - dead actuator or disabled motor?",
-          "episode_index": 27,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9607390300230947
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 27: joint 6 static for 92% of frames - dead actuator or disabled motor?",
-          "episode_index": 27,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9176289453425712
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 27: joint 13 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 27,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9430331023864511
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 28: joint 0 static for 92% of frames - dead actuator or disabled motor?",
-          "episode_index": 28,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9160892994611239
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 28: joint 6 static for 91% of frames - dead actuator or disabled motor?",
-          "episode_index": 28,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9137798306389531
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 28: joint 13 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 28,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9438029253271748
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 29: joint 0 static for 93% of frames - dead actuator or disabled motor?",
-          "episode_index": 29,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9345650500384911
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 29: joint 6 static for 93% of frames - dead actuator or disabled motor?",
-          "episode_index": 29,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9253271747498075
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 29: joint 13 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 29,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9438029253271748
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 30: joint 0 static for 93% of frames - dead actuator or disabled motor?",
-          "episode_index": 30,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9268668206312548
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 30: joint 6 static for 93% of frames - dead actuator or disabled motor?",
-          "episode_index": 30,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.930715935334873
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 30: joint 7 static for 80% of frames - dead actuator or disabled motor?",
-          "episode_index": 30,
-          "details": {
-            "joint": 7,
-            "static_fraction": 0.8006158583525789
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 30: joint 13 static for 95% of frames - dead actuator or disabled motor?",
-          "episode_index": 30,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.945342571208622
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 31: joint 0 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 31,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9438029253271748
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 31: joint 6 static for 92% of frames - dead actuator or disabled motor?",
-          "episode_index": 31,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9214780600461894
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 31: joint 13 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 31,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9399538106235565
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 32: joint 0 static for 95% of frames - dead actuator or disabled motor?",
-          "episode_index": 32,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9522709776751347
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 32: joint 6 static for 93% of frames - dead actuator or disabled motor?",
-          "episode_index": 32,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9291762894534257
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 32: joint 7 static for 80% of frames - dead actuator or disabled motor?",
-          "episode_index": 32,
-          "details": {
-            "joint": 7,
-            "static_fraction": 0.8006158583525789
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 32: joint 13 static for 95% of frames - dead actuator or disabled motor?",
-          "episode_index": 32,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9461123941493457
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 33: joint 0 static for 95% of frames - dead actuator or disabled motor?",
-          "episode_index": 33,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.947652040030793
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 33: joint 6 static for 89% of frames - dead actuator or disabled motor?",
-          "episode_index": 33,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.8929946112394149
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 33: joint 13 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 33,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9422632794457275
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 34: joint 0 static for 90% of frames - dead actuator or disabled motor?",
-          "episode_index": 34,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9022324865280985
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 34: joint 6 static for 91% of frames - dead actuator or disabled motor?",
-          "episode_index": 34,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9122401847575058
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 34: joint 7 static for 82% of frames - dead actuator or disabled motor?",
-          "episode_index": 34,
-          "details": {
-            "joint": 7,
-            "static_fraction": 0.821401077752117
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 34: joint 13 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 34,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.939183987682833
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 35: joint 0 static for 96% of frames - dead actuator or disabled motor?",
-          "episode_index": 35,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9599692070823711
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 35: joint 4 static for 82% of frames - dead actuator or disabled motor?",
-          "episode_index": 35,
-          "details": {
-            "joint": 4,
-            "static_fraction": 0.8175519630484989
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 35: joint 6 static for 92% of frames - dead actuator or disabled motor?",
-          "episode_index": 35,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9153194765204004
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 35: joint 13 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 35,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9384141647421094
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 36: joint 0 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 36,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9414934565050038
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 36: joint 6 static for 91% of frames - dead actuator or disabled motor?",
-          "episode_index": 36,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9122401847575058
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 36: joint 13 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 36,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9399538106235565
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 37: joint 0 static for 95% of frames - dead actuator or disabled motor?",
-          "episode_index": 37,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9461123941493457
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 37: joint 6 static for 89% of frames - dead actuator or disabled motor?",
-          "episode_index": 37,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.8860662047729022
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 37: joint 13 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 37,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9399538106235565
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 38: joint 0 static for 95% of frames - dead actuator or disabled motor?",
-          "episode_index": 38,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9507313317936874
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 38: joint 4 static for 81% of frames - dead actuator or disabled motor?",
-          "episode_index": 38,
-          "details": {
-            "joint": 4,
-            "static_fraction": 0.806774441878368
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 38: joint 6 static for 91% of frames - dead actuator or disabled motor?",
-          "episode_index": 38,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9091608929946112
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 38: joint 13 static for 95% of frames - dead actuator or disabled motor?",
-          "episode_index": 38,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.945342571208622
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 39: joint 0 static for 95% of frames - dead actuator or disabled motor?",
-          "episode_index": 39,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9530408006158584
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 39: joint 4 static for 83% of frames - dead actuator or disabled motor?",
-          "episode_index": 39,
-          "details": {
-            "joint": 4,
-            "static_fraction": 0.827559661277906
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 39: joint 6 static for 92% of frames - dead actuator or disabled motor?",
-          "episode_index": 39,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9160892994611239
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 39: joint 13 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 39,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9384141647421094
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 40: joint 0 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 40,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9353348729792148
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 40: joint 6 static for 93% of frames - dead actuator or disabled motor?",
-          "episode_index": 40,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9268668206312548
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 40: joint 13 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 40,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9430331023864511
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 41: joint 0 static for 95% of frames - dead actuator or disabled motor?",
-          "episode_index": 41,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9491916859122402
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 41: joint 6 static for 91% of frames - dead actuator or disabled motor?",
-          "episode_index": 41,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9130100076982294
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 41: joint 7 static for 81% of frames - dead actuator or disabled motor?",
-          "episode_index": 41,
-          "details": {
-            "joint": 7,
-            "static_fraction": 0.8060046189376443
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 41: joint 13 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 41,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9414934565050038
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 42: joint 0 static for 93% of frames - dead actuator or disabled motor?",
-          "episode_index": 42,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9260969976905312
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 42: joint 6 static for 92% of frames - dead actuator or disabled motor?",
-          "episode_index": 42,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9160892994611239
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 42: joint 7 static for 82% of frames - dead actuator or disabled motor?",
-          "episode_index": 42,
-          "details": {
-            "joint": 7,
-            "static_fraction": 0.8160123171670516
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 42: joint 13 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 42,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9430331023864511
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 43: joint 0 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 43,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9376443418013857
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 43: joint 4 static for 82% of frames - dead actuator or disabled motor?",
-          "episode_index": 43,
-          "details": {
-            "joint": 4,
-            "static_fraction": 0.815242494226328
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 43: joint 6 static for 91% of frames - dead actuator or disabled motor?",
-          "episode_index": 43,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9083910700538876
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 43: joint 13 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 43,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9414934565050038
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 44: joint 0 static for 96% of frames - dead actuator or disabled motor?",
-          "episode_index": 44,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9638183217859893
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 44: joint 4 static for 81% of frames - dead actuator or disabled motor?",
-          "episode_index": 44,
-          "details": {
-            "joint": 4,
-            "static_fraction": 0.8090839107005389
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 44: joint 6 static for 92% of frames - dead actuator or disabled motor?",
-          "episode_index": 44,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9176289453425712
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 44: joint 13 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 44,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9445727482678984
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 45: joint 0 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 45,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9414934565050038
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 45: joint 6 static for 93% of frames - dead actuator or disabled motor?",
-          "episode_index": 45,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9260969976905312
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 45: joint 13 static for 95% of frames - dead actuator or disabled motor?",
-          "episode_index": 45,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9499615088529638
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 46: joint 0 static for 95% of frames - dead actuator or disabled motor?",
-          "episode_index": 46,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9461123941493457
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 46: joint 6 static for 90% of frames - dead actuator or disabled motor?",
-          "episode_index": 46,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.8991531947652041
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 46: joint 13 static for 95% of frames - dead actuator or disabled motor?",
-          "episode_index": 46,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9461123941493457
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 47: joint 0 static for 95% of frames - dead actuator or disabled motor?",
-          "episode_index": 47,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.9491916859122402
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 47: joint 6 static for 91% of frames - dead actuator or disabled motor?",
-          "episode_index": 47,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9137798306389531
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 47: joint 13 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 47,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9438029253271748
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 48: joint 0 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 48,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.939183987682833
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 48: joint 4 static for 81% of frames - dead actuator or disabled motor?",
-          "episode_index": 48,
-          "details": {
-            "joint": 4,
-            "static_fraction": 0.8052347959969207
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 48: joint 6 static for 91% of frames - dead actuator or disabled motor?",
-          "episode_index": 48,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9091608929946112
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 48: joint 13 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 48,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.939183987682833
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 49: joint 0 static for 96% of frames - dead actuator or disabled motor?",
-          "episode_index": 49,
-          "details": {
-            "joint": 0,
-            "static_fraction": 0.962278675904542
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 49: joint 4 static for 81% of frames - dead actuator or disabled motor?",
-          "episode_index": 49,
-          "details": {
-            "joint": 4,
-            "static_fraction": 0.8106235565819861
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 49: joint 6 static for 92% of frames - dead actuator or disabled motor?",
-          "episode_index": 49,
-          "details": {
-            "joint": 6,
-            "static_fraction": 0.9214780600461894
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 49: joint 13 static for 94% of frames - dead actuator or disabled motor?",
-          "episode_index": 49,
-          "details": {
-            "joint": 13,
-            "static_fraction": 0.9384141647421094
-          }
-        }
-      ]
+      "findings": []
     },
     {
       "id": "action-saturation",
       "title": "Action saturation (commands clipped at the limits)",
       "verdict": "PASS",
-      "summary": "no action dim saturated above 5%",
+      "summary": "no continuous action dim pinned at a limit above 5% (12 dims checked)",
       "skipped": false,
       "skip_reason": "",
       "details": {},
@@ -1718,7 +224,7 @@
       "id": "duplicate-and-leakage",
       "title": "Duplicate episodes / train-eval leakage",
       "verdict": "PASS",
-      "summary": "no exact or near duplicates",
+      "summary": "no exact, partial or near duplicates",
       "skipped": false,
       "skip_reason": "",
       "details": {},
@@ -1728,218 +234,270 @@
       "id": "outlier-episodes",
       "title": "Outlier episodes (duration, jerk, velocity, static, end-pose)",
       "verdict": "INFO",
-      "summary": "2/50 episodes flagged; worst: [3, 46]. Review or drop these episodes before training: [3, 46]",
+      "summary": "0 episode(s) to review, 1 mild, of 50; worst: [13]",
       "skipped": false,
       "skip_reason": "",
       "details": {
         "metrics": {
           "duration_s": {
-            "0": 26.0,
-            "1": 26.0,
-            "2": 26.0,
-            "3": 26.0,
-            "4": 26.0,
-            "5": 26.0,
-            "6": 26.0,
-            "7": 26.0,
-            "8": 26.0,
-            "9": 26.0,
-            "10": 26.0,
-            "11": 26.0,
-            "12": 26.0,
-            "13": 26.0,
-            "14": 26.0,
-            "15": 26.0,
-            "16": 26.0,
-            "17": 26.0,
-            "18": 26.0,
-            "19": 26.0,
-            "20": 26.0,
-            "21": 26.0,
-            "22": 26.0,
-            "23": 26.0,
-            "24": 26.0,
-            "25": 26.0,
-            "26": 26.0,
-            "27": 26.0,
-            "28": 26.0,
-            "29": 26.0,
-            "30": 26.0,
-            "31": 26.0,
-            "32": 26.0,
-            "33": 26.0,
-            "34": 26.0,
-            "35": 26.0,
-            "36": 26.0,
-            "37": 26.0,
-            "38": 26.0,
-            "39": 26.0,
-            "40": 26.0,
-            "41": 26.0,
-            "42": 26.0,
-            "43": 26.0,
-            "44": 26.0,
-            "45": 26.0,
-            "46": 26.0,
-            "47": 26.0,
-            "48": 26.0,
-            "49": 26.0
+            "0": 1.0,
+            "1": 1.0,
+            "2": 1.0,
+            "3": 1.0,
+            "4": 1.0,
+            "5": 1.0,
+            "6": 1.0,
+            "7": 1.0,
+            "8": 1.0,
+            "9": 1.0,
+            "10": 1.0,
+            "11": 1.0,
+            "12": 1.0,
+            "13": 1.0,
+            "14": 1.0,
+            "15": 1.0,
+            "16": 1.0,
+            "17": 1.0,
+            "18": 1.0,
+            "19": 1.0,
+            "20": 1.0,
+            "21": 1.0,
+            "22": 1.0,
+            "23": 1.0,
+            "24": 1.0,
+            "25": 1.0,
+            "26": 1.0,
+            "27": 1.0,
+            "28": 1.0,
+            "29": 1.0,
+            "30": 1.0,
+            "31": 1.0,
+            "32": 1.0,
+            "33": 1.0,
+            "34": 1.0,
+            "35": 1.0,
+            "36": 1.0,
+            "37": 1.0,
+            "38": 1.0,
+            "39": 1.0,
+            "40": 1.0,
+            "41": 1.0,
+            "42": 1.0,
+            "43": 1.0,
+            "44": 1.0,
+            "45": 1.0,
+            "46": 1.0,
+            "47": 1.0,
+            "48": 1.0,
+            "49": 1.0
           },
           "p95_jerk": {
-            "0": 0.0061359405517578125,
-            "1": 0.00613589808344841,
-            "2": 0.006135918200016022,
-            "3": 0.0061359405517578125,
-            "4": 0.006135912600439042,
-            "5": 0.007218608260154724,
-            "6": 0.0061359405517578125,
-            "7": 0.005414080806076527,
-            "8": 0.007218718528747559,
-            "9": 0.005522441864013574,
-            "10": 0.006135925650596619,
-            "11": 0.006135830283164978,
-            "12": 0.006135927885770798,
-            "13": 0.0061359405517578125,
-            "14": 0.006135880947113037,
-            "15": 0.006135925650596619,
-            "16": 0.006135927885770798,
-            "17": 0.006135910749435425,
-            "18": 0.006135925650596619,
-            "19": 0.006135925650596619,
-            "20": 0.006135910749435425,
-            "21": 0.006135885417461395,
-            "22": 0.006135925650596619,
-            "23": 0.006135910749435425,
-            "24": 0.005414164811372757,
-            "25": 0.0061359118670225145,
-            "26": 0.005414102971553802,
-            "27": 0.0061359494924545285,
-            "28": 0.0061359405517578125,
-            "29": 0.005414077639579773,
-            "30": 0.0061359232757240536,
-            "31": 0.0061359405517578125,
-            "32": 0.0061359405517578125,
-            "33": 0.005522451922297379,
-            "34": 0.0061359494924545285,
-            "35": 0.006135880947113037,
-            "36": 0.006135910749435425,
-            "37": 0.006136000156402588,
-            "38": 0.005414068698883057,
-            "39": 0.0061359405517578125,
-            "40": 0.006135925650596619,
-            "41": 0.0061359405517578125,
-            "42": 0.0061359405517578125,
-            "43": 0.006135912984609604,
-            "44": 0.006135925650596619,
-            "45": 0.006135925650596619,
-            "46": 0.007218718528747559,
-            "47": 0.0061359232757240536,
-            "48": 0.006135925650596619,
-            "49": 0.006135927885770798
+            "0": 0.05037210623177824,
+            "1": 0.050372045067104076,
+            "2": 0.050372148855910535,
+            "3": 0.050372054241805214,
+            "4": 0.05037204506710408,
+            "5": 0.05037216739645239,
+            "6": 0.05037204506710408,
+            "7": 0.050372106231778235,
+            "8": 0.05037204506710408,
+            "9": 0.05037204506710408,
+            "10": 0.05037213853437177,
+            "11": 0.05037213910779059,
+            "12": 0.05037204506710408,
+            "13": 0.0503721108191288,
+            "14": 0.05037216739645239,
+            "15": 0.05037204506710409,
+            "16": 0.05037214140146588,
+            "17": 0.05037204506710408,
+            "18": 0.04027163710819944,
+            "19": 0.05037204506710408,
+            "20": 0.05037216739645239,
+            "21": 0.03892652478916049,
+            "22": 0.05037216739645239,
+            "23": 0.05037215210528385,
+            "24": 0.05037204506710408,
+            "25": 0.05037204506710409,
+            "26": 0.05037204506710408,
+            "27": 0.050372136814115315,
+            "28": 0.05037204506710408,
+            "29": 0.05037216739645239,
+            "30": 0.05037204506710409,
+            "31": 0.050372054241805214,
+            "32": 0.05037204506710408,
+            "33": 0.050372106231778235,
+            "34": 0.05037204506710408,
+            "35": 0.05037216739645239,
+            "36": 0.050372148282491716,
+            "37": 0.04632125867588829,
+            "38": 0.05037204506710409,
+            "39": 0.05037204506710408,
+            "40": 0.05037214637109565,
+            "41": 0.05037204506710408,
+            "42": 0.050372148282491716,
+            "43": 0.05037204506710408,
+            "44": 0.05037216739645239,
+            "45": 0.05037216739645238,
+            "46": 0.05037210852545352,
+            "47": 0.05037204506710408,
+            "48": 0.05037216739645239,
+            "49": 0.05037204506710408
           },
           "peak_velocity": {
-            "0": 0.09384363889694214,
-            "1": 0.0812106728553772,
-            "2": 0.07760131359100342,
-            "3": 0.10106228291988373,
-            "4": 0.07760131359100342,
-            "5": 0.0595545768737793,
-            "6": 0.08301553130149841,
-            "7": 0.06596124172210693,
-            "8": 0.06677332520484924,
-            "9": 0.06677332520484924,
-            "10": 0.061359286308288574,
-            "11": 0.06857800483703613,
-            "12": 0.06857788562774658,
-            "13": 0.06496864557266235,
-            "14": 0.06677332520484924,
-            "15": 0.06316393613815308,
-            "16": 0.05414053797721863,
-            "17": 0.04448544979095459,
-            "18": 0.05774989724159241,
-            "19": 0.06677329540252686,
-            "20": 0.07399195432662964,
-            "21": 0.05955454707145691,
-            "22": 0.06677332520484924,
-            "23": 0.0595545768737793,
-            "24": 0.08482009172439575,
-            "25": 0.08301538228988647,
-            "26": 0.06496864557266235,
-            "27": 0.06316393613815308,
-            "28": 0.06316393613815308,
-            "29": 0.05774986743927002,
-            "30": 0.07399195432662964,
-            "31": 0.061359256505966187,
-            "32": 0.06316393613815308,
-            "33": 0.06857788562774658,
-            "34": 0.08301538228988647,
-            "35": 0.07940599322319031,
-            "36": 0.07399195432662964,
-            "37": 0.08301552385091782,
-            "38": 0.06316381692886353,
-            "39": 0.061359256505966187,
-            "40": 0.06857788562774658,
-            "41": 0.06677320599555969,
-            "42": 0.0848202109336853,
-            "43": 0.07579678297042847,
-            "44": 0.07579663395881653,
-            "45": 0.0595545768737793,
-            "46": 0.10647636651992798,
-            "47": 0.061359286308288574,
-            "48": 0.07218724489212036,
-            "49": 0.05594521760940552
+            "0": 0.27704682893347693,
+            "1": 0.20148842492711294,
+            "2": 0.2266746921193616,
+            "3": 0.20148866958580955,
+            "4": 0.17630253236849347,
+            "5": 0.253708583185677,
+            "6": 0.18122024890570354,
+            "7": 0.1763025247229092,
+            "8": 0.15111637986000886,
+            "9": 0.2014886084211354,
+            "10": 0.25186071465291365,
+            "11": 0.2266748144487099,
+            "12": 0.2933681715993176,
+            "13": 0.37779107197937045,
+            "14": 0.18122036626454957,
+            "15": 0.2266746921193616,
+            "16": 0.24162709145002448,
+            "17": 0.15705761751093658,
+            "18": 0.15111645631585155,
+            "19": 0.1763025247229092,
+            "20": 0.1763025247229092,
+            "21": 0.22667463095468743,
+            "22": 0.20538302699902802,
+            "23": 0.13907499814405022,
+            "24": 0.20148854725646126,
+            "25": 0.2266745697900133,
+            "26": 0.20148866958580955,
+            "27": 0.18122036626454957,
+            "28": 0.2266748144487099,
+            "29": 0.20538314435787405,
+            "30": 0.18793434779833063,
+            "31": 0.21616597381349123,
+            "32": 0.20538302699902802,
+            "33": 0.18122036626454957,
+            "34": 0.2624872324893795,
+            "35": 0.277046859515814,
+            "36": 0.1763025247229092,
+            "37": 0.2174645334045363,
+            "38": 0.185285184692572,
+            "39": 0.24162709145002448,
+            "40": 0.20538302699902802,
+            "41": 0.24162707678016873,
+            "42": 0.20072565424754102,
+            "43": 0.21616597381349123,
+            "44": 0.1763025247229092,
+            "45": 0.24704683792891988,
+            "46": 0.1763025247229092,
+            "47": 0.2266748144487099,
+            "48": 0.20148854725646126,
+            "49": 0.21616597381349123
+          },
+          "velocity_spike": {
+            "0": null,
+            "1": null,
+            "2": null,
+            "3": null,
+            "4": null,
+            "5": null,
+            "6": null,
+            "7": null,
+            "8": null,
+            "9": null,
+            "10": null,
+            "11": null,
+            "12": null,
+            "13": null,
+            "14": null,
+            "15": null,
+            "16": null,
+            "17": null,
+            "18": null,
+            "19": null,
+            "20": null,
+            "21": null,
+            "22": null,
+            "23": null,
+            "24": null,
+            "25": null,
+            "26": null,
+            "27": null,
+            "28": null,
+            "29": null,
+            "30": null,
+            "31": null,
+            "32": null,
+            "33": null,
+            "34": null,
+            "35": null,
+            "36": null,
+            "37": null,
+            "38": null,
+            "39": null,
+            "40": null,
+            "41": null,
+            "42": null,
+            "43": null,
+            "44": null,
+            "45": null,
+            "46": null,
+            "47": null,
+            "48": null,
+            "49": null
           },
           "static_fraction": {
-            "0": 0.2178598922247883,
-            "1": 0.23556581986143188,
-            "2": 0.22401847575057737,
-            "3": 0.21170130869899922,
-            "4": 0.22401847575057737,
-            "5": 0.24942263279445728,
-            "6": 0.1747498075442648,
-            "7": 0.22401847575057737,
-            "8": 0.24172440338722093,
-            "9": 0.21247113163972287,
-            "10": 0.19399538106235567,
-            "11": 0.2455735180908391,
-            "12": 0.21093148575827558,
-            "13": 0.1901462663587375,
-            "14": 0.23094688221709006,
-            "15": 0.21093148575827558,
-            "16": 0.1624326404926867,
-            "17": 0.22324865280985373,
-            "18": 0.19476520400307928,
-            "19": 0.19553502694380293,
-            "20": 0.22555812163202463,
-            "21": 0.23017705927636645,
-            "22": 0.20554272517321015,
-            "23": 0.20939183987682833,
-            "24": 0.2178598922247883,
-            "25": 0.1747498075442648,
-            "26": 0.18090839107005388,
-            "27": 0.1901462663587375,
-            "28": 0.2086220169361047,
-            "29": 0.21709006928406466,
-            "30": 0.18629715165511931,
-            "31": 0.22170900692840648,
-            "32": 0.24018475750577367,
-            "33": 0.1855273287143957,
-            "34": 0.3094688221709007,
-            "35": 0.21862971516551194,
-            "36": 0.21016166281755197,
-            "37": 0.19707467282525018,
-            "38": 0.24480369515011546,
-            "39": 0.19784449576597382,
-            "40": 0.22170900692840648,
-            "41": 0.25943033102386454,
-            "42": 0.2517321016166282,
-            "43": 0.21093148575827558,
-            "44": 0.23248652809853734,
-            "45": 0.26481909160892997,
-            "46": 0.2224788298691301,
-            "47": 0.2317167051578137,
-            "48": 0.2340261739799846,
-            "49": 0.21632024634334104
+            "0": 0.07698229407236336,
+            "1": 0.09314857582755966,
+            "2": 0.07621247113163972,
+            "3": 0.0731331793687452,
+            "4": 0.08237105465742879,
+            "5": 0.1147036181678214,
+            "6": 0.050808314087759814,
+            "7": 0.05388760585065435,
+            "8": 0.09468822170900693,
+            "9": 0.07390300230946882,
+            "10": 0.06697459584295612,
+            "11": 0.08160123171670516,
+            "12": 0.05003849114703618,
+            "13": 0.06081601231716705,
+            "14": 0.10007698229407236,
+            "15": 0.06774441878367975,
+            "16": 0.04772902232486528,
+            "17": 0.07621247113163972,
+            "18": 0.06774441878367975,
+            "19": 0.06235565819861432,
+            "20": 0.08314087759815242,
+            "21": 0.08083140877598152,
+            "22": 0.05003849114703618,
+            "23": 0.05234795996920708,
+            "24": 0.08237105465742879,
+            "25": 0.06235565819861432,
+            "26": 0.06620477290223249,
+            "27": 0.06620477290223249,
+            "28": 0.056197074672825253,
+            "29": 0.08391070053887606,
+            "30": 0.06851424172440339,
+            "31": 0.06081601231716705,
+            "32": 0.09314857582755966,
+            "33": 0.07005388760585066,
+            "34": 0.15088529638183218,
+            "35": 0.07929176289453425,
+            "36": 0.056197074672825253,
+            "37": 0.07159353348729793,
+            "38": 0.1216320246343341,
+            "39": 0.08391070053887606,
+            "40": 0.11239414934565051,
+            "41": 0.11855273287143957,
+            "42": 0.10700538876058506,
+            "43": 0.06697459584295612,
+            "44": 0.09776751347190146,
+            "45": 0.1077752117013087,
+            "46": 0.06235565819861432,
+            "47": 0.08775981524249422,
+            "48": 0.06928406466512702,
+            "49": 0.07082371054657428
           },
           "end_pose_deviation": {
             "0": 0.2500000030055838,
@@ -1995,10 +553,7 @@
           }
         },
         "flagged": {
-          "3": [
-            "peak_velocity"
-          ],
-          "46": [
+          "13": [
             "peak_velocity"
           ]
         }
@@ -2006,25 +561,56 @@
       "findings": [
         {
           "severity": "INFO",
-          "message": "episode 3: IQR outlier on peak_velocity",
-          "episode_index": 3,
+          "message": "episode 13: IQR outlier on peak_velocity",
+          "episode_index": 13,
           "details": {
             "metrics": [
               "peak_velocity"
-            ]
-          }
-        },
-        {
-          "severity": "INFO",
-          "message": "episode 46: IQR outlier on peak_velocity",
-          "episode_index": 46,
-          "details": {
-            "metrics": [
-              "peak_velocity"
-            ]
+            ],
+            "far_out": false
           }
         }
       ]
+    },
+    {
+      "id": "embedded-images",
+      "title": "Embedded images in the parquet shards",
+      "verdict": "PASS",
+      "summary": "no image features declared",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "camera-coverage",
+      "title": "Per-episode camera coverage",
+      "verdict": "PASS",
+      "summary": "3 camera(s) over 50 episodes; 0 missing segments",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "task-strings",
+      "title": "Task strings",
+      "verdict": "PASS",
+      "summary": "50 episodes, 0 tasks in meta/tasks; 0 finding(s)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "reward-done",
+      "title": "Reward / done fields",
+      "verdict": "PASS",
+      "summary": "reward absent, done present",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
     },
     {
       "id": "visual-quality",
@@ -2039,31 +625,12 @@
     {
       "id": "deployment-readiness",
       "title": "Deployment readiness (would this dataset serve a policy?)",
-      "verdict": "WARN",
-      "summary": "0 blocker(s), 2 warning(s)",
+      "verdict": "PASS",
+      "summary": "no deployment blockers found",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [
-        {
-          "severity": "WARN",
-          "message": "observation.state: 0.76% of values sit >3 sigma from the stored normalization stats - at inference the policy sees inputs outside the range it trained on (the openpi #906 failure mode)",
-          "episode_index": null,
-          "details": {
-            "feature": "observation.state",
-            "ood_fraction": 0.007602197802197802
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "action: 0.73% of values sit >3 sigma from the stored normalization stats - at inference the policy sees inputs outside the range it trained on (the openpi #906 failure mode)",
-          "episode_index": null,
-          "details": {
-            "feature": "action",
-            "ood_fraction": 0.007330769230769231
-          }
-        }
-      ]
+      "findings": []
     }
   ]
 }

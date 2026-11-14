@@ -2,27 +2,40 @@
   "source": "VLABench/vlabench_primitive_pretrain_lerobot",
   "format_version": "v2.0",
   "episodes": 4,
-  "frames": 350,
+  "frames": 417,
   "fps": 10.0,
   "truncated": true,
-  "score": 75,
+  "score": 59,
   "verdict": "FAIL",
   "checks": [
     {
       "id": "stats-drift",
-      "title": "Stats drift (meta/stats.json vs actual data)",
-      "verdict": "PASS",
-      "summary": "stats.json matches the data (mean/std/min/max within 1%)",
+      "title": "Stats drift (stored normalization stats vs actual data)",
+      "verdict": "WARN",
+      "summary": "worst error 0.0x the FAIL threshold",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": []
+      "findings": [
+        {
+          "severity": "WARN",
+          "message": "observation.state: no normalization stats (neither meta/stats.json nor per-episode stats) - policies that normalize will fail",
+          "episode_index": null,
+          "details": {}
+        },
+        {
+          "severity": "WARN",
+          "message": "action: no normalization stats (neither meta/stats.json nor per-episode stats) - policies that normalize will fail",
+          "episode_index": null,
+          "details": {}
+        }
+      ]
     },
     {
       "id": "timestamp-grid",
-      "title": "Timestamp grid (on-grid, monotonic, low jitter)",
+      "title": "Timestamp grid (spacing, monotonic, start at 0)",
       "verdict": "PASS",
-      "summary": "all episodes on the 10 fps grid and monotonic",
+      "summary": "evenly spaced at 10 fps and monotonic",
       "skipped": false,
       "skip_reason": "",
       "details": {},
@@ -32,14 +45,14 @@
       "id": "dropped-frames",
       "title": "Dropped / duplicated frames",
       "verdict": "INFO",
-      "summary": "frame_index contiguous and episode lengths match the data",
+      "summary": "frame_index contiguous; episode lengths match the data",
       "skipped": false,
       "skip_reason": "",
       "details": {},
       "findings": [
         {
           "severity": "INFO",
-          "message": "video frame counts not checked (pass --video to include MP4s)",
+          "message": "no per-episode video segments in the metadata (v2.x or no videos): video frame counts not cross-checked",
           "episode_index": null,
           "details": {}
         }
@@ -47,43 +60,109 @@
     },
     {
       "id": "calibration-drift",
-      "title": "Calibration drift (action vs state offset on still frames)",
-      "verdict": "SKIP",
-      "summary": "",
-      "skipped": true,
-      "skip_reason": "observation.state or action column missing",
-      "details": {},
+      "title": "Calibration drift (action vs state on still frames)",
+      "verdict": "PASS",
+      "summary": "5 joint(s) + 0 gripper(s) agree; worst offset +0.9% of range (joint 1); not compared: 2 different space",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "per_joint": {
+          "0": {
+            "joint": 0,
+            "offset_fraction": 7.062287087185432e-05,
+            "scale_error": 0.006234051775439421,
+            "r2": 0.0648013623954714,
+            "line_vs_step": 0.9605271767158242,
+            "still_frames": 166
+          },
+          "1": {
+            "joint": 1,
+            "offset_fraction": 0.009312534329587648,
+            "scale_error": -0.011735911561270934,
+            "r2": 0.09393780041051847,
+            "line_vs_step": 0.9178214098094335,
+            "still_frames": 166
+          },
+          "2": {
+            "joint": 2,
+            "offset_fraction": 0.00782759799723747,
+            "scale_error": -0.010252598486675871,
+            "r2": 0.07537516285683898,
+            "line_vs_step": 0.9808611442293873,
+            "still_frames": 166
+          },
+          "4": {
+            "joint": 4,
+            "offset_fraction": 0.002212329018040533,
+            "scale_error": 0.010450996876567361,
+            "r2": 0.5447535675097259,
+            "line_vs_step": 0.9753110455554773,
+            "still_frames": 166
+          },
+          "5": {
+            "joint": 5,
+            "offset_fraction": -0.0019662429931061017,
+            "scale_error": -0.012587425421623138,
+            "r2": 0.017814599951290422,
+            "line_vs_step": 0.9036216016287827,
+            "still_frames": 166
+          }
+        },
+        "compared_joints": [
+          0,
+          1,
+          2,
+          4,
+          5
+        ],
+        "compared_grippers": [],
+        "excluded_joints": {
+          "3": "different space",
+          "6": "different space"
+        }
+      },
       "findings": []
     },
     {
       "id": "idle-segments",
       "title": "Idle segments (policy learns to do nothing)",
-      "verdict": "SKIP",
-      "summary": "",
-      "skipped": true,
-      "skip_reason": "action column missing",
+      "verdict": "PASS",
+      "summary": "no episode starts idle or idles >= 30%",
+      "skipped": false,
+      "skip_reason": "",
       "details": {},
       "findings": []
     },
     {
       "id": "stuck-actuator",
       "title": "Stuck actuators (joints that never move)",
-      "verdict": "SKIP",
-      "summary": "",
-      "skipped": true,
-      "skip_reason": "action column missing",
+      "verdict": "PASS",
+      "summary": "every joint moves wherever the dataset uses it",
+      "skipped": false,
+      "skip_reason": "",
       "details": {},
       "findings": []
     },
     {
       "id": "action-saturation",
       "title": "Action saturation (commands clipped at the limits)",
-      "verdict": "SKIP",
-      "summary": "",
-      "skipped": true,
-      "skip_reason": "action column missing",
+      "verdict": "WARN",
+      "summary": "1 dim(s) saturated",
+      "skipped": false,
+      "skip_reason": "",
       "details": {},
-      "findings": []
+      "findings": [
+        {
+          "severity": "WARN",
+          "message": "action dim 4: 5.4% of commands during motion are pinned at exactly its max (0) - clipped commands the policy will imitate",
+          "episode_index": null,
+          "details": {
+            "dim": 4,
+            "saturated_fraction": 0.05361930294906166,
+            "side": "max"
+          }
+        }
+      ]
     },
     {
       "id": "nan-and-normalization",
@@ -98,10 +177,10 @@
     {
       "id": "duplicate-and-leakage",
       "title": "Duplicate episodes / train-eval leakage",
-      "verdict": "SKIP",
-      "summary": "",
-      "skipped": true,
-      "skip_reason": "action column missing",
+      "verdict": "PASS",
+      "summary": "no exact, partial or near duplicates",
+      "skipped": false,
+      "skip_reason": "",
       "details": {},
       "findings": []
     },
@@ -112,6 +191,59 @@
       "summary": "",
       "skipped": true,
       "skip_reason": "fewer than 8 episodes - IQR flagging needs a population",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "embedded-images",
+      "title": "Embedded images in the parquet shards",
+      "verdict": "INFO",
+      "summary": "3 embedded image feature(s)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "3 image feature(s) embedded in the parquet shards (image, second_image, wrist_image): shards are big and every frame decodes on read - the video layout (dtype \"video\", MP4 chunks) streams far better for training",
+          "episode_index": null,
+          "details": {
+            "features": [
+              "image",
+              "second_image",
+              "wrist_image"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "camera-coverage",
+      "title": "Per-episode camera coverage",
+      "verdict": "SKIP",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "no video cameras declared",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "task-strings",
+      "title": "Task strings",
+      "verdict": "PASS",
+      "summary": "4 episodes, 0 tasks in meta/tasks; 0 finding(s)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "reward-done",
+      "title": "Reward / done fields",
+      "verdict": "SKIP",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "no reward/done fields (position-control datasets rarely have them)",
       "details": {},
       "findings": []
     },
@@ -136,13 +268,13 @@
       "findings": [
         {
           "severity": "FAIL",
-          "message": "observation.state: absent from meta/stats.json - the policy cannot normalize inputs/outputs at inference",
+          "message": "observation.state: no normalization stats (meta/stats.json or per-episode stats) - the policy cannot normalize inputs/outputs at inference",
           "episode_index": null,
           "details": {}
         },
         {
           "severity": "FAIL",
-          "message": "action: absent from meta/stats.json - the policy cannot normalize inputs/outputs at inference",
+          "message": "action: no normalization stats (meta/stats.json or per-episode stats) - the policy cannot normalize inputs/outputs at inference",
           "episode_index": null,
           "details": {}
         }

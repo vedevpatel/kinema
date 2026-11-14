@@ -1,0 +1,634 @@
+{
+  "source": "lerobot/taco_play",
+  "format_version": "v3.0",
+  "episodes": 50,
+  "frames": 3300,
+  "fps": 15.0,
+  "truncated": true,
+  "score": 91,
+  "verdict": "WARN",
+  "checks": [
+    {
+      "id": "stats-drift",
+      "title": "Stats drift (stored normalization stats vs actual data)",
+      "verdict": "PASS",
+      "summary": "data matches per-episode stats of the loaded episodes (worst 0% of the FAIL threshold)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "timestamp-grid",
+      "title": "Timestamp grid (spacing, monotonic, start at 0)",
+      "verdict": "PASS",
+      "summary": "evenly spaced at 15 fps and monotonic",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "dropped-frames",
+      "title": "Dropped / duplicated frames",
+      "verdict": "PASS",
+      "summary": "frame_index contiguous; episode lengths and video segments match the data",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "calibration-drift",
+      "title": "Calibration drift (action vs state on still frames)",
+      "verdict": "SKIP",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "no dim where action is a position command for the same joint: 2 delta command; 5 different space",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "idle-segments",
+      "title": "Idle segments (policy learns to do nothing)",
+      "verdict": "PASS",
+      "summary": "no episode starts idle or idles >= 30%",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "stuck-actuator",
+      "title": "Stuck actuators (joints that never move)",
+      "verdict": "WARN",
+      "summary": "1/50 episodes with stuck joints",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "joint 6 (motor_6) does not move in 3/50 episodes [147, 441, 1544] - it moves in the others - dead or disabled motor during those recordings? [dim looks like an unnamed gripper]",
+          "episode_index": null,
+          "details": {
+            "joint": 6,
+            "episodes": [
+              147,
+              441,
+              1544
+            ],
+            "share": 0.06
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "gripper (action dim 6) never actuates in 1/50 pick/place episode(s): [1544]",
+          "episode_index": null,
+          "details": {
+            "joint": 6,
+            "episodes": [
+              1544
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "action-saturation",
+      "title": "Action saturation (commands clipped at the limits)",
+      "verdict": "PASS",
+      "summary": "no continuous action dim pinned at a limit above 5% (6 dims checked)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "nan-and-normalization",
+      "title": "NaN / Inf and normalization hazards",
+      "verdict": "PASS",
+      "summary": "no NaN/Inf; all dims have usable variance",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "duplicate-and-leakage",
+      "title": "Duplicate episodes / train-eval leakage",
+      "verdict": "PASS",
+      "summary": "no exact, partial or near duplicates",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "outlier-episodes",
+      "title": "Outlier episodes (duration, jerk, velocity, static, end-pose)",
+      "verdict": "WARN",
+      "summary": "4 episode(s) to review, 4 mild, of 50; worst: [2279, 1617, 1764, 3308, 1544, 2132, 2940, 3234]; duration/end pose skipped for 50 episodes whose task has < 5 episodes",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "metrics": {
+          "duration_s": {
+            "0": null,
+            "74": null,
+            "147": null,
+            "221": null,
+            "294": null,
+            "368": null,
+            "441": null,
+            "515": null,
+            "588": null,
+            "662": null,
+            "735": null,
+            "809": null,
+            "882": null,
+            "956": null,
+            "1029": null,
+            "1103": null,
+            "1176": null,
+            "1250": null,
+            "1323": null,
+            "1397": null,
+            "1470": null,
+            "1544": null,
+            "1617": null,
+            "1691": null,
+            "1764": null,
+            "1838": null,
+            "1911": null,
+            "1985": null,
+            "2058": null,
+            "2132": null,
+            "2205": null,
+            "2279": null,
+            "2352": null,
+            "2426": null,
+            "2499": null,
+            "2573": null,
+            "2646": null,
+            "2720": null,
+            "2793": null,
+            "2867": null,
+            "2940": null,
+            "3014": null,
+            "3087": null,
+            "3161": null,
+            "3234": null,
+            "3308": null,
+            "3381": null,
+            "3455": null,
+            "3528": null,
+            "3602": null
+          },
+          "p95_jerk": {
+            "0": 3.5457225516738564,
+            "74": 2.5308640943251897,
+            "147": 1.9080705367750836,
+            "221": 2.880538188332224,
+            "294": 4.33458995346374,
+            "368": 4.833693815282487,
+            "441": 2.3658149055055206,
+            "515": 3.97220234173195,
+            "588": 2.274049119871325,
+            "662": 4.375810909024943,
+            "735": 5.587608937554103,
+            "809": 2.438542390037389,
+            "882": 3.3838739675042024,
+            "956": 4.19554216732682,
+            "1029": 4.866704532317341,
+            "1103": 2.371467593385757,
+            "1176": 2.4569240108672794,
+            "1250": 4.0121165387658895,
+            "1323": 3.34071678856324,
+            "1397": 1.87184309797396,
+            "1470": 1.9662983494125903,
+            "1544": 6.13265975111896,
+            "1617": 1.8456646332599276,
+            "1691": 3.0829874119267298,
+            "1764": 4.157648464079508,
+            "1838": 3.9560884180331755,
+            "1911": 2.276821958477223,
+            "1985": 1.7838373472758189,
+            "2058": 3.69867188475035,
+            "2132": 3.0258235472043737,
+            "2205": 3.838089266504035,
+            "2279": 9.866149745645696,
+            "2352": 2.4473765331987636,
+            "2426": 3.0452207374970217,
+            "2499": 3.657570106867544,
+            "2573": 6.590556533965633,
+            "2646": 1.4676217959840512,
+            "2720": 3.115604016008533,
+            "2793": 2.2868884846601283,
+            "2867": 2.361392540515575,
+            "2940": 4.2970982344988515,
+            "3014": 3.151311262445536,
+            "3087": 2.9338883780243843,
+            "3161": 3.770195008213637,
+            "3234": 6.2366611844023385,
+            "3308": 5.757181571989614,
+            "3381": 2.0424861854923533,
+            "3455": 2.5563545529446325,
+            "3528": 2.6267836871272885,
+            "3602": 2.81485052763308
+          },
+          "peak_velocity": {
+            "0": 3.5606716095241633,
+            "74": 1.648444085114978,
+            "147": 1.3128960255153366,
+            "221": 2.752030759488778,
+            "294": 4.087436121522159,
+            "368": 4.64376467427934,
+            "441": 1.504066906151605,
+            "515": 6.442369824848443,
+            "588": 1.7314155008518002,
+            "662": 4.659824673502187,
+            "735": 3.45643235169717,
+            "809": 2.4041073793930656,
+            "882": 3.850873452879352,
+            "956": 3.393237665582818,
+            "1029": 6.023799733707175,
+            "1103": 1.4973872451350838,
+            "1176": 2.185276109226086,
+            "1250": 5.032925153245239,
+            "1323": 3.3441204894657552,
+            "1397": 1.8839290039597967,
+            "1470": 2.023674603096298,
+            "1544": 5.029612574062572,
+            "1617": 11.183445200892058,
+            "1691": 2.380043477258003,
+            "1764": 5.248641846488344,
+            "1838": 3.4064234882146063,
+            "1911": 2.723363808103438,
+            "1985": 1.75897415347811,
+            "2058": 2.366509310815998,
+            "2132": 2.645652715370123,
+            "2205": 4.317402800363949,
+            "2279": 8.635004781553736,
+            "2352": 2.82448137641242,
+            "2426": 3.214586168993853,
+            "2499": 3.1572776359512322,
+            "2573": 7.611472862735826,
+            "2646": 1.0682346895613468,
+            "2720": 3.0247058995267926,
+            "2793": 3.6708051421721746,
+            "2867": 4.091983531308428,
+            "2940": 4.421691744358065,
+            "3014": 2.7413914417610266,
+            "3087": 2.0160023062407566,
+            "3161": 3.35863196480289,
+            "3234": 4.884519561198452,
+            "3308": 15.912185115648215,
+            "3381": 2.1758414036297076,
+            "3455": 1.7937517411306978,
+            "3528": 2.9277199485041026,
+            "3602": 2.364258189874752
+          },
+          "velocity_spike": {
+            "0": 1.0838974001602788,
+            "74": 0.8172414474479085,
+            "147": 0.33127612999163797,
+            "221": 0.7754666320445961,
+            "294": 0.7086149872679032,
+            "368": 0.7625194559410305,
+            "441": 0.6449716920558033,
+            "515": 1.402206290768432,
+            "588": 0.47193280720764286,
+            "662": 1.3171506810539566,
+            "735": 0.49160557163780083,
+            "809": 0.365315205413972,
+            "882": 0.5946500470424024,
+            "956": 1.0476247540720147,
+            "1029": 1.974843675568246,
+            "1103": 0.5651639277548238,
+            "1176": 0.4281736034682096,
+            "1250": 0.7889976727972199,
+            "1323": 0.7524366690743861,
+            "1397": 0.39998246827204215,
+            "1470": 0.7353294605179154,
+            "1544": 1.4973387987698463,
+            "1617": 2.301832740299097,
+            "1691": 0.6075835197009466,
+            "1764": 2.9789517105901524,
+            "1838": 1.0731530213351084,
+            "1911": 0.7092257187210849,
+            "1985": 0.4109284007214274,
+            "2058": 1.282086182289726,
+            "2132": 2.2527348187503,
+            "2205": 1.8139360739308927,
+            "2279": 2.1733554494059413,
+            "2352": 0.38143657932087704,
+            "2426": 1.1297423033292031,
+            "2499": 1.168199127801416,
+            "2573": 0.7420786781063177,
+            "2646": 0.3841579842112955,
+            "2720": 0.3883987322658959,
+            "2793": 0.6750645157115638,
+            "2867": 0.7889976727972199,
+            "2940": 0.9210743983652583,
+            "3014": 1.3442380408437495,
+            "3087": 1.0382684340348087,
+            "3161": 0.6280479841974541,
+            "3234": 0.8501566591938773,
+            "3308": 0.9026321402151145,
+            "3381": 0.7637039346798874,
+            "3455": 1.3047349761306177,
+            "3528": 0.9632324507057107,
+            "3602": 1.1117337401252447
+          },
+          "static_fraction": {
+            "0": 0.015384615384615385,
+            "74": 0.015384615384615385,
+            "147": 0.015384615384615385,
+            "221": 0.015384615384615385,
+            "294": 0.015384615384615385,
+            "368": 0.1076923076923077,
+            "441": 0.015384615384615385,
+            "515": 0.2,
+            "588": 0.015384615384615385,
+            "662": 0.015384615384615385,
+            "735": 0.015384615384615385,
+            "809": 0.015384615384615385,
+            "882": 0.046153846153846156,
+            "956": 0.015384615384615385,
+            "1029": 0.2153846153846154,
+            "1103": 0.015384615384615385,
+            "1176": 0.015384615384615385,
+            "1250": 0.16923076923076924,
+            "1323": 0.015384615384615385,
+            "1397": 0.015384615384615385,
+            "1470": 0.015384615384615385,
+            "1544": 0.4153846153846154,
+            "1617": 0.12307692307692308,
+            "1691": 0.015384615384615385,
+            "1764": 0.23076923076923078,
+            "1838": 0.015384615384615385,
+            "1911": 0.015384615384615385,
+            "1985": 0.015384615384615385,
+            "2058": 0.015384615384615385,
+            "2132": 0.2,
+            "2205": 0.2153846153846154,
+            "2279": 0.13846153846153847,
+            "2352": 0.015384615384615385,
+            "2426": 0.1076923076923077,
+            "2499": 0.26153846153846155,
+            "2573": 0.015384615384615385,
+            "2646": 0.015384615384615385,
+            "2720": 0.015384615384615385,
+            "2793": 0.015384615384615385,
+            "2867": 0.015384615384615385,
+            "2940": 0.38461538461538464,
+            "3014": 0.015384615384615385,
+            "3087": 0.015384615384615385,
+            "3161": 0.015384615384615385,
+            "3234": 0.27692307692307694,
+            "3308": 0.015384615384615385,
+            "3381": 0.24615384615384617,
+            "3455": 0.015384615384615385,
+            "3528": 0.015384615384615385,
+            "3602": 0.015384615384615385
+          },
+          "end_pose_deviation": {
+            "0": null,
+            "74": null,
+            "147": null,
+            "221": null,
+            "294": null,
+            "368": null,
+            "441": null,
+            "515": null,
+            "588": null,
+            "662": null,
+            "735": null,
+            "809": null,
+            "882": null,
+            "956": null,
+            "1029": null,
+            "1103": null,
+            "1176": null,
+            "1250": null,
+            "1323": null,
+            "1397": null,
+            "1470": null,
+            "1544": null,
+            "1617": null,
+            "1691": null,
+            "1764": null,
+            "1838": null,
+            "1911": null,
+            "1985": null,
+            "2058": null,
+            "2132": null,
+            "2205": null,
+            "2279": null,
+            "2352": null,
+            "2426": null,
+            "2499": null,
+            "2573": null,
+            "2646": null,
+            "2720": null,
+            "2793": null,
+            "2867": null,
+            "2940": null,
+            "3014": null,
+            "3087": null,
+            "3161": null,
+            "3234": null,
+            "3308": null,
+            "3381": null,
+            "3455": null,
+            "3528": null,
+            "3602": null
+          }
+        },
+        "flagged": {
+          "1544": [
+            "static_fraction"
+          ],
+          "1617": [
+            "peak_velocity",
+            "velocity_spike"
+          ],
+          "1764": [
+            "velocity_spike"
+          ],
+          "2132": [
+            "velocity_spike"
+          ],
+          "2279": [
+            "p95_jerk",
+            "peak_velocity",
+            "velocity_spike"
+          ],
+          "2940": [
+            "static_fraction"
+          ],
+          "3234": [
+            "static_fraction"
+          ],
+          "3308": [
+            "peak_velocity"
+          ]
+        }
+      },
+      "findings": [
+        {
+          "severity": "WARN",
+          "message": "episode 2279: IQR outlier on p95_jerk, peak_velocity, velocity_spike (far out)",
+          "episode_index": 2279,
+          "details": {
+            "metrics": [
+              "p95_jerk",
+              "peak_velocity",
+              "velocity_spike"
+            ],
+            "far_out": true
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 1617: IQR outlier on peak_velocity, velocity_spike (far out)",
+          "episode_index": 1617,
+          "details": {
+            "metrics": [
+              "peak_velocity",
+              "velocity_spike"
+            ],
+            "far_out": true
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 1764: IQR outlier on velocity_spike (far out)",
+          "episode_index": 1764,
+          "details": {
+            "metrics": [
+              "velocity_spike"
+            ],
+            "far_out": true
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 3308: IQR outlier on peak_velocity (far out)",
+          "episode_index": 3308,
+          "details": {
+            "metrics": [
+              "peak_velocity"
+            ],
+            "far_out": true
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 1544: IQR outlier on static_fraction",
+          "episode_index": 1544,
+          "details": {
+            "metrics": [
+              "static_fraction"
+            ],
+            "far_out": false
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 2132: IQR outlier on velocity_spike",
+          "episode_index": 2132,
+          "details": {
+            "metrics": [
+              "velocity_spike"
+            ],
+            "far_out": false
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 2940: IQR outlier on static_fraction",
+          "episode_index": 2940,
+          "details": {
+            "metrics": [
+              "static_fraction"
+            ],
+            "far_out": false
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 3234: IQR outlier on static_fraction",
+          "episode_index": 3234,
+          "details": {
+            "metrics": [
+              "static_fraction"
+            ],
+            "far_out": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "embedded-images",
+      "title": "Embedded images in the parquet shards",
+      "verdict": "PASS",
+      "summary": "no image features declared",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "camera-coverage",
+      "title": "Per-episode camera coverage",
+      "verdict": "PASS",
+      "summary": "2 camera(s) over 50 episodes; 0 missing segments",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "task-strings",
+      "title": "Task strings",
+      "verdict": "PASS",
+      "summary": "50 episodes, 0 tasks in meta/tasks; 0 finding(s)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "reward-done",
+      "title": "Reward / done fields",
+      "verdict": "PASS",
+      "summary": "reward and done present",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "visual-quality",
+      "title": "Visual quality (blur, lighting)",
+      "verdict": "SKIP",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "pass --video to run (downloads MP4s; needs the video extra)",
+      "details": {},
+      "findings": []
+    },
+    {
+      "id": "deployment-readiness",
+      "title": "Deployment readiness (would this dataset serve a policy?)",
+      "verdict": "PASS",
+      "summary": "no deployment blockers found",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": []
+    }
+  ]
+}
