@@ -5,44 +5,58 @@
   "frames": 12429,
   "fps": 15.0,
   "truncated": true,
-  "score": 90,
+  "score": 70,
+  "score_model": "tiered-v1",
   "verdict": "WARN",
   "checks": [
     {
       "id": "stats-drift",
       "title": "Stats drift (stored normalization stats vs actual data)",
-      "verdict": "INFO",
-      "summary": "data matches stored range (worst 0% of the FAIL threshold)",
+      "verdict": "WARN",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "worst error 0.0x the FAIL threshold",
       "skipped": false,
       "skip_reason": "",
       "details": {},
       "findings": [
         {
-          "severity": "INFO",
-          "message": "sampled subset and no per-episode stats: only range containment is checked (mean/std of a sample are not comparable to whole-dataset stats)",
+          "severity": "WARN",
+          "message": "action.std: the stored std is inconsistent with the loaded sample on dim 1 (stored 0.187108, outside the sample's 99.9% bootstrap interval [0.135666, 0.186078] over 40 episodes) - the stored stats look wrong (sampled audit: load the full dataset to confirm)",
           "episode_index": null,
-          "details": {}
+          "details": {
+            "feature": "action",
+            "stat": "std",
+            "dim": 1,
+            "reference": "bootstrap",
+            "episodes": 40,
+            "stored": 0.18710795774418965,
+            "interval": [
+              0.13566554455432414,
+              0.18607819501707534
+            ]
+          }
         }
-      ],
-      "weight": 10,
-      "weight_basis": "placeholder"
+      ]
     },
     {
       "id": "timestamp-grid",
       "title": "Timestamp grid (spacing, monotonic, start at 0)",
       "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
       "summary": "evenly spaced at 15 fps and monotonic",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [],
-      "weight": 10,
-      "weight_basis": "placeholder"
+      "findings": []
     },
     {
       "id": "dropped-frames",
       "title": "Dropped / duplicated frames",
       "verdict": "INFO",
+      "weight": 8,
+      "weight_basis": "placeholder",
       "summary": "frame_index contiguous; episode lengths match the data",
       "skipped": false,
       "skip_reason": "",
@@ -54,26 +68,119 @@
           "episode_index": null,
           "details": {}
         }
-      ],
-      "weight": 8,
-      "weight_basis": "placeholder"
+      ]
     },
     {
       "id": "calibration-drift",
       "title": "Calibration drift (action vs state on still frames)",
-      "verdict": "SKIP",
-      "summary": "",
-      "skipped": true,
-      "skip_reason": "no dim where action is a position command for the same joint: 4 delta command; 2 different space; 1 gripper in different units",
-      "details": {},
-      "findings": [],
+      "verdict": "WARN",
       "weight": 10,
-      "weight_basis": "measured"
+      "weight_basis": "measured",
+      "summary": "4 joint(s) miscalibrated; not compared: 2 different space, 1 gripper in different units; 4 delta-command dim(s) checked for scale agreement",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "per_joint": {
+          "0": {
+            "joint": 0,
+            "kind": "delta_scale",
+            "step_ratio": 0.011875843545442334,
+            "r2": 0.6239104634738042,
+            "frames": 12389
+          },
+          "1": {
+            "joint": 1,
+            "kind": "delta_scale",
+            "step_ratio": 0.020819941384503708,
+            "r2": 0.6357274212353619,
+            "frames": 12389
+          },
+          "2": {
+            "joint": 2,
+            "kind": "delta_scale",
+            "step_ratio": 0.015599649337892929,
+            "r2": 0.5263784907091917,
+            "frames": 12389
+          },
+          "4": {
+            "joint": 4,
+            "kind": "delta_scale",
+            "step_ratio": 0.03563528067003756,
+            "r2": 0.505698290548068,
+            "frames": 12389
+          }
+        },
+        "compared_joints": [],
+        "compared_grippers": [],
+        "compared_deltas": [
+          0,
+          1,
+          2,
+          4
+        ],
+        "excluded_joints": {
+          "3": "different space",
+          "5": "different space",
+          "6": "gripper in different units"
+        }
+      },
+      "findings": [
+        {
+          "severity": "WARN",
+          "message": "delta command 0 (x): the measured steps of its state dim are 0.01x the commanded steps (R^2 0.62) - action and state disagree on scale: a conversion-units bug, or commands the robot cannot follow; anything comparing commands to measured motion inherits the mismatch",
+          "episode_index": null,
+          "details": {
+            "joint": 0,
+            "kind": "delta_scale",
+            "step_ratio": 0.011875843545442334,
+            "r2": 0.6239104634738042,
+            "frames": 12389
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "delta command 1 (y): the measured steps of its state dim are 0.02x the commanded steps (R^2 0.64) - action and state disagree on scale: a conversion-units bug, or commands the robot cannot follow; anything comparing commands to measured motion inherits the mismatch",
+          "episode_index": null,
+          "details": {
+            "joint": 1,
+            "kind": "delta_scale",
+            "step_ratio": 0.020819941384503708,
+            "r2": 0.6357274212353619,
+            "frames": 12389
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "delta command 2 (z): the measured steps of its state dim are 0.02x the commanded steps (R^2 0.53) - action and state disagree on scale: a conversion-units bug, or commands the robot cannot follow; anything comparing commands to measured motion inherits the mismatch",
+          "episode_index": null,
+          "details": {
+            "joint": 2,
+            "kind": "delta_scale",
+            "step_ratio": 0.015599649337892929,
+            "r2": 0.5263784907091917,
+            "frames": 12389
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "delta command 4 (pitch): the measured steps of its state dim are 0.04x the commanded steps (R^2 0.51) - action and state disagree on scale: a conversion-units bug, or commands the robot cannot follow; anything comparing commands to measured motion inherits the mismatch",
+          "episode_index": null,
+          "details": {
+            "joint": 4,
+            "kind": "delta_scale",
+            "step_ratio": 0.03563528067003756,
+            "r2": 0.505698290548068,
+            "frames": 12389
+          }
+        }
+      ]
     },
     {
       "id": "idle-segments",
       "title": "Idle segments (policy learns to do nothing)",
       "verdict": "WARN",
+      "weight": 10,
+      "weight_basis": "measured",
       "summary": "4/40 episodes flagged; worst 29% idle",
       "skipped": false,
       "skip_reason": "",
@@ -123,38 +230,38 @@
             "trailing_idle_s": 0.0
           }
         }
-      ],
-      "weight": 10,
-      "weight_basis": "measured"
+      ]
     },
     {
       "id": "stuck-actuator",
       "title": "Stuck actuators (joints that never move)",
       "verdict": "PASS",
+      "weight": 6,
+      "weight_basis": "placeholder",
       "summary": "every joint moves wherever the dataset uses it",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [],
-      "weight": 6,
-      "weight_basis": "placeholder"
+      "findings": []
     },
     {
       "id": "action-saturation",
       "title": "Action saturation (commands clipped at the limits)",
       "verdict": "PASS",
+      "weight": 6,
+      "weight_basis": "placeholder",
       "summary": "no continuous action dim pinned at a limit above 5% (6 dims checked)",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [],
-      "weight": 6,
-      "weight_basis": "placeholder"
+      "findings": []
     },
     {
       "id": "nan-and-normalization",
       "title": "NaN / Inf and normalization hazards",
       "verdict": "INFO",
+      "weight": 10,
+      "weight_basis": "placeholder",
       "summary": "",
       "skipped": false,
       "skip_reason": "",
@@ -169,26 +276,26 @@
             "dim": 6
           }
         }
-      ],
-      "weight": 10,
-      "weight_basis": "placeholder"
+      ]
     },
     {
       "id": "duplicate-and-leakage",
       "title": "Duplicate episodes / train-eval leakage",
       "verdict": "PASS",
+      "weight": 2,
+      "weight_basis": "measured",
       "summary": "no exact, partial or near duplicates",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [],
-      "weight": 2,
-      "weight_basis": "measured"
+      "findings": []
     },
     {
       "id": "outlier-episodes",
       "title": "Outlier episodes (duration, jerk, velocity, static, end-pose)",
       "verdict": "INFO",
+      "weight": 3,
+      "weight_basis": "placeholder",
       "summary": "0 episode(s) to review, 6 mild, of 40; worst: [10136, 13176, 20271, 25339, 30407, 38515]; duration/end pose skipped for 40 episodes whose task has < 5 episodes",
       "skipped": false,
       "skip_reason": "",
@@ -535,82 +642,79 @@
             "far_out": false
           }
         }
-      ],
-      "weight": 3,
-      "weight_basis": "placeholder"
+      ]
     },
     {
       "id": "embedded-images",
       "title": "Embedded images in the parquet shards",
       "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
       "summary": "no image features declared",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [],
-      "weight": 8,
-      "weight_basis": "placeholder"
+      "findings": []
     },
     {
       "id": "camera-coverage",
       "title": "Per-episode camera coverage",
       "verdict": "SKIP",
+      "weight": 8,
+      "weight_basis": "placeholder",
       "summary": "",
       "skipped": true,
       "skip_reason": "video files not downloaded (pass --video) and the metadata records no segments",
       "details": {},
-      "findings": [],
-      "weight": 8,
-      "weight_basis": "placeholder"
+      "findings": []
     },
     {
       "id": "task-strings",
       "title": "Task strings",
       "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
       "summary": "40 episodes, 0 tasks in meta/tasks; 0 finding(s)",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [],
-      "weight": 8,
-      "weight_basis": "placeholder"
+      "findings": []
     },
     {
       "id": "reward-done",
       "title": "Reward / done fields",
       "verdict": "SKIP",
+      "weight": 8,
+      "weight_basis": "placeholder",
       "summary": "",
       "skipped": true,
       "skip_reason": "no reward/done fields (position-control datasets rarely have them)",
       "details": {},
-      "findings": [],
-      "weight": 8,
-      "weight_basis": "placeholder"
+      "findings": []
     },
     {
       "id": "visual-quality",
       "title": "Visual quality (blur, lighting)",
       "verdict": "SKIP",
+      "weight": 6,
+      "weight_basis": "placeholder",
       "summary": "",
       "skipped": true,
       "skip_reason": "pass --video to run (downloads MP4s; needs the video extra)",
       "details": {},
-      "findings": [],
-      "weight": 6,
-      "weight_basis": "placeholder"
+      "findings": []
     },
     {
       "id": "deployment-readiness",
       "title": "Deployment readiness (would this dataset serve a policy?)",
       "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
       "summary": "no deployment blockers found",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [],
-      "weight": 10,
-      "weight_basis": "placeholder"
+      "findings": []
     }
-  ],
-  "score_model": "tiered-v1"
+  ]
 }

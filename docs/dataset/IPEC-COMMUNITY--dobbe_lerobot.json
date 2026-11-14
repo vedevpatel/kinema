@@ -6,12 +6,15 @@
   "fps": 3.75,
   "truncated": true,
   "score": 87,
+  "score_model": "tiered-v1",
   "verdict": "WARN",
   "checks": [
     {
       "id": "stats-drift",
       "title": "Stats drift (stored normalization stats vs actual data)",
       "verdict": "WARN",
+      "weight": 10,
+      "weight_basis": "placeholder",
       "summary": "worst error 0.0x the FAIL threshold",
       "skipped": false,
       "skip_reason": "",
@@ -31,6 +34,40 @@
         },
         {
           "severity": "WARN",
+          "message": "observation.state.mean: the stored mean is inconsistent with the loaded sample on dim 2 (stored -0.0184249, outside the sample's 99.9% bootstrap interval [-0.0137793, 0.0678564] over 40 episodes) - the stored stats look wrong (sampled audit: load the full dataset to confirm)",
+          "episode_index": null,
+          "details": {
+            "feature": "observation.state",
+            "stat": "mean",
+            "dim": 2,
+            "reference": "bootstrap",
+            "episodes": 40,
+            "stored": -0.018424928188323975,
+            "interval": [
+              -0.013779308355808852,
+              0.0678564381634633
+            ]
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "observation.state.std: the stored std is inconsistent with the loaded sample on dim 2 (stored 2.23377, outside the sample's 99.9% bootstrap interval [0.0725964, 0.141054] over 40 episodes) - the stored stats look wrong (sampled audit: load the full dataset to confirm)",
+          "episode_index": null,
+          "details": {
+            "feature": "observation.state",
+            "stat": "std",
+            "dim": 2,
+            "reference": "bootstrap",
+            "episodes": 40,
+            "stored": 2.2337708473205566,
+            "interval": [
+              0.0725963949088734,
+              0.1410535187561253
+            ]
+          }
+        },
+        {
+          "severity": "WARN",
           "message": "action.std: the sampled data is off the stored stats by 49.7x on dim 2 - far more than sampling explains; the stored stats look wrong (sampled audit: load the full dataset to confirm)",
           "episode_index": null,
           "details": {
@@ -42,31 +79,59 @@
           }
         },
         {
-          "severity": "INFO",
-          "message": "sampled subset and no per-episode stats: only range containment is checked (mean/std of a sample are not comparable to whole-dataset stats)",
+          "severity": "WARN",
+          "message": "action.mean: the stored mean is inconsistent with the loaded sample on dim 6 (stored 0.630769, outside the sample's 99.9% bootstrap interval [0.634686, 0.816403] over 40 episodes) - the stored stats look wrong (sampled audit: load the full dataset to confirm)",
           "episode_index": null,
-          "details": {}
+          "details": {
+            "feature": "action",
+            "stat": "mean",
+            "dim": 6,
+            "reference": "bootstrap",
+            "episodes": 40,
+            "stored": 0.6307693719863892,
+            "interval": [
+              0.634686389317154,
+              0.8164032284477836
+            ]
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "action.std: the stored std is inconsistent with the loaded sample on dim 2 (stored 0.122256, outside the sample's 99.9% bootstrap interval [0.00147365, 0.00392016] over 40 episodes) - the stored stats look wrong (sampled audit: load the full dataset to confirm)",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "stat": "std",
+            "dim": 2,
+            "reference": "bootstrap",
+            "episodes": 40,
+            "stored": 0.12225601822137833,
+            "interval": [
+              0.001473651148795082,
+              0.0039201562954206915
+            ]
+          }
         }
-      ],
-      "weight": 10,
-      "weight_basis": "placeholder"
+      ]
     },
     {
       "id": "timestamp-grid",
       "title": "Timestamp grid (spacing, monotonic, start at 0)",
       "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
       "summary": "evenly spaced at 3.75 fps and monotonic",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [],
-      "weight": 10,
-      "weight_basis": "placeholder"
+      "findings": []
     },
     {
       "id": "dropped-frames",
       "title": "Dropped / duplicated frames",
       "verdict": "INFO",
+      "weight": 8,
+      "weight_basis": "placeholder",
       "summary": "frame_index contiguous; episode lengths match the data",
       "skipped": false,
       "skip_reason": "",
@@ -78,15 +143,15 @@
           "episode_index": null,
           "details": {}
         }
-      ],
-      "weight": 8,
-      "weight_basis": "placeholder"
+      ]
     },
     {
       "id": "calibration-drift",
       "title": "Calibration drift (action vs state on still frames)",
       "verdict": "PASS",
-      "summary": "0 joint(s) + 1 gripper(s) agree; worst offset +0.0% of range (joint 6); not compared: 4 delta command, 2 different space",
+      "weight": 10,
+      "weight_basis": "measured",
+      "summary": "0 joint(s) + 1 gripper(s) agree; worst offset +0.0% of range (joint 6); not compared: 2 different space; 4 delta-command dim(s) checked for scale agreement",
       "skipped": false,
       "skip_reason": "",
       "details": {
@@ -97,65 +162,95 @@
             "offset_fraction": 1.4860016213332394e-06,
             "still_frames": 558,
             "kind": "gripper"
+          },
+          "0": {
+            "joint": 0,
+            "kind": "delta_scale",
+            "step_ratio": 0.999999995793171,
+            "r2": 0.999999999997919,
+            "frames": 8124
+          },
+          "1": {
+            "joint": 1,
+            "kind": "delta_scale",
+            "step_ratio": 0.9999999866328524,
+            "r2": 0.9999999999944568,
+            "frames": 8124
+          },
+          "2": {
+            "joint": 2,
+            "kind": "delta_scale",
+            "step_ratio": 0.9999999773080696,
+            "r2": 0.9999999999976678,
+            "frames": 8124
+          },
+          "4": {
+            "joint": 4,
+            "kind": "delta_scale",
+            "step_ratio": 0.9142547179489094,
+            "r2": 0.9421547756202503,
+            "frames": 8124
           }
         },
         "compared_joints": [],
         "compared_grippers": [
           6
         ],
+        "compared_deltas": [
+          0,
+          1,
+          2,
+          4
+        ],
         "excluded_joints": {
-          "0": "delta command",
-          "1": "delta command",
-          "2": "delta command",
           "3": "different space",
-          "4": "delta command",
           "5": "different space"
         }
       },
-      "findings": [],
-      "weight": 10,
-      "weight_basis": "measured"
+      "findings": []
     },
     {
       "id": "idle-segments",
       "title": "Idle segments (policy learns to do nothing)",
       "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "measured",
       "summary": "no episode starts idle or idles >= 30%",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [],
-      "weight": 10,
-      "weight_basis": "measured"
+      "findings": []
     },
     {
       "id": "stuck-actuator",
       "title": "Stuck actuators (joints that never move)",
       "verdict": "PASS",
+      "weight": 6,
+      "weight_basis": "placeholder",
       "summary": "every joint moves wherever the dataset uses it",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [],
-      "weight": 6,
-      "weight_basis": "placeholder"
+      "findings": []
     },
     {
       "id": "action-saturation",
       "title": "Action saturation (commands clipped at the limits)",
       "verdict": "PASS",
+      "weight": 6,
+      "weight_basis": "placeholder",
       "summary": "no continuous action dim pinned at a limit above 5% (6 dims checked)",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [],
-      "weight": 6,
-      "weight_basis": "placeholder"
+      "findings": []
     },
     {
       "id": "nan-and-normalization",
       "title": "NaN / Inf and normalization hazards",
       "verdict": "INFO",
+      "weight": 10,
+      "weight_basis": "placeholder",
       "summary": "",
       "skipped": false,
       "skip_reason": "",
@@ -170,26 +265,26 @@
             "dim": 6
           }
         }
-      ],
-      "weight": 10,
-      "weight_basis": "placeholder"
+      ]
     },
     {
       "id": "duplicate-and-leakage",
       "title": "Duplicate episodes / train-eval leakage",
       "verdict": "PASS",
+      "weight": 2,
+      "weight_basis": "measured",
       "summary": "no exact, partial or near duplicates",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [],
-      "weight": 2,
-      "weight_basis": "measured"
+      "findings": []
     },
     {
       "id": "outlier-episodes",
       "title": "Outlier episodes (duration, jerk, velocity, static, end-pose)",
       "verdict": "WARN",
+      "weight": 3,
+      "weight_basis": "placeholder",
       "summary": "2 episode(s) to review, 5 mild, of 40; worst: [935, 3071, 2270, 2403, 2003, 3605, 4406]; duration/end pose skipped for 3 episodes whose task has < 5 episodes",
       "skipped": false,
       "skip_reason": "",
@@ -556,82 +651,79 @@
             "far_out": false
           }
         }
-      ],
-      "weight": 3,
-      "weight_basis": "placeholder"
+      ]
     },
     {
       "id": "embedded-images",
       "title": "Embedded images in the parquet shards",
       "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
       "summary": "no image features declared",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [],
-      "weight": 8,
-      "weight_basis": "placeholder"
+      "findings": []
     },
     {
       "id": "camera-coverage",
       "title": "Per-episode camera coverage",
       "verdict": "SKIP",
+      "weight": 8,
+      "weight_basis": "placeholder",
       "summary": "",
       "skipped": true,
       "skip_reason": "video files not downloaded (pass --video) and the metadata records no segments",
       "details": {},
-      "findings": [],
-      "weight": 8,
-      "weight_basis": "placeholder"
+      "findings": []
     },
     {
       "id": "task-strings",
       "title": "Task strings",
       "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
       "summary": "40 episodes, 0 tasks in meta/tasks; 0 finding(s)",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [],
-      "weight": 8,
-      "weight_basis": "placeholder"
+      "findings": []
     },
     {
       "id": "reward-done",
       "title": "Reward / done fields",
       "verdict": "SKIP",
+      "weight": 8,
+      "weight_basis": "placeholder",
       "summary": "",
       "skipped": true,
       "skip_reason": "no reward/done fields (position-control datasets rarely have them)",
       "details": {},
-      "findings": [],
-      "weight": 8,
-      "weight_basis": "placeholder"
+      "findings": []
     },
     {
       "id": "visual-quality",
       "title": "Visual quality (blur, lighting)",
       "verdict": "SKIP",
+      "weight": 6,
+      "weight_basis": "placeholder",
       "summary": "",
       "skipped": true,
       "skip_reason": "pass --video to run (downloads MP4s; needs the video extra)",
       "details": {},
-      "findings": [],
-      "weight": 6,
-      "weight_basis": "placeholder"
+      "findings": []
     },
     {
       "id": "deployment-readiness",
       "title": "Deployment readiness (would this dataset serve a policy?)",
       "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
       "summary": "no deployment blockers found",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [],
-      "weight": 10,
-      "weight_basis": "placeholder"
+      "findings": []
     }
-  ],
-  "score_model": "tiered-v1"
+  ]
 }

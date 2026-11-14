@@ -6,36 +6,39 @@
   "fps": 10.0,
   "truncated": true,
   "score": 100,
+  "score_model": "tiered-v1",
   "verdict": "INFO",
   "checks": [
     {
       "id": "stats-drift",
       "title": "Stats drift (stored normalization stats vs actual data)",
       "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
       "summary": "data matches per-episode stats of the loaded episodes (worst 0% of the FAIL threshold)",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [],
-      "weight": 10,
-      "weight_basis": "placeholder"
+      "findings": []
     },
     {
       "id": "timestamp-grid",
       "title": "Timestamp grid (spacing, monotonic, start at 0)",
       "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
       "summary": "evenly spaced at 10 fps and monotonic",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [],
-      "weight": 10,
-      "weight_basis": "placeholder"
+      "findings": []
     },
     {
       "id": "dropped-frames",
       "title": "Dropped / duplicated frames",
       "verdict": "INFO",
+      "weight": 8,
+      "weight_basis": "placeholder",
       "summary": "frame_index contiguous; episode lengths match the data",
       "skipped": false,
       "skip_reason": "",
@@ -47,14 +50,14 @@
           "episode_index": null,
           "details": {}
         }
-      ],
-      "weight": 8,
-      "weight_basis": "placeholder"
+      ]
     },
     {
       "id": "calibration-drift",
       "title": "Calibration drift (action vs state on still frames)",
       "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "measured",
       "summary": "3 joint(s) + 0 gripper(s) agree; worst offset +0.2% of range (joint 1)",
       "skipped": false,
       "skip_reason": "",
@@ -91,77 +94,78 @@
           2
         ],
         "compared_grippers": [],
+        "compared_deltas": [],
         "excluded_joints": {}
       },
-      "findings": [],
-      "weight": 10,
-      "weight_basis": "measured"
+      "findings": []
     },
     {
       "id": "idle-segments",
       "title": "Idle segments (policy learns to do nothing)",
       "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "measured",
       "summary": "no episode starts idle or idles >= 30%",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [],
-      "weight": 10,
-      "weight_basis": "measured"
+      "findings": []
     },
     {
       "id": "stuck-actuator",
       "title": "Stuck actuators (joints that never move)",
       "verdict": "PASS",
+      "weight": 6,
+      "weight_basis": "placeholder",
       "summary": "every joint moves wherever the dataset uses it",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [],
-      "weight": 6,
-      "weight_basis": "placeholder"
+      "findings": []
     },
     {
       "id": "action-saturation",
       "title": "Action saturation (commands clipped at the limits)",
       "verdict": "PASS",
+      "weight": 6,
+      "weight_basis": "placeholder",
       "summary": "no continuous action dim pinned at a limit above 5% (3 dims checked)",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [],
-      "weight": 6,
-      "weight_basis": "placeholder"
+      "findings": []
     },
     {
       "id": "nan-and-normalization",
       "title": "NaN / Inf and normalization hazards",
       "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
       "summary": "no NaN/Inf; all dims have usable variance",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [],
-      "weight": 10,
-      "weight_basis": "placeholder"
+      "findings": []
     },
     {
       "id": "duplicate-and-leakage",
       "title": "Duplicate episodes / train-eval leakage",
       "verdict": "PASS",
+      "weight": 2,
+      "weight_basis": "measured",
       "summary": "no exact, partial or near duplicates",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [],
-      "weight": 2,
-      "weight_basis": "measured"
+      "findings": []
     },
     {
       "id": "outlier-episodes",
       "title": "Outlier episodes (duration, jerk, velocity, static, end-pose)",
       "verdict": "INFO",
-      "summary": "0 episode(s) to review, 5 mild, of 25; worst: [58, 135, 193, 387, 445]",
+      "weight": 3,
+      "weight_basis": "placeholder",
+      "summary": "0 episode(s) to review, 6 mild, of 25; worst: [77, 58, 135, 193, 387, 445]",
       "skipped": false,
       "skip_reason": "",
       "details": {
@@ -194,57 +198,57 @@
             "464": 0.736
           },
           "p95_jerk": {
-            "0": 0.009728018735760678,
-            "19": 0.01316403577051603,
+            "0": 0.013539928912863146,
+            "19": 0.014228761783596717,
             "39": 0.005402301242808474,
-            "58": 0.059802584728734606,
-            "77": 0.03102971268329312,
+            "58": 0.06318829907645955,
+            "77": 0.07998763683483141,
             "97": 0.03464285921974192,
-            "116": 0.02826853752872977,
-            "135": 0.01286477143676212,
+            "116": 0.030099161632656714,
+            "135": 0.016701662770120678,
             "155": 0.012060414207040304,
             "174": 0.029396183463642374,
-            "193": 0.013431342297886912,
-            "213": 0.005547787795257163,
-            "232": 0.010453285449677758,
+            "193": 0.02104187126989195,
+            "213": 0.02068404765054414,
+            "232": 0.02770627799754264,
             "251": 0.019900322682568295,
-            "271": 0.015966671119407222,
+            "271": 0.019498198842367958,
             "290": 0.012298311377801371,
             "309": 0.01387602585401348,
-            "329": 0.00859951344452783,
+            "329": 0.00873139992683314,
             "348": 0.011613722319382297,
             "367": 0.0070753263555113745,
             "387": 0.059509256620919826,
             "406": 0.007263823386286835,
             "425": 0.03268546635478247,
-            "445": 0.011796745416595582,
+            "445": 0.019540329718208644,
             "464": 0.025355897335237812
           },
           "peak_velocity": {
-            "0": 0.05649355929984375,
-            "19": 0.10227207176415601,
+            "0": 0.07935437921177457,
+            "19": 0.12113793779598854,
             "39": 0.07578764605829448,
-            "58": 0.2336410872809036,
-            "77": 0.19849350819914607,
-            "97": 0.17792735540397625,
-            "116": 0.14183088197846364,
-            "135": 0.11360146992499591,
+            "58": 0.28400435455131584,
+            "77": 0.4176255074982494,
+            "97": 0.18451860517845808,
+            "116": 0.24799298550015192,
+            "135": 0.1722294099455594,
             "155": 0.10183814317391562,
             "174": 0.16609459840103585,
-            "193": 0.10253400807997583,
+            "193": 0.13146878084529562,
             "213": 0.07966687559967706,
-            "232": 0.05748263610277941,
+            "232": 0.2241895110524934,
             "251": 0.10997956878645182,
             "271": 0.11257076357227758,
             "290": 0.12154002639339562,
             "309": 0.13298426484160003,
-            "329": 0.06947570537007625,
+            "329": 0.08161842331342363,
             "348": 0.08087341614289233,
             "367": 0.07675034807534846,
             "387": 0.16224800432406405,
             "406": 0.07179581010960434,
             "425": 0.16301490765228208,
-            "445": 0.08965956062202099,
+            "445": 0.17405432979846736,
             "464": 0.13389567419768864
           },
           "velocity_spike": {
@@ -333,6 +337,10 @@
           "58": [
             "p95_jerk"
           ],
+          "77": [
+            "p95_jerk",
+            "peak_velocity"
+          ],
           "135": [
             "static_fraction"
           ],
@@ -348,6 +356,18 @@
         }
       },
       "findings": [
+        {
+          "severity": "INFO",
+          "message": "episode 77: IQR outlier on p95_jerk, peak_velocity",
+          "episode_index": 77,
+          "details": {
+            "metrics": [
+              "p95_jerk",
+              "peak_velocity"
+            ],
+            "far_out": false
+          }
+        },
         {
           "severity": "INFO",
           "message": "episode 58: IQR outlier on p95_jerk",
@@ -403,14 +423,14 @@
             "far_out": false
           }
         }
-      ],
-      "weight": 3,
-      "weight_basis": "placeholder"
+      ]
     },
     {
       "id": "embedded-images",
       "title": "Embedded images in the parquet shards",
       "verdict": "INFO",
+      "weight": 8,
+      "weight_basis": "placeholder",
       "summary": "2 embedded image feature(s)",
       "skipped": false,
       "skip_reason": "",
@@ -427,70 +447,67 @@
             ]
           }
         }
-      ],
-      "weight": 8,
-      "weight_basis": "placeholder"
+      ]
     },
     {
       "id": "camera-coverage",
       "title": "Per-episode camera coverage",
       "verdict": "SKIP",
+      "weight": 8,
+      "weight_basis": "placeholder",
       "summary": "",
       "skipped": true,
       "skip_reason": "no video cameras declared",
       "details": {},
-      "findings": [],
-      "weight": 8,
-      "weight_basis": "placeholder"
+      "findings": []
     },
     {
       "id": "task-strings",
       "title": "Task strings",
       "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
       "summary": "25 episodes, 0 tasks in meta/tasks; 0 finding(s)",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [],
-      "weight": 8,
-      "weight_basis": "placeholder"
+      "findings": []
     },
     {
       "id": "reward-done",
       "title": "Reward / done fields",
       "verdict": "SKIP",
+      "weight": 8,
+      "weight_basis": "placeholder",
       "summary": "",
       "skipped": true,
       "skip_reason": "no reward/done fields (position-control datasets rarely have them)",
       "details": {},
-      "findings": [],
-      "weight": 8,
-      "weight_basis": "placeholder"
+      "findings": []
     },
     {
       "id": "visual-quality",
       "title": "Visual quality (blur, lighting)",
       "verdict": "SKIP",
+      "weight": 6,
+      "weight_basis": "placeholder",
       "summary": "",
       "skipped": true,
       "skip_reason": "pass --video to run (downloads MP4s; needs the video extra)",
       "details": {},
-      "findings": [],
-      "weight": 6,
-      "weight_basis": "placeholder"
+      "findings": []
     },
     {
       "id": "deployment-readiness",
       "title": "Deployment readiness (would this dataset serve a policy?)",
       "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
       "summary": "no deployment blockers found",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [],
-      "weight": 10,
-      "weight_basis": "placeholder"
+      "findings": []
     }
-  ],
-  "score_model": "tiered-v1"
+  ]
 }

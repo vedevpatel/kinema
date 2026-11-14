@@ -6,12 +6,15 @@
   "fps": 30.0,
   "truncated": true,
   "score": 29,
+  "score_model": "tiered-v1",
   "verdict": "FAIL",
   "checks": [
     {
       "id": "stats-drift",
       "title": "Stats drift (stored normalization stats vs actual data)",
       "verdict": "WARN",
+      "weight": 10,
+      "weight_basis": "placeholder",
       "summary": "worst error 4.6x the FAIL threshold",
       "skipped": false,
       "skip_reason": "",
@@ -121,14 +124,14 @@
             "reference": "per-episode stats"
           }
         }
-      ],
-      "weight": 10,
-      "weight_basis": "placeholder"
+      ]
     },
     {
       "id": "timestamp-grid",
       "title": "Timestamp grid (spacing, monotonic, start at 0)",
       "verdict": "FAIL",
+      "weight": 10,
+      "weight_basis": "placeholder",
       "summary": "1/38 episodes flagged; worst spacing deviation 0% of a period (episode 0)",
       "skipped": false,
       "skip_reason": "",
@@ -140,14 +143,14 @@
           "episode_index": 179,
           "details": {}
         }
-      ],
-      "weight": 10,
-      "weight_basis": "placeholder"
+      ]
     },
     {
       "id": "dropped-frames",
       "title": "Dropped / duplicated frames",
       "verdict": "FAIL",
+      "weight": 8,
+      "weight_basis": "placeholder",
       "summary": "0 episodes with gaps, 1 with duplicate indices, 11 with metadata length mismatches",
       "skipped": false,
       "skip_reason": "",
@@ -399,14 +402,14 @@
             ]
           }
         }
-      ],
-      "weight": 8,
-      "weight_basis": "placeholder"
+      ]
     },
     {
       "id": "calibration-drift",
       "title": "Calibration drift (action vs state on still frames)",
       "verdict": "INFO",
+      "weight": 10,
+      "weight_basis": "measured",
       "summary": "5 joint(s) + 0 gripper(s) agree; worst offset +6.4% of range (joint 4)",
       "skipped": false,
       "skip_reason": "",
@@ -461,6 +464,7 @@
           4
         ],
         "compared_grippers": [],
+        "compared_deltas": [],
         "excluded_joints": {}
       },
       "findings": [
@@ -506,26 +510,26 @@
             "kind": "irregular"
           }
         }
-      ],
-      "weight": 10,
-      "weight_basis": "measured"
+      ]
     },
     {
       "id": "idle-segments",
       "title": "Idle segments (policy learns to do nothing)",
       "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "measured",
       "summary": "no episode starts idle or idles >= 30%",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [],
-      "weight": 10,
-      "weight_basis": "measured"
+      "findings": []
     },
     {
       "id": "stuck-actuator",
       "title": "Stuck actuators (joints that never move)",
       "verdict": "WARN",
+      "weight": 6,
+      "weight_basis": "placeholder",
       "summary": "2/38 episodes with stuck joints",
       "skipped": false,
       "skip_reason": "",
@@ -556,8 +560,8 @@
           }
         },
         {
-          "severity": "WARN",
-          "message": "joint 3 (wrist_flex) does not move in 2/38 episodes [0, 199] - it moves in the others - dead or disabled motor during those recordings?",
+          "severity": "INFO",
+          "message": "joint 3 (wrist_flex) does not move in 2/38 episodes [0, 199] - it moves in the others - dead or disabled motor during those recordings? [two-level on/off command]",
           "episode_index": null,
           "details": {
             "joint": 3,
@@ -579,39 +583,51 @@
             ],
             "share": 0.02631578947368421
           }
+        },
+        {
+          "severity": "WARN",
+          "message": "gripper (action dim 3) never actuates in 2/38 pick/place episode(s): [0, 199]",
+          "episode_index": null,
+          "details": {
+            "joint": 3,
+            "episodes": [
+              0,
+              199
+            ]
+          }
         }
-      ],
-      "weight": 6,
-      "weight_basis": "placeholder"
+      ]
     },
     {
       "id": "action-saturation",
       "title": "Action saturation (commands clipped at the limits)",
       "verdict": "PASS",
+      "weight": 6,
+      "weight_basis": "placeholder",
       "summary": "no continuous action dim pinned at a limit above 5% (5 dims checked)",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [],
-      "weight": 6,
-      "weight_basis": "placeholder"
+      "findings": []
     },
     {
       "id": "nan-and-normalization",
       "title": "NaN / Inf and normalization hazards",
       "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
       "summary": "no NaN/Inf; all dims have usable variance",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [],
-      "weight": 10,
-      "weight_basis": "placeholder"
+      "findings": []
     },
     {
       "id": "duplicate-and-leakage",
       "title": "Duplicate episodes / train-eval leakage",
       "verdict": "WARN",
+      "weight": 2,
+      "weight_basis": "measured",
       "summary": "0 exact group(s), 15 pair(s) sharing motion, 0 near-duplicate pair(s)",
       "skipped": false,
       "skip_reason": "",
@@ -705,14 +721,14 @@
             ]
           }
         }
-      ],
-      "weight": 2,
-      "weight_basis": "measured"
+      ]
     },
     {
       "id": "outlier-episodes",
       "title": "Outlier episodes (duration, jerk, velocity, static, end-pose)",
       "verdict": "WARN",
+      "weight": 3,
+      "weight_basis": "placeholder",
       "summary": "3 episode(s) to review, 2 mild, of 38; worst: [179, 0, 199, 19, 124]",
       "skipped": false,
       "skip_reason": "",
@@ -1039,82 +1055,79 @@
             "far_out": false
           }
         }
-      ],
-      "weight": 3,
-      "weight_basis": "placeholder"
+      ]
     },
     {
       "id": "embedded-images",
       "title": "Embedded images in the parquet shards",
       "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
       "summary": "no image features declared",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [],
-      "weight": 8,
-      "weight_basis": "placeholder"
+      "findings": []
     },
     {
       "id": "camera-coverage",
       "title": "Per-episode camera coverage",
       "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
       "summary": "2 camera(s) over 38 episodes; 0 missing segments",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [],
-      "weight": 8,
-      "weight_basis": "placeholder"
+      "findings": []
     },
     {
       "id": "task-strings",
       "title": "Task strings",
       "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
       "summary": "38 episodes, 0 tasks in meta/tasks; 0 finding(s)",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [],
-      "weight": 8,
-      "weight_basis": "placeholder"
+      "findings": []
     },
     {
       "id": "reward-done",
       "title": "Reward / done fields",
       "verdict": "SKIP",
+      "weight": 8,
+      "weight_basis": "placeholder",
       "summary": "",
       "skipped": true,
       "skip_reason": "no reward/done fields (position-control datasets rarely have them)",
       "details": {},
-      "findings": [],
-      "weight": 8,
-      "weight_basis": "placeholder"
+      "findings": []
     },
     {
       "id": "visual-quality",
       "title": "Visual quality (blur, lighting)",
       "verdict": "SKIP",
+      "weight": 6,
+      "weight_basis": "placeholder",
       "summary": "",
       "skipped": true,
       "skip_reason": "pass --video to run (downloads MP4s; needs the video extra)",
       "details": {},
-      "findings": [],
-      "weight": 6,
-      "weight_basis": "placeholder"
+      "findings": []
     },
     {
       "id": "deployment-readiness",
       "title": "Deployment readiness (would this dataset serve a policy?)",
       "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
       "summary": "no deployment blockers found",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [],
-      "weight": 10,
-      "weight_basis": "placeholder"
+      "findings": []
     }
-  ],
-  "score_model": "tiered-v1"
+  ]
 }
