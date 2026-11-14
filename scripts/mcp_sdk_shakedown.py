@@ -113,29 +113,44 @@ async def main():
                     read_timeout_seconds=300.0,
                 )
 
-            async def cancel_soon(res):
-                while not cancel_progress:
-                    await anyio.sleep(0.05)
-                await session.send_notification(types.CancelledNotification(
-                    method="notifications/cancelled",
-                    params=types.CancelledNotificationParams(
-                        requestId=rec.last_call_id,
-                        reason="shakedown cancel")))
-
+            # MCP: a cancelled request gets NO response, so the check is that
+            # nothing arrives for it after the cancel - and the session lives
+            quiet_s = 20.0
+            holder = {}
             async with anyio.create_task_group() as tg:
-                holder = {}
 
                 async def runner():
                     holder["res"] = await run_big()
+                    tg.cancel_scope.cancel()  # answered: nothing left to wait for
+
+                async def cancel_then_wait():
+                    while not cancel_progress:
+                        await anyio.sleep(0.05)
+                    await session.send_notification(types.CancelledNotification(
+                        method="notifications/cancelled",
+                        params=types.CancelledNotificationParams(
+                            requestId=rec.last_call_id,
+                            reason="shakedown cancel")))
+                    await anyio.sleep(quiet_s)
+                    tg.cancel_scope.cancel()  # stays unanswered: abandon the call
 
                 tg.start_soon(runner)
-                tg.start_soon(cancel_soon, None)
-            res = holder["res"]
-            rtxt = res.content[0].text if res.content else ""
-            cancelled = res.is_error or '"cancelled": true' in rtxt or "cancelled" in rtxt.lower()[:80]
-            report("mid-run cancel", cancelled,
-                   f"isError={res.is_error} progress={len(cancel_progress)} text={rtxt[:120]!r}"
-                   + ("" if cancelled else " (run finished before the cancel landed - race, not a hang)"))
+                tg.start_soon(cancel_then_wait)
+            res = holder.get("res")
+            if res is None:
+                report("mid-run cancel", True,
+                       f"no response within {quiet_s:.0f}s of the cancel; progress={len(cancel_progress)}")
+            else:
+                rtxt = res.content[0].text if res.content else ""
+                report("mid-run cancel", False,
+                       f"got a response: isError={res.is_error} text={rtxt[:120]!r} (either the run "
+                       "finished before the cancel landed - a race, not a hang - or a cancelled "
+                       "call was answered)")
+            try:
+                await session.send_ping()
+                report("session alive after cancel", True)
+            except Exception as e:  # noqa: BLE001
+                report("session alive after cancel", False, str(e))
 
             # diagnose_finetune on a real failing scenario
             r = await session.call_tool(

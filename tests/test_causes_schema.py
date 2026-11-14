@@ -55,11 +55,20 @@ def test_clusters_have_keywords_and_checks():
         assert cluster["checks"], name
 
 
-def test_message_contains_needles_exist_in_check_source():
-    """Review finding 14: a cause whose indicates.message_contains matches
-    nothing the check can emit silently demotes its findings to
-    'outside coverage'. Pin every needle against the check's own source so
-    rewording a message breaks the build instead of the diagnosis."""
+def test_confidence_follows_the_severity_rule():
+    """The spec's mapping: FAIL -> high, WARN -> medium. A WARN-level cause
+    claiming high confidence (review finding 5) contradicts it."""
+    rule = {"FAIL": "high", "WARN": "medium"}
+    for cause in CAUSES["causes"]:
+        for sev, conf in cause["confidence"].items():
+            assert conf == rule[sev], f"{cause['id']}: {sev} -> {conf}"
+
+
+def test_every_message_needle_is_emitted_by_its_check():
+    """message_contains is matched against finding text at runtime; a check
+    whose wording changed would silently stop matching and demote its cause
+    to 'outside coverage'. The needle must appear in the source of the
+    module that defines the check (review finding 14)."""
     import inspect
 
     by_id = {c.id: c for c in ALL_CHECKS}
@@ -67,9 +76,6 @@ def test_message_contains_needles_exist_in_check_source():
         needle = cause["indicates"].get("message_contains")
         if not needle:
             continue
-        module = inspect.getmodule(type(by_id[cause["indicates"]["check_id"]]))
-        source = inspect.getsource(module)
-        assert needle in source, (
-            f"{cause['id']}: message_contains {needle!r} appears in no message "
-            f"its check can emit"
-        )
+        check = by_id[cause["indicates"]["check_id"]]
+        src = inspect.getsource(inspect.getmodule(type(check)))
+        assert needle in src, f"{cause['id']}: {needle!r} not emitted by {check.id}"

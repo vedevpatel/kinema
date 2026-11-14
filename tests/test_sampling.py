@@ -251,12 +251,16 @@ def test_spilled_load_leaves_nothing_in_the_temp_dir(tmp_path, monkeypatch):
 def test_cancelled_spilled_load_leaves_nothing(tmp_path, monkeypatch):
     import tempfile
 
+    import pyarrow.parquet as pq
     import pytest
 
-    from kinema.dataset import LoadCancelledError, load_dataset
+    from kinema.dataset import CancelledError, load_dataset
     from kinema.fixtures.synth import make_dataset
 
     root = make_dataset(tmp_path / "ds", episodes=12)
+    # several row groups, so the cancel lands after some frames were spilled
+    for f in (root / "data").rglob("*.parquet"):
+        pq.write_table(pq.read_table(f), f, row_group_size=50)
     tmp = tmp_path / "tmp"
     tmp.mkdir()
     monkeypatch.setattr(tempfile, "tempdir", str(tmp))
@@ -274,8 +278,7 @@ def test_cancelled_spilled_load_leaves_nothing(tmp_path, monkeypatch):
 
     probe = CancelAt()
     load_dataset(str(root), cancelled=probe)
-    assert probe.calls >= 2  # before the load + once per shard
-    # cancel at the last checkpoint: the spill dir already exists by then
-    with pytest.raises(LoadCancelledError):
-        load_dataset(str(root), cancelled=CancelAt(at=probe.calls))
+    assert probe.calls > 4  # 2 pre-read checkpoints + one per row group
+    with pytest.raises(CancelledError, match="while reading"):
+        load_dataset(str(root), cancelled=CancelAt(at=probe.calls))  # the last row group
     assert _spill_dirs(tmp) == []

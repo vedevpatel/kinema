@@ -46,25 +46,24 @@ OVERRIDEABLE_POLICY_FIELDS = (
 )
 
 
-def _check_override_type(key: str, val) -> None:
-    """A wrong-typed override must fail loudly: {"quantile_norm": "false"}
-    is a truthy string and would silently keep the quantile cause firing."""
+def _override_problem(key: str, val) -> str | None:
+    """Why an override value has the wrong type, or None when it is fine.
+    Types are checked, not coerced: a string "false" is truthy, so an
+    unchecked quantile_norm="false" would silently keep quantile norm on."""
     if key == "chunk_size":
-        # bool is an int subclass; an explicit True here is a typo, not 1
-        if not isinstance(val, int) or isinstance(val, bool) or val <= 0:
-            raise ValueError(f"policy override 'chunk_size' must be a positive integer, got {val!r}")
+        if isinstance(val, bool) or not isinstance(val, int) or val < 1:
+            return "a positive integer"
+    elif key in ("quantile_norm", "needs_images", "needs_language"):
+        if not isinstance(val, bool):
+            return "a boolean (true/false, not a string)"
     elif key == "typical_resolution":
-        ok = (
+        if not (
             isinstance(val, (list, tuple))
             and len(val) == 2
             and all(isinstance(v, int) and not isinstance(v, bool) and v > 0 for v in val)
-        )
-        if not ok:
-            raise ValueError(
-                f"policy override 'typical_resolution' must be [width, height] integers, got {val!r}"
-            )
-    elif not isinstance(val, bool):
-        raise ValueError(f"policy override {key!r} must be a boolean, got {val!r}")
+        ):
+            return "a [width, height] pair of positive integers"
+    return None
 
 
 def canonical_policy_name(name: str) -> str:
@@ -92,7 +91,9 @@ def resolve_policy(name: str | None, overrides: dict | None = None):
                 f"unknown policy override {key!r} "
                 f"(valid: {', '.join(OVERRIDEABLE_POLICY_FIELDS)})"
             )
-        _check_override_type(key, val)
+        problem = _override_problem(key, val)
+        if problem:
+            raise ValueError(f"policy override {key!r} must be {problem}, got {val!r}")
         merged[key] = val
     return canon, merged
 
@@ -122,12 +123,15 @@ class DeploymentReadinessCheck(Check):
     title = "Deployment readiness (would this dataset serve a policy?)"
 
     def _quantile_entry(self, ctx, feat: str) -> dict:
-        """The stats entry a quantile normalizer actually consumes.
+        """The stats entry to test for q01/q99.
 
-        Consumers of meta/stats.json read the raw file, so it wins when it
-        carries quantiles; the effective stats (per-episode aggregates on
-        v2.1) keep only mean/std/min/max/count and would cry wolf about
-        missing quantiles on datasets whose stats.json ships them."""
+        The raw meta/stats.json wins when it carries quantiles: the
+        effective stats (per-episode aggregates on v2.1) keep only
+        mean/std/min/max/count and would report quantiles missing from a
+        dataset whose stats.json ships them. Which file a given training
+        pipeline actually reads varies by pipeline and is not something
+        this check can see - pipelines that compute their own norm stats
+        read neither."""
         raw = ctx.stats_json.get(feat) if getattr(ctx, "stats_json", None) else None
         if isinstance(raw, dict) and "q01" in raw and "q99" in raw:
             return raw
@@ -182,8 +186,8 @@ class DeploymentReadinessCheck(Check):
                             Severity.WARN,
                             f"{pname} normalizes with q01/q99 quantiles but "
                             f"{ctx.stats_source} has none for {feat} - recompute stats "
-                            "with quantiles or the openpi normalizer will estimate "
-                            "them itself",
+                            "with quantiles, unless your training pipeline computes its "
+                            "own norm stats",
                             details={"feature": feat, "policy": pname, "stats": sorted(entry)},
                         )
                     )

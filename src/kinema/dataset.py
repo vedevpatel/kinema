@@ -14,7 +14,6 @@ import json
 import os
 import shutil
 import tempfile
-import threading
 import weakref
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -49,11 +48,19 @@ def _resolve_keys(info: dict) -> dict[str, str]:
     return out
 
 
-class LoadCancelledError(Exception):
-    """The client cancelled while the dataset was still loading.
+class DatasetError(Exception):
+    pass
 
-    Raised inside load_dataset's frame-read loop; the MCP layer turns it
-    into the same CancelledError as a between-checks cancellation."""
+
+class CancelledError(Exception):
+    """The caller cancelled the load (or the run built on it) - raised at
+    the next cooperative checkpoint: after the download, between row groups
+    while reading, between checks."""
+
+
+def _raise_if_cancelled(cancelled, where: str) -> None:
+    if cancelled is not None and cancelled.is_set():
+        raise CancelledError(f"cancelled {where}")
 
 
 def _remove_quietly(path: str) -> None:
@@ -69,11 +76,10 @@ def _spill_map(path: str, dtype, shape) -> np.memmap:
 
     POSIX: the file is unlinked as soon as it is mapped. The mapping keeps
     the data reachable, and the kernel frees the space when the last array
-    view is gone - even if the process is killed. Without this, every
-    spilled load left its full frame copy under kinema-frames-* forever
-    (gigabytes per call in a long-lived MCP server). Windows cannot unlink
-    a mapped file, so there removal is deferred until the map is
-    garbage-collected (best effort)."""
+    view is gone - even if the process is killed. Without this, a
+    long-lived MCP server left one full frame copy in the temp dir per
+    large load. Windows cannot unlink a mapped file, so there removal is
+    deferred until the map is garbage-collected (best effort)."""
     m = np.memmap(path, dtype=dtype, mode="w+", shape=shape)
     if os.name == "posix":
         os.unlink(path)
@@ -82,8 +88,36 @@ def _spill_map(path: str, dtype, shape) -> np.memmap:
     return m
 
 
-class DatasetError(Exception):
-    pass
+def _extract_zip(p: Path) -> Path:
+    """Extract a .zip dataset once per (path, size, mtime) and reuse it.
+
+    A long-lived MCP server sees the same archive many times; extracting to
+    a fresh temp dir per call leaked one full copy per call. Extraction
+    lands in a scratch dir and is renamed into place, so the final dir
+    existing means the extraction completed."""
+    import hashlib
+    import zipfile
+
+    st = p.stat()
+    key = hashlib.sha1(f"{p.resolve()}:{st.st_size}:{st.st_mtime_ns}".encode()).hexdigest()[:16]
+    final = Path(tempfile.gettempdir()) / f"kinema-zip-{key}"
+    if not final.is_dir():
+        scratch = Path(tempfile.mkdtemp(prefix=f"kinema-zip-{key}-partial-"))
+        try:
+            with zipfile.ZipFile(p) as z:
+                z.extractall(scratch)
+            try:
+                os.rename(scratch, final)
+            except OSError:
+                if not final.is_dir():  # not a lost race with a concurrent extraction
+                    raise
+        finally:
+            shutil.rmtree(scratch, ignore_errors=True)
+    # unwrap a single top-level directory
+    children = list(final.iterdir())
+    if len(children) == 1 and children[0].is_dir():
+        return children[0]
+    return final
 
 
 _FRAME_BUDGET_ENV = "KINEMA_FRAME_BUDGET_BYTES"
@@ -148,9 +182,6 @@ class DatasetContext:
     video_segments: dict = field(default_factory=dict, repr=False)
     _row_slices: dict = field(default_factory=dict, repr=False)
     _meta_index: dict = field(default_factory=dict, repr=False)
-    # temp dir a .zip source was extracted into; the runner deletes it
-    temp_extract_dir: str = ""
-
 
     @property
     def total_episodes(self) -> int:
@@ -313,33 +344,17 @@ def _target_video_files(root: Path, max_episodes: int) -> list[str] | None:
 
 
 def _resolve_source(
-    source: str,
-    video: bool = False,
-    max_episodes: int | None = None,
-    progress=None,
-) -> tuple[Path, str | None, str | None]:
-    """Return (local_root, repo_id, temp_extract_dir). Downloads from the Hub
-    when needed. temp_extract_dir is set only for .zip sources and is owned
-    by the caller (diagnose cleans it up after the run)."""
+    source: str, video: bool = False, max_episodes: int | None = None
+) -> tuple[Path, str | None]:
+    """Return (local_root, repo_id). Downloads from the Hub when needed."""
     src = source.strip()
     if src.startswith("hf://"):
         src = src[len("hf://"):]
     p = Path(src).expanduser()
     if p.exists():
         if p.suffix == ".zip":
-            import zipfile
-            import tempfile
-
-            out = Path(tempfile.mkdtemp(prefix="kinema-ds-"))
-            extract_dir = str(out)
-            with zipfile.ZipFile(p) as z:
-                z.extractall(out)
-            # unwrap a single top-level directory
-            children = list(out.iterdir())
-            if len(children) == 1 and children[0].is_dir():
-                out = children[0]
-            return out, None, extract_dir
-        return p, None, None
+            return _extract_zip(p), None
+        return p, None
     # Treat as a Hub repo id.
     if "/" not in src:
         raise DatasetError(
@@ -347,8 +362,6 @@ def _resolve_source(
         )
     from huggingface_hub import snapshot_download
 
-    if progress is not None:
-        progress(f"downloading {src} from the Hugging Face Hub")
     # owner/name@revision pins a branch, tag or commit (reproducible audits)
     revision = None
     if "@" in src:
@@ -381,7 +394,7 @@ def _resolve_source(
             )
     except Exception as e:  # noqa: BLE001 - surface a clean message
         raise DatasetError(f"could not download {src} from the Hugging Face Hub: {e}")
-    return local, src, None
+    return local, src
 
 
 def _load_episode_meta(root: Path) -> list[EpisodeMeta]:
@@ -571,20 +584,14 @@ def load_dataset(
     source: str,
     max_episodes: int | None = None,
     video: bool = False,
-    cancelled: threading.Event | None = None,
-    progress=None,
+    cancelled=None,
 ) -> DatasetContext:
-    """Load a LeRobot dataset for auditing.
-
-    cancelled, when given, is checked between frame-read batches - the load
-    is the long part of an MCP run, so a cancellation that only lands after
-    it would be useless. progress, when given, is called with a stage
-    message (Hub download start, per-shard reads)."""
-    if cancelled is not None and cancelled.is_set():
-        raise LoadCancelledError("cancelled before the dataset load started")
-    root, repo_id, extract_dir = _resolve_source(
-        source, video=video, max_episodes=max_episodes, progress=progress
-    )
+    """Load a LeRobot dataset. `cancelled` (a threading.Event) is checked
+    cooperatively - after the download and between row groups - and raises
+    CancelledError; a Hub download in flight is not interrupted."""
+    _raise_if_cancelled(cancelled, "before loading")
+    root, repo_id = _resolve_source(source, video=video, max_episodes=max_episodes)
+    _raise_if_cancelled(cancelled, "after download")
     info_path = root / "meta" / "info.json"
     if not info_path.exists():
         raise DatasetError(f"{root} is not a LeRobot dataset (meta/info.json missing)")
@@ -736,14 +743,11 @@ def load_dataset(
     # (decompressed) group - on huge shards (DROID-scale, finding #11)
     # that alone OOMs small machines even when the frame arrays spill.
     try:
-        n_files = len(plan)
-        for fi, (f, pf, groups) in enumerate(plan):
-            if cancelled is not None and cancelled.is_set():
-                raise LoadCancelledError(f"cancelled during frame reads ({fi}/{n_files} shards)")
-            if progress is not None:
-                progress(f"reading shard {fi + 1}/{n_files}")
+        for f, pf, groups in plan:
             cols = [c for c in wanted_cols if c in pf.schema_arrow.names]
             for g in groups:
+                if cancelled is not None and cancelled.is_set():
+                    raise CancelledError(f"cancelled while reading {f.name}")
                 try:
                     for t in pf.iter_batches(batch_size=_READ_BATCH_ROWS, row_groups=[g], columns=cols):
                         t = t.filter(pc.is_in(t.column("episode_index").cast(pa.int64()), value_set=value_set))
@@ -902,5 +906,4 @@ def load_dataset(
         unreadable_files=unreadable,
         state_names=feature_names(info, keys[STATE_KEY]),
         action_names=feature_names(info, keys[ACTION_KEY]),
-        temp_extract_dir=extract_dir or "",
     )

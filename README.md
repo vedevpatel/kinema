@@ -123,7 +123,8 @@ Three tools:
 
 - `diagnose_finetune(dataset, policy, symptom, policy_overrides?, max_episodes?)` -
   ranks the data causes that explain a failed run, each with check evidence, a
-  docs citation and a next step. Scope is deliberately narrow: the pi0 family
+  docs citation and a next step. Every check runs whatever the symptom says;
+  the symptom only decides which causes rank first. Scope is deliberately narrow: the pi0 family
   (`pi0`, `pi05`/`pi0.5`, `pi0_fast`) and two failure-mode clusters -
   normalization/stats mismatch and idle/static segments. Training with a custom
   chunk size or mean/std normalization? Pass `policy_overrides`
@@ -131,8 +132,14 @@ Three tools:
   against *your* setup, not the declared defaults.
 - `run_checks(dataset, checks?, ...)` - the raw engine over MCP: a capped summary
   (verdict, score, top findings) sized for client output limits, with the full
-  JSON report written to a file.
+  JSON report written to a file (`<dataset>.kinema-report-<timestamp>.json` next
+  to a local dataset, else `~/.cache/kinema/reports/`; an explicit `report_path`
+  must be absolute and only replaces an earlier kinema report).
 - `list_checks()` - the check catalog from the registry, with docs links.
+
+`dataset` is an absolute local path (directory or `.zip`) or a Hub repo id
+(`owner/name`). Relative paths are rejected: the server runs in whatever
+directory your client launched it from, not yours.
 
 The answers show their work instead of claiming your data is fine: every answer
 enumerates which checks ran, which skipped and why, whether the load was sampled,
