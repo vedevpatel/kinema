@@ -1,4 +1,4 @@
-"""Engine fingerprint: a hash of the code that decides verdicts.
+"""Engine fingerprint: a hash of the code and data that decide verdicts.
 
 Stored alongside every leaderboard result so a results cache can tell
 when it was produced by different check logic and must be re-audited -
@@ -7,6 +7,9 @@ bumping a version string by hand is exactly the step that gets forgotten.
 The hash covers the code's syntax tree with docstrings removed, so
 comments, docstrings and formatting do not trigger a full re-audit (about
 two nightly runs); anything that can change a verdict or a message does.
+policies.json and causes.json are hashed as content: a changed policy
+declaration changes deployment-readiness verdicts, and a changed cause
+map changes the MCP answers built on the same checks.
 """
 
 from __future__ import annotations
@@ -18,6 +21,9 @@ from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parent
 _ENGINE_FILES = ("dataset.py", "stats.py", "checks/*.py")
+# data the verdicts depend on: policies.json drives deployment-readiness,
+# causes.json drives the MCP diagnosis answers built on the same checks
+_ENGINE_DATA = ("policies.json", "causes.json")
 
 
 def _strip_docstrings(tree: ast.AST) -> ast.AST:
@@ -43,4 +49,9 @@ def engine_version() -> str:
         for p in sorted(_ROOT.glob(pattern)):
             h.update(p.relative_to(_ROOT).as_posix().encode())
             h.update(_normalized(p.read_text()).encode())
+    for name in _ENGINE_DATA:
+        p = _ROOT / name
+        if p.exists():
+            h.update(name.encode())
+            h.update(p.read_bytes())
     return h.hexdigest()[:12]

@@ -217,13 +217,22 @@ a vision policy), task strings for language-conditioned ones, and an INFO
 note when a camera is smaller than the resolution the policy is usually
 trained at.
 
+The quantile check reads the raw `meta/stats.json` first, because that is
+the file the normalizer consumes (openpi reads it directly): a v2.1 dataset
+whose stats.json ships q01/q99 is fine even though the per-episode
+aggregate stats keep only mean/std/min/max/count. Only when stats.json
+lacks quantiles does the WARN fire.
+
 What each policy expects is declared in `src/kinema/policies.json` - chunk
-size, normalization, camera/language needs, typical resolution. Adding or
-updating a policy is a JSON edit. An unknown `--policy` still runs the
-policy-agnostic checks and says so.
+size, normalization, camera/language needs, typical resolution, and aliases
+(`pi0.5` resolves to `pi05`). Adding or updating a policy is a JSON edit.
+An unknown `--policy` still runs the policy-agnostic checks and says so.
+The MCP copilot can override any declaration per call (`policy_overrides`),
+so a custom training config - chunk 10, mean/std norm - is diagnosed
+against its own assumptions; the declared defaults are untouched.
 
 Limit: the declarations are the documented defaults; a policy trained with a
-custom config may disagree with them, which is what `--config` and the JSON
-file are for.
+custom config may disagree with them, which is what `policy_overrides` and
+the JSON file are for.
 
 No `CheckConfig` knobs; runtime flags `--policy` and `--video`.

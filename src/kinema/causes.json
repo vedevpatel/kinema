@@ -1,0 +1,112 @@
+{
+  "version": 1,
+  "clusters": {
+    "normalization": {
+      "keywords": ["normaliz", "stats", "scale", "scaling", "scaled", "quantile", "q01", "q99", "drift", "distribution"],
+      "checks": ["stats-drift", "nan-and-normalization", "deployment-readiness"]
+    },
+    "idle": {
+      "keywords": ["doesn't move", "does not move", "not moving", "stays still", "stands still", "no movement", "frozen", "freezes", "freeze", "won't move", "wont move", "barely moves", "static"],
+      "checks": ["idle-segments", "stuck-actuator"]
+    }
+  },
+  "causes": [
+    {
+      "id": "stored-stats-drift",
+      "cluster": "normalization",
+      "title": "Stored normalization stats disagree with the data",
+      "indicates": {"check_id": "stats-drift", "min_severity": "WARN"},
+      "confidence": {"FAIL": "high", "WARN": "medium"},
+      "explanation": "Every training run and every inference call normalizes with the numbers in meta/stats.json. When those numbers drift from the data, the policy trains on wrong-scaled inputs and fails with a clean loss curve - the openpi #906 pattern, the top community diagnosis for 'low loss, failed robot' on {policy}.",
+      "docs_section": "stats-drift",
+      "next_step": "Recompute meta/stats.json from the data (LeRobot aggregation, or openpi's compute_norm_stats.py for openpi training) and retrain; if the stats came from a converter, fix the converter."
+    },
+    {
+      "id": "missing-quantile-stats",
+      "cluster": "normalization",
+      "title": "The policy normalizes with q01/q99 but the stats have none",
+      "indicates": {"check_id": "deployment-readiness", "min_severity": "WARN", "message_contains": "q01/q99"},
+      "confidence": {"WARN": "high"},
+      "explanation": "{policy} normalizes with q01/q99 quantiles. Without them in the stats the run either crashes on the missing keys or silently falls back to an estimate computed differently than LeRobot would - inputs land in a different range than training assumed.",
+      "docs_section": "deployment-readiness",
+      "next_step": "Recompute stats with quantiles (openpi reads meta/stats.json directly), or confirm the training config recomputes its own norm stats at train time - in which case this finding does not apply."
+    },
+    {
+      "id": "missing-stats",
+      "cluster": "normalization",
+      "title": "No normalization stats at all",
+      "indicates": {"check_id": "deployment-readiness", "min_severity": "FAIL", "message_contains": "no normalization stats"},
+      "confidence": {"FAIL": "high"},
+      "explanation": "There are no stats to normalize {policy}'s inputs or outputs with. Training may still run (some pipelines compute their own), but inference without the same stats produces garbage actions.",
+      "docs_section": "deployment-readiness",
+      "next_step": "Generate meta/stats.json for the dataset and make sure the training run and the deployment load the same stats."
+    },
+    {
+      "id": "zero-variance-dims",
+      "cluster": "normalization",
+      "title": "Constant or near-constant dims break normalization",
+      "indicates": {"check_id": "nan-and-normalization", "min_severity": "WARN", "message_contains": "std"},
+      "confidence": {"WARN": "medium"},
+      "explanation": "A zero-variance dim divides by ~0 during normalization (Inf/NaN batches) or amplifies sensor noise into a full-scale signal the policy wastes capacity fitting.",
+      "docs_section": "nan-and-normalization",
+      "next_step": "Drop constant dims from the features (and the policy's input dims), or fix the recording so those dims carry signal; then recompute stats."
+    },
+    {
+      "id": "nan-values",
+      "cluster": "normalization",
+      "title": "NaN or Inf values in the data",
+      "indicates": {"check_id": "nan-and-normalization", "min_severity": "FAIL", "message_contains": "NaN"},
+      "confidence": {"FAIL": "high"},
+      "explanation": "NaN/Inf frames poison the batch statistics and the loss; training can appear to converge on the surviving batches while the policy learns corrupted input statistics.",
+      "docs_section": "nan-and-normalization",
+      "next_step": "Find the source in recording or conversion, drop the affected episodes (or repair the frames), recompute stats, and retrain."
+    },
+    {
+      "id": "chunk-too-short",
+      "cluster": "normalization",
+      "title": "Episodes shorter than the policy's action chunk",
+      "indicates": {"check_id": "deployment-readiness", "min_severity": "WARN", "message_contains": "action chunk"},
+      "confidence": {"WARN": "medium"},
+      "explanation": "{policy} predicts action chunks; episodes shorter than the chunk train on padded or truncated actions, teaching the policy boundary artifacts instead of task behavior.",
+      "docs_section": "deployment-readiness",
+      "next_step": "Drop or merge the short episodes, or train with a smaller action horizon (pass it back as a policy override here to re-check)."
+    },
+    {
+      "id": "shape-mismatch",
+      "cluster": "normalization",
+      "title": "info.json shapes disagree with the data",
+      "indicates": {"check_id": "deployment-readiness", "min_severity": "FAIL", "message_contains": "declares shape"},
+      "confidence": {"FAIL": "high"},
+      "explanation": "The declared feature shapes are what the policy builds its input/output layers from; a mismatch means the policy sees a different layout than the metadata promises - training against the metadata fails or silently truncates dims.",
+      "docs_section": "deployment-readiness",
+      "next_step": "Fix meta/info.json to the actual array shapes (or fix the conversion that wrote it) before training."
+    },
+    {
+      "id": "idle-heavy-episodes",
+      "cluster": "idle",
+      "title": "Long idle segments teach the policy to do nothing",
+      "indicates": {"check_id": "idle-segments", "min_severity": "WARN"},
+      "confidence": {"WARN": "medium"},
+      "explanation": "Episodes with long stretches where no joint moves teach {policy} that doing nothing is a good action - the classic 'robot stays still at inference' postmortem. Idle at the end of episodes is worse: it teaches stopping early.",
+      "docs_section": "idle-segments",
+      "next_step": "Trim the idle segments (or the worst episodes) and retrain; if the idling is an artifact of how demonstrations start/end, fix the recording flow."
+    },
+    {
+      "id": "stuck-or-unused-joint",
+      "cluster": "idle",
+      "title": "A joint barely moves - or never moves",
+      "indicates": {"check_id": "stuck-actuator", "min_severity": "WARN"},
+      "confidence": {"WARN": "medium"},
+      "explanation": "A joint that never moves teaches {policy} to ignore that degree of freedom; a gripper that never actuates in pick/place episodes means the demonstrations never show the grasp the task needs.",
+      "docs_section": "stuck-actuator",
+      "next_step": "Check whether the joint/gripper is an unused DOF (fine - consider dropping the dim) or a recording/hardware failure (re-record); a commanded joint whose follower never moves points at a dead or blocked motor."
+    }
+  ],
+  "blind_spots": [
+    "Unit conventions (degrees vs radians): stats computed on the same data always agree, so self-consistent wrong units are invisible to every check.",
+    "Joint-order mismatches between the dataset's layout and the policy's expected layout.",
+    "Absolute-vs-delta action space mismatches that only appear at inference (calibration-drift classifies those dims and sits them out by design).",
+    "Train-fps vs the deployment control-loop frequency (timestamp-grid checks internal consistency only).",
+    "Training pipelines that recompute normalization stats at train time with different code than LeRobot's aggregation (e.g. an openpi run over stats the dataset never ships)."
+  ]
+}

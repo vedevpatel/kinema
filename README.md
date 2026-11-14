@@ -95,9 +95,52 @@ language-conditioned ones, and a note when a camera is smaller than the resoluti
 policy is usually trained at.
 
 What each policy expects is declared in `src/kinema/policies.json` (chunk size,
-normalization, camera/language needs, typical resolution). Adding or updating a policy
-is a JSON edit, no code change; an unknown `--policy` still gets the policy-agnostic
-checks.
+normalization, camera/language needs, typical resolution; aliases like `pi0.5`
+resolve to their family entry). Adding or updating a policy is a JSON edit, no
+code change; an unknown `--policy` still gets the policy-agnostic checks.
+
+## The fine-tune copilot (MCP)
+
+`kinema mcp` starts an MCP server over stdio - the "why did my fine-tune fail"
+layer on top of the same checks. Point your MCP client at it:
+
+```json
+{
+  "mcpServers": {
+    "kinema": {
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/vedevpatel/kinema", "kinema", "mcp"]
+    }
+  }
+}
+```
+
+(The plain `uvx kinema mcp` form works once the package is on PyPI - a planned
+milestone, not done yet. Until then a `pip install -e .` checkout works too:
+`"command": "kinema", "args": ["mcp"]`.)
+
+Three tools:
+
+- `diagnose_finetune(dataset, policy, symptom, policy_overrides?, max_episodes?)` -
+  ranks the data causes that explain a failed run, each with check evidence, a
+  docs citation and a next step. Scope is deliberately narrow: the pi0 family
+  (`pi0`, `pi05`/`pi0.5`, `pi0_fast`) and two failure-mode clusters -
+  normalization/stats mismatch and idle/static segments. Training with a custom
+  chunk size or mean/std normalization? Pass `policy_overrides`
+  (`{"chunk_size": 10, "quantile_norm": false}`) and the diagnosis computes
+  against *your* setup, not the declared defaults.
+- `run_checks(dataset, checks?, ...)` - the raw engine over MCP: a capped summary
+  (verdict, score, top findings) sized for client output limits, with the full
+  JSON report written to a file.
+- `list_checks()` - the check catalog from the registry, with docs links.
+
+The answers show their work instead of claiming your data is fine: every answer
+enumerates which checks ran, which skipped and why, whether the load was sampled,
+which action dims sat out, any findings outside the v0 clusters (verbatim), and
+the blind spots no check covers (unit conventions, joint order, delta-vs-absolute
+at inference, control-loop fps). Cause entries live in `src/kinema/causes.json` -
+adding a failure-mode cluster or a policy is a JSON edit, and a schema test keeps
+the map honest against the engine.
 
 ## Tuning the thresholds
 
@@ -144,9 +187,6 @@ kinema check /tmp/demo
 
 ## Roadmap
 
-- **Fine-tune failure copilot (MCP)**: dataset + training config + symptom in, ranked
-  probable causes with evidence out. The checks above are the engine; the copilot is the
-  diagnosis layer.
 - Auto-fix suggestions with safe rewrites (stats recompute, idle trimming).
 - Video checks on the leaderboard: v3 shared-MP4 attribution works locally (`--video`); the nightly board skips it because the MP4s run to hundreds of MB per camera.
 

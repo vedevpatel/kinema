@@ -4,6 +4,7 @@
                       [--json [PATH]] [--markdown [PATH]] [--fail-on fail|warn]
   <name> report REPORT.json [--markdown [PATH]]
   <name> synth PATH [--episodes N] [--defects a,b,c]
+  <name> mcp
 
 DATASET is a local directory, a .zip, or a Hub repo id (owner/name or
 hf://owner/name, optionally @revision to pin a branch, tag or commit).
@@ -101,6 +102,12 @@ def _synth(args) -> int:
     return 0
 
 
+def _mcp(args) -> int:
+    from kinema.mcp_server import main as serve
+
+    return serve()
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         prog="kinema",
@@ -111,7 +118,7 @@ def main(argv=None) -> int:
 
     p_check = sub.add_parser("check", help="run all checks on a dataset")
     p_check.add_argument("source", help="local dir, .zip, or Hub repo id (owner/name)")
-    p_check.add_argument("--policy", default=None, help="target policy: act, diffusion, smolvla, pi0, pi0_fast")
+    p_check.add_argument("--policy", default=None, help="target policy: act, diffusion, smolvla, pi0, pi05, pi0_fast")
     p_check.add_argument("--video", action="store_true", help="include video checks (needs the video extra)")
     p_check.add_argument("--max-episodes", type=int, default=None, help="audit a sample of N episodes, spread across the dataset (Hub downloads fetch only the shards they live in)")
     p_check.add_argument("--config", default=None, help="JSON file of threshold overrides (CheckConfig field names)")
@@ -130,6 +137,9 @@ def main(argv=None) -> int:
     p_synth.add_argument("--episodes", type=int, default=24)
     p_synth.add_argument("--defects", default="", help="comma-separated defect names")
     p_synth.set_defaults(func=_synth)
+
+    p_mcp = sub.add_parser("mcp", help="start the MCP server on stdio (the fine-tune copilot)")
+    p_mcp.set_defaults(func=_mcp)
 
     args = parser.parse_args(argv)
     return args.func(args)
