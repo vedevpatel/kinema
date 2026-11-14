@@ -12,8 +12,10 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import tempfile
 import threading
+import weakref
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -52,6 +54,32 @@ class LoadCancelledError(Exception):
 
     Raised inside load_dataset's frame-read loop; the MCP layer turns it
     into the same CancelledError as a between-checks cancellation."""
+
+
+def _remove_quietly(path: str) -> None:
+    for rm in (os.unlink, lambda q: os.rmdir(os.path.dirname(q))):
+        try:
+            rm(path)
+        except OSError:
+            pass
+
+
+def _spill_map(path: str, dtype, shape) -> np.memmap:
+    """A writable memmap whose disk space goes away with its last view.
+
+    POSIX: the file is unlinked as soon as it is mapped. The mapping keeps
+    the data reachable, and the kernel frees the space when the last array
+    view is gone - even if the process is killed. Without this, every
+    spilled load left its full frame copy under kinema-frames-* forever
+    (gigabytes per call in a long-lived MCP server). Windows cannot unlink
+    a mapped file, so there removal is deferred until the map is
+    garbage-collected (best effort)."""
+    m = np.memmap(path, dtype=dtype, mode="w+", shape=shape)
+    if os.name == "posix":
+        os.unlink(path)
+    else:
+        weakref.finalize(m, _remove_quietly, path)
+    return m
 
 
 class DatasetError(Exception):
@@ -689,9 +717,9 @@ def load_dataset(
             arr = arr.reshape(-1, 1)
         if spill:
             if name not in maps:
-                maps[name] = np.memmap(
+                maps[name] = _spill_map(
                     os.path.join(spill_dir, name.replace("/", "_") + ".dat"),
-                    dtype=dtypes[name], mode="w+", shape=(row_bound, arr.shape[1]),
+                    dtypes[name], (row_bound, arr.shape[1]),
                 )
             m = maps[name]
             m[n:n + arr.shape[0]] = arr
@@ -707,44 +735,51 @@ def load_dataset(
     # arrays. Reading whole row groups at once spikes to the full
     # (decompressed) group - on huge shards (DROID-scale, finding #11)
     # that alone OOMs small machines even when the frame arrays spill.
-    n_files = len(plan)
-    for fi, (f, pf, groups) in enumerate(plan):
-        if cancelled is not None and cancelled.is_set():
-            raise LoadCancelledError(f"cancelled during frame reads ({fi}/{n_files} shards)")
-        if progress is not None:
-            progress(f"reading shard {fi + 1}/{n_files}")
-        cols = [c for c in wanted_cols if c in pf.schema_arrow.names]
-        for g in groups:
-            try:
-                for t in pf.iter_batches(batch_size=_READ_BATCH_ROWS, row_groups=[g], columns=cols):
-                    t = t.filter(pc.is_in(t.column("episode_index").cast(pa.int64()), value_set=value_set))
-                    if not t.num_rows:
-                        continue
-                    for name in ("episode_index", "frame_index", "task_index"):
-                        if name in t.column_names:
-                            seen.add(name)
-                            _put(name, _ints(t, name))
-                    if "timestamp" in t.column_names:
-                        seen.add("timestamp")
-                        _put("timestamp", t.column("timestamp").to_numpy().astype(np.float64, copy=False))
-                    for extra in (reward_col, done_col):
-                        if extra and extra in t.column_names:
-                            seen.add(extra)
-                            # zero_copy_only=False: boolean columns (done) have no
-                            # zero-copy numpy form
-                            _put(extra, t.column(extra).to_numpy(zero_copy_only=False).astype(np.float64, copy=False))
-                    for canon in (STATE_KEY, ACTION_KEY):
-                        name = keys[canon]
-                        if name in t.column_names:
-                            arr = _column(t, name)
-                            if arr is not None:
+    try:
+        n_files = len(plan)
+        for fi, (f, pf, groups) in enumerate(plan):
+            if cancelled is not None and cancelled.is_set():
+                raise LoadCancelledError(f"cancelled during frame reads ({fi}/{n_files} shards)")
+            if progress is not None:
+                progress(f"reading shard {fi + 1}/{n_files}")
+            cols = [c for c in wanted_cols if c in pf.schema_arrow.names]
+            for g in groups:
+                try:
+                    for t in pf.iter_batches(batch_size=_READ_BATCH_ROWS, row_groups=[g], columns=cols):
+                        t = t.filter(pc.is_in(t.column("episode_index").cast(pa.int64()), value_set=value_set))
+                        if not t.num_rows:
+                            continue
+                        for name in ("episode_index", "frame_index", "task_index"):
+                            if name in t.column_names:
                                 seen.add(name)
-                                widths.setdefault(name, arr.shape[1] if arr.ndim > 1 else 1)
-                                _put(name, arr)
-                    n += t.num_rows
-            except (OSError, pa.ArrowInvalid) as e:  # truncated / corrupt data pages
-                _bad(f, e)
-                break
+                                _put(name, _ints(t, name))
+                        if "timestamp" in t.column_names:
+                            seen.add("timestamp")
+                            _put("timestamp", t.column("timestamp").to_numpy().astype(np.float64, copy=False))
+                        for extra in (reward_col, done_col):
+                            if extra and extra in t.column_names:
+                                seen.add(extra)
+                                # zero_copy_only=False: boolean columns (done) have no
+                                # zero-copy numpy form
+                                _put(extra, t.column(extra).to_numpy(zero_copy_only=False).astype(np.float64, copy=False))
+                        for canon in (STATE_KEY, ACTION_KEY):
+                            name = keys[canon]
+                            if name in t.column_names:
+                                arr = _column(t, name)
+                                if arr is not None:
+                                    seen.add(name)
+                                    widths.setdefault(name, arr.shape[1] if arr.ndim > 1 else 1)
+                                    _put(name, arr)
+                        n += t.num_rows
+                except (OSError, pa.ArrowInvalid) as e:  # truncated / corrupt data pages
+                    _bad(f, e)
+                    break
+    except BaseException:
+        maps.clear()  # drop the maps now so their space is released with them
+        raise
+    finally:
+        if spill_dir:  # POSIX: already empty, the spill files were unlinked when mapped
+            shutil.rmtree(spill_dir, ignore_errors=True)
 
     if n == 0 and unreadable:
         raise DatasetError(
