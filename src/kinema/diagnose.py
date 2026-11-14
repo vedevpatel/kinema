@@ -18,15 +18,18 @@ Two honesty rules the answers follow:
 from __future__ import annotations
 
 import json
+import re
+import shutil
 import threading
 from importlib import resources
+from pathlib import Path
 
 from kinema.checks import ALL_CHECKS, CheckConfig, Severity
 from kinema.checks.deployment import (
     POLICY_DEFAULTS,
     resolve_policy,
 )
-from kinema.dataset import load_dataset
+from kinema.dataset import LoadCancelledError, load_dataset
 from kinema.report import DatasetReport
 
 DOCS_BASE = "https://github.com/vedevpatel/kinema/blob/main/docs/checks.md"
@@ -44,24 +47,30 @@ def known_policies() -> list[str]:
     return sorted(POLICY_DEFAULTS)
 
 
-def checks_for_symptom(symptom: str) -> tuple[list[str], list[str]]:
-    """The check ids a symptom routes to, and the clusters matched.
+def _keyword_hit(keyword: str, text: str) -> bool:
+    """Word/phrase-boundary match: 'scale' must not fire on 'large-scale',
+    'static' on 'static camera' is fine to leave to the LLM-ordering stage
+    only when it stands alone. Hyphens count as word characters so
+    hyphenated compounds never fire their parts."""
+    pat = r"(?<![\w-])" + re.escape(keyword) + r"(?![\w-])"
+    return re.search(pat, text) is not None
 
-    Keyword routing only picks a check subset - the client LLM does the
-    real language understanding. A symptom matching no cluster runs all
-    checks, so an unrouted symptom never hides a finding."""
+
+def checks_for_symptom(symptom: str) -> tuple[list[str], list[str]]:
+    """All check ids (routing never filters), and the clusters matched.
+
+    Review finding: filtering which checks run let the headline symptom
+    ('robot doesn't move') skip every normalization check and answer
+    'no cause' while a stats-drift defect sat unexamined. Matched clusters
+    now only ORDER the causes; every check always runs, so the negative
+    answer's coverage block is complete by construction."""
     text = (symptom or "").lower()
     matched = [
         name
         for name, cluster in CAUSES["clusters"].items()
-        if any(kw in text for kw in cluster["keywords"])
+        if any(_keyword_hit(kw, text) for kw in cluster["keywords"])
     ]
-    if not matched:
-        return [c.id for c in ALL_CHECKS], []
-    ids: list[str] = []
-    for name in matched:
-        ids.extend(CAUSES["clusters"][name]["checks"])
-    return list(dict.fromkeys(ids)), matched
+    return [c.id for c in ALL_CHECKS], matched
 
 
 def _evidence(f) -> dict:
@@ -77,9 +86,15 @@ def _evidence(f) -> dict:
     return out
 
 
-def _match_causes(results, policy_name: str) -> tuple[list[dict], list[dict]]:
+def _match_causes(
+    results, policy_name: str, matched_clusters: tuple | list = ()
+) -> tuple[list[dict], list[dict]]:
     """Findings matched to cause entries, and WARN/FAIL findings no entry
-    claims (surfaced verbatim, never dropped)."""
+    claims (surfaced verbatim, never dropped).
+
+    Causes in a cluster the symptom matched rank above the rest - routing
+    orders, it never filters; within each group, severity first, then
+    cause-map order."""
     causes: list[dict] = []
     claimed: set[int] = set()
     findings = [
@@ -114,7 +129,8 @@ def _match_causes(results, policy_name: str) -> tuple[list[dict], list[dict]]:
                 "explanation": cause["explanation"].format(policy=policy_name or "the policy"),
                 "docs": f"{DOCS_BASE}#{cause['docs_section']}",
                 "next_step": cause["next_step"],
-                "_rank": (worst, -order),  # severity first, then map order
+                # symptom-matched clusters first, then severity, then map order
+                "_rank": (cause["cluster"] in matched_clusters, worst, -order),
             }
         )
     causes.sort(key=lambda c: c["_rank"], reverse=True)
@@ -226,20 +242,79 @@ def diagnose(
     cfg = CheckConfig(
         video=video, policy=canon, policy_overrides=dict(policy_overrides or {})
     )
-    ctx = load_dataset(dataset, max_episodes=max_episodes, video=video)
-    if progress is not None:
-        progress(0, len(check_ids), "dataset loaded")
-    report = run_check_subset(ctx, cfg, check_ids, dataset, cancelled, progress)
-    causes, unmapped = _match_causes(report.results, canon)
-    return {
-        "dataset": dataset,
-        "policy": canon,
-        "policy_assumptions": entry,
-        "symptom": symptom,
-        "clusters_matched": clusters,
-        "causes": causes,
-        "coverage": _coverage(report, ctx, unmapped),
-    }
+    ctx = None
+    try:
+        ctx = _load(dataset, max_episodes, video, cancelled, progress)
+        if progress is not None:
+            progress(0, len(check_ids), "dataset loaded")
+        report = run_check_subset(ctx, cfg, check_ids, dataset, cancelled, progress)
+        causes, unmapped = _match_causes(report.results, canon, clusters)
+        return {
+            "dataset": dataset,
+            "policy": canon,
+            "policy_assumptions": entry,
+            "symptom": symptom,
+            "clusters_matched": clusters,
+            "causes": causes,
+            "coverage": _coverage(report, ctx, unmapped),
+        }
+    finally:
+        _cleanup(ctx)
+
+
+_HUB_REPO = re.compile(r"^[\w][\w.-]*/[\w][\w.-]*(@[^/]+)?$")
+
+
+def validate_dataset_arg(dataset: str) -> None:
+    """The MCP tools take a local dir/.zip or a Hub repo id - never a
+    relative local path. A relative path would resolve against the server
+    process's cwd (a client can start it anywhere, cwd=/ happens) and, when
+    it misses, silently fall through to a Hub download of a same-named repo.
+    Absolute paths and owner/name repo ids are unambiguous; raise
+    ValueError otherwise."""
+    src = (dataset or "").strip()
+    if src.startswith("hf://"):
+        src = src[len("hf://"):]
+    p = Path(src).expanduser()
+    if p.is_absolute():
+        return
+    if p.exists():
+        raise ValueError(
+            f"relative dataset path {dataset!r}: pass an absolute path "
+            "(the server's working directory is not yours)"
+        )
+    if not _HUB_REPO.match(src):
+        raise ValueError(
+            f"{dataset!r} is neither an absolute path nor a Hub repo id "
+            "(owner/name) - pass an absolute path"
+        )
+
+
+def _load(dataset, max_episodes, video, cancelled, progress):
+    """load_dataset with MCP plumbing: stage messages, cancel-during-load
+    mapped onto CancelledError."""
+    def note(message: str) -> None:
+        if progress is not None:
+            progress(0, 1, message)
+
+    try:
+        return load_dataset(
+            dataset,
+            max_episodes=max_episodes,
+            video=video,
+            cancelled=cancelled,
+            progress=note,
+        )
+    except LoadCancelledError as e:
+        raise CancelledError(str(e)) from e
+
+
+def _cleanup(ctx) -> None:
+    """Delete the temp dir a .zip source was extracted into (the loader
+    cannot: the context outlives the load call)."""
+    d = getattr(ctx, "temp_extract_dir", "") if ctx is not None else ""
+    if d:
+        shutil.rmtree(d, ignore_errors=True)
 
 
 def run_checks(
@@ -269,10 +344,18 @@ def run_checks(
     cfg = CheckConfig(
         video=video, policy=policy, policy_overrides=dict(policy_overrides or {})
     )
-    ctx = load_dataset(dataset, max_episodes=max_episodes, video=video)
     ids = checks or [c.id for c in ALL_CHECKS]
-    report = run_check_subset(ctx, cfg, ids, dataset, cancelled, progress)
-    return report, ctx
+    ctx = None
+    try:
+        ctx = _load(dataset, max_episodes, video, cancelled, progress)
+        if progress is not None:
+            progress(0, len(ids), "dataset loaded")
+        report = run_check_subset(ctx, cfg, ids, dataset, cancelled, progress)
+        return report, ctx
+    finally:
+        # frame arrays are already in memory/memmap; the extracted .zip
+        # tree is dead weight once the checks have run
+        _cleanup(ctx)
 
 
 def summarize_report(report: DatasetReport, top: int = 25) -> dict:

@@ -46,6 +46,27 @@ OVERRIDEABLE_POLICY_FIELDS = (
 )
 
 
+def _check_override_type(key: str, val) -> None:
+    """A wrong-typed override must fail loudly: {"quantile_norm": "false"}
+    is a truthy string and would silently keep the quantile cause firing."""
+    if key == "chunk_size":
+        # bool is an int subclass; an explicit True here is a typo, not 1
+        if not isinstance(val, int) or isinstance(val, bool) or val <= 0:
+            raise ValueError(f"policy override 'chunk_size' must be a positive integer, got {val!r}")
+    elif key == "typical_resolution":
+        ok = (
+            isinstance(val, (list, tuple))
+            and len(val) == 2
+            and all(isinstance(v, int) and not isinstance(v, bool) and v > 0 for v in val)
+        )
+        if not ok:
+            raise ValueError(
+                f"policy override 'typical_resolution' must be [width, height] integers, got {val!r}"
+            )
+    elif not isinstance(val, bool):
+        raise ValueError(f"policy override {key!r} must be a boolean, got {val!r}")
+
+
 def canonical_policy_name(name: str) -> str:
     """Resolve an alias (pi0.5) to the canonical policies.json key (pi05)."""
     low = name.lower()
@@ -71,6 +92,7 @@ def resolve_policy(name: str | None, overrides: dict | None = None):
                 f"unknown policy override {key!r} "
                 f"(valid: {', '.join(OVERRIDEABLE_POLICY_FIELDS)})"
             )
+        _check_override_type(key, val)
         merged[key] = val
     return canon, merged
 
@@ -102,7 +124,7 @@ class DeploymentReadinessCheck(Check):
     def _quantile_entry(self, ctx, feat: str) -> dict:
         """The stats entry a quantile normalizer actually consumes.
 
-        openpi reads meta/stats.json directly, so the raw file wins when it
+        Consumers of meta/stats.json read the raw file, so it wins when it
         carries quantiles; the effective stats (per-episode aggregates on
         v2.1) keep only mean/std/min/max/count and would cry wolf about
         missing quantiles on datasets whose stats.json ships them."""

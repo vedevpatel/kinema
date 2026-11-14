@@ -53,3 +53,23 @@ def test_clusters_have_keywords_and_checks():
     for name, cluster in CAUSES["clusters"].items():
         assert cluster["keywords"], name
         assert cluster["checks"], name
+
+
+def test_message_contains_needles_exist_in_check_source():
+    """Review finding 14: a cause whose indicates.message_contains matches
+    nothing the check can emit silently demotes its findings to
+    'outside coverage'. Pin every needle against the check's own source so
+    rewording a message breaks the build instead of the diagnosis."""
+    import inspect
+
+    by_id = {c.id: c for c in ALL_CHECKS}
+    for cause in CAUSES["causes"]:
+        needle = cause["indicates"].get("message_contains")
+        if not needle:
+            continue
+        module = inspect.getmodule(type(by_id[cause["indicates"]["check_id"]]))
+        source = inspect.getsource(module)
+        assert needle in source, (
+            f"{cause['id']}: message_contains {needle!r} appears in no message "
+            f"its check can emit"
+        )

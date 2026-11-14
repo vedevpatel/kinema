@@ -232,10 +232,13 @@ note when a camera is smaller than the resolution the policy is usually
 trained at.
 
 The quantile check reads the raw `meta/stats.json` first, because that is
-the file the normalizer consumes (openpi reads it directly): a v2.1 dataset
-whose stats.json ships q01/q99 is fine even though the per-episode
-aggregate stats keep only mean/std/min/max/count. Only when stats.json
-lacks quantiles does the WARN fire.
+the file a stats-consuming pipeline reads: a v2.1 dataset whose stats.json
+ships q01/q99 is fine even though the per-episode aggregate stats keep only
+mean/std/min/max/count. Only when stats.json lacks quantiles does the WARN
+fire. Note that openpi's documented flow recomputes its own
+`norm_stats.json` from the data (`scripts/compute_norm_stats.py`) and never
+reads `meta/stats.json`, so for a pure openpi run the WARN only matters
+when another stage consumes the file.
 
 What each policy expects is declared in `src/kinema/policies.json` - chunk
 size, normalization, camera/language needs, typical resolution, and aliases

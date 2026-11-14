@@ -19,15 +19,48 @@ from kinema.diagnose import (
 from kinema.fixtures.synth import make_dataset
 
 
-def test_symptom_routing():
+def test_symptom_routing_never_filters_checks():
+    """Review finding 1: routing used to pick a check subset, so the
+    headline symptom ('robot doesn't move') skipped every normalization
+    check and answered 'no cause' over an unexamined stats-drift defect.
+    Routing now returns ALL checks and matched clusters only order causes."""
+    from kinema.checks import ALL_CHECKS
+    all_ids = [c.id for c in ALL_CHECKS]
     ids, clusters = checks_for_symptom("loss converged but the robot doesn't move")
     assert clusters == ["idle"]
-    assert set(ids) == {"idle-segments", "stuck-actuator"}
+    assert ids == all_ids  # every check runs, whatever the symptom
     ids, clusters = checks_for_symptom("actions look scaled wrong; maybe a normalization issue")
     assert clusters == ["normalization"]
-    assert set(ids) == {"stats-drift", "nan-and-normalization", "deployment-readiness"}
+    assert ids == all_ids
     ids, clusters = checks_for_symptom("florp gibberish unrouteable")
-    assert clusters == [] and len(ids) > 5  # fallback: all checks
+    assert clusters == [] and ids == all_ids
+
+
+def test_keyword_matching_respects_word_boundaries():
+    """Substrings must not fire clusters: 'large-scale' is not 'scale',
+    'static camera' is not an idle robot (review finding 1)."""
+    _, clusters = checks_for_symptom("the dataset is large-scale, collected in the wild")
+    assert "normalization" not in clusters
+    _, clusters = checks_for_symptom("a static camera viewed from the side")
+    assert "idle" not in clusters
+    # real phrases still route
+    _, clusters = checks_for_symptom("the robot stays still at inference")
+    assert clusters == ["idle"]
+
+
+def test_headline_symptom_still_finds_the_stats_defect(tmp_path):
+    """Regression for the review's headline case: 'the robot does not move'
+    on a stats-drift dataset must surface stored-stats-drift - before the
+    fix it returned zero causes because the normalization checks never ran."""
+    root = make_dataset(tmp_path / "ds", episodes=12, defects=["stats-drift"])
+    out = diagnose(str(root), "pi05", "the robot does not move")
+    ids = [c["cause_id"] for c in out["causes"]]
+    assert "stored-stats-drift" in ids
+    # coverage is complete: every check appears in the answer
+    ran = {c["check_id"] for c in out["coverage"]["checks_run"]}
+    skipped = {c["check_id"] for c in out["coverage"]["checks_skipped"]}
+    from kinema.checks import ALL_CHECKS
+    assert ran | skipped == {c.id for c in ALL_CHECKS}
 
 
 def test_stats_drift_ranks_the_stats_cause(tmp_path):
@@ -123,3 +156,45 @@ def test_list_checks_from_the_registry():
     for c in checks:
         assert c["docs"].endswith(f"#{c['id']}")
         assert c["title"] and c["description"]
+
+
+def test_zip_source_tempdir_is_cleaned_up(tmp_path):
+    """Review finding 13: every .zip audit extracted to a fresh temp dir
+    that was never deleted."""
+    import zipfile
+    from pathlib import Path
+
+    import kinema.diagnose as d
+
+    root = make_dataset(tmp_path / "ds", episodes=8)
+    zpath = tmp_path / "ds.zip"
+    with zipfile.ZipFile(zpath, "w") as z:
+        for f in sorted(root.rglob("*")):
+            if f.is_file():
+                z.write(f, f.relative_to(root))
+    seen = {}
+    orig = d.load_dataset
+
+    def spy(*a, **k):
+        ctx = orig(*a, **k)
+        seen["dir"] = ctx.temp_extract_dir
+        return ctx
+
+    d.load_dataset = spy
+    try:
+        run_checks(str(zpath), policy="pi0")
+    finally:
+        d.load_dataset = orig
+    assert seen["dir"], "zip extract dir was never tracked"
+    assert not Path(seen["dir"]).exists(), "zip extract dir was left behind"
+
+
+def test_cancellation_lands_during_the_dataset_load(tmp_path):
+    """Review finding 10: cancellation used to be noticed only after the
+    load - the long part. A cancelled event now aborts the load itself."""
+    import threading
+    root = make_dataset(tmp_path / "ds", episodes=8)
+    cancel = threading.Event()
+    cancel.set()  # cancelled before the run even starts
+    with pytest.raises(CancelledError):
+        diagnose(str(root), "pi0", "x", cancelled=cancel)

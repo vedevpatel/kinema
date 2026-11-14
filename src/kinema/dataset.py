@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -44,6 +45,13 @@ def _resolve_keys(info: dict) -> dict[str, str]:
     for canon, names in _ALIASES.items():
         out[canon] = next((n for n in names if n in feats), canon)
     return out
+
+
+class LoadCancelledError(Exception):
+    """The client cancelled while the dataset was still loading.
+
+    Raised inside load_dataset's frame-read loop; the MCP layer turns it
+    into the same CancelledError as a between-checks cancellation."""
 
 
 class DatasetError(Exception):
@@ -112,6 +120,9 @@ class DatasetContext:
     video_segments: dict = field(default_factory=dict, repr=False)
     _row_slices: dict = field(default_factory=dict, repr=False)
     _meta_index: dict = field(default_factory=dict, repr=False)
+    # temp dir a .zip source was extracted into; the runner deletes it
+    temp_extract_dir: str = ""
+
 
     @property
     def total_episodes(self) -> int:
@@ -274,9 +285,14 @@ def _target_video_files(root: Path, max_episodes: int) -> list[str] | None:
 
 
 def _resolve_source(
-    source: str, video: bool = False, max_episodes: int | None = None
-) -> tuple[Path, str | None]:
-    """Return (local_root, repo_id). Downloads from the Hub when needed."""
+    source: str,
+    video: bool = False,
+    max_episodes: int | None = None,
+    progress=None,
+) -> tuple[Path, str | None, str | None]:
+    """Return (local_root, repo_id, temp_extract_dir). Downloads from the Hub
+    when needed. temp_extract_dir is set only for .zip sources and is owned
+    by the caller (diagnose cleans it up after the run)."""
     src = source.strip()
     if src.startswith("hf://"):
         src = src[len("hf://"):]
@@ -287,14 +303,15 @@ def _resolve_source(
             import tempfile
 
             out = Path(tempfile.mkdtemp(prefix="kinema-ds-"))
+            extract_dir = str(out)
             with zipfile.ZipFile(p) as z:
                 z.extractall(out)
             # unwrap a single top-level directory
             children = list(out.iterdir())
             if len(children) == 1 and children[0].is_dir():
                 out = children[0]
-            return out, None
-        return p, None
+            return out, None, extract_dir
+        return p, None, None
     # Treat as a Hub repo id.
     if "/" not in src:
         raise DatasetError(
@@ -302,6 +319,8 @@ def _resolve_source(
         )
     from huggingface_hub import snapshot_download
 
+    if progress is not None:
+        progress(f"downloading {src} from the Hugging Face Hub")
     # owner/name@revision pins a branch, tag or commit (reproducible audits)
     revision = None
     if "@" in src:
@@ -334,7 +353,7 @@ def _resolve_source(
             )
     except Exception as e:  # noqa: BLE001 - surface a clean message
         raise DatasetError(f"could not download {src} from the Hugging Face Hub: {e}")
-    return local, src
+    return local, src, None
 
 
 def _load_episode_meta(root: Path) -> list[EpisodeMeta]:
@@ -524,8 +543,20 @@ def load_dataset(
     source: str,
     max_episodes: int | None = None,
     video: bool = False,
+    cancelled: threading.Event | None = None,
+    progress=None,
 ) -> DatasetContext:
-    root, repo_id = _resolve_source(source, video=video, max_episodes=max_episodes)
+    """Load a LeRobot dataset for auditing.
+
+    cancelled, when given, is checked between frame-read batches - the load
+    is the long part of an MCP run, so a cancellation that only lands after
+    it would be useless. progress, when given, is called with a stage
+    message (Hub download start, per-shard reads)."""
+    if cancelled is not None and cancelled.is_set():
+        raise LoadCancelledError("cancelled before the dataset load started")
+    root, repo_id, extract_dir = _resolve_source(
+        source, video=video, max_episodes=max_episodes, progress=progress
+    )
     info_path = root / "meta" / "info.json"
     if not info_path.exists():
         raise DatasetError(f"{root} is not a LeRobot dataset (meta/info.json missing)")
@@ -676,7 +707,12 @@ def load_dataset(
     # arrays. Reading whole row groups at once spikes to the full
     # (decompressed) group - on huge shards (DROID-scale, finding #11)
     # that alone OOMs small machines even when the frame arrays spill.
-    for f, pf, groups in plan:
+    n_files = len(plan)
+    for fi, (f, pf, groups) in enumerate(plan):
+        if cancelled is not None and cancelled.is_set():
+            raise LoadCancelledError(f"cancelled during frame reads ({fi}/{n_files} shards)")
+        if progress is not None:
+            progress(f"reading shard {fi + 1}/{n_files}")
         cols = [c for c in wanted_cols if c in pf.schema_arrow.names]
         for g in groups:
             try:
@@ -831,4 +867,5 @@ def load_dataset(
         unreadable_files=unreadable,
         state_names=feature_names(info, keys[STATE_KEY]),
         action_names=feature_names(info, keys[ACTION_KEY]),
+        temp_extract_dir=extract_dir or "",
     )
