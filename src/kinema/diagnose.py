@@ -34,7 +34,7 @@ from kinema.checks.deployment import (
     resolve_policy,
 )
 from kinema.dataset import CancelledError, load_dataset
-from kinema.report import DatasetReport
+from kinema.report import DatasetReport, SCORE_MODEL
 
 __all__ = ["CancelledError"]  # re-exported: the MCP layer and tests catch it from here
 
@@ -365,6 +365,7 @@ def summarize_report(report: DatasetReport, top: int = 25) -> dict:
         "frames": report.frames,
         "truncated": report.truncated,
         "score": report.score,
+        "score_model": SCORE_MODEL,
         "verdict": report.verdict.name,
         "counts": counts,
         "checks": [

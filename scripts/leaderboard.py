@@ -394,7 +394,13 @@ def render_index(entries: list[dict], generated: str) -> str:
     engine = engine_version()
     rows = []
     n_stale = 0
-    entries = sorted(entries, key=lambda e: -(e.get("downloads") or 0))  # current ranking
+    entries = sorted(
+        entries,
+        key=lambda e: (
+            -((e.get("report") or {}).get("score", -1)),
+            -(e.get("downloads") or 0),
+        ),
+    )  # health score first, downloads break ties, unaudited last
     for i, e in enumerate(entries, 1):
         stale = e.get("report") and e.get("engine") != engine
         n_stale += bool(stale)
@@ -433,7 +439,8 @@ def render_index(entries: list[dict], generated: str) -> str:
         "check and a per-check weight for each warning check (10 / 6 / 2 by measured "
         "training harm where the harm study has measured it, hand-tuned otherwise; "
         "<a href='https://github.com/vedevpatel/kinema/blob/main/docs/checks.md#health-score'>"
-        "details</a>). Scores are not comparable across score models. Video checks are not run "
+        "details</a>). Ranked by health score; downloads break ties. Scores are not "
+        "comparable across score models. Video checks are not run "
         "here (MP4s are hundreds of MB per camera); run <code>kinema check --video</code> "
         "locally.</p>"
         "<p id=pager><button onclick=pg(-1)>&larr; Prev</button> "
