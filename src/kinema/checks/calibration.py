@@ -23,6 +23,13 @@ when its names do not contradict the pairing and the data agrees
 other dim is classified (delta / velocity command, different space, ...)
 so a skip says why.
 
+Delta commands get their own test (finding #14: most Open X-Embodiment
+conversions command deltas, and used to get no verdict at all): the
+measured per-frame step of the paired state dim is regressed on the
+command. A slope far from 1 means action and state disagree on scale -
+a conversion-units bug, or commands the robot cannot follow. Absolute
+EE-pose actions still cannot be checked without the robot's kinematics.
+
 Grippers get their own test: a gripper commanded shut on an object never
 gets there, so only the FREE end (where nothing blocks it - the end with
 the smaller still-frame offset) says anything about calibration.
@@ -87,13 +94,15 @@ def _pairs(ctx) -> list[tuple[int, int]]:
 
 
 def _comparable_dims(ctx, cfg):
-    """(joint pairs, gripper pairs, excluded-with-reason keyed by action index)."""
+    """(joint pairs, gripper pairs, delta pairs, excluded-with-reason keyed
+    by action index). Delta pairs are action dims that command the STEP of
+    a state dim: no still-frame offset, but scale agreement is checkable."""
     sn, an = ctx.state_names, ctx.action_names
     ns, na = ctx.state.shape[1], ctx.action.shape[1]
     have = sn is not None and an is not None and len(sn) == ns and len(an) == na
     named_grip_s, named_grip_a = gripper_dims(sn, ns), gripper_dims(an, na)
     excluded: dict[int, str] = {}
-    joints, grippers = [], []
+    joints, grippers, deltas = [], [], []
     for i, j in _pairs(ctx):
         if have and not is_generic([sn[i]]) and not is_generic([an[j]]) \
                 and canonical(sn[i]) != canonical(an[j]):
@@ -115,10 +124,14 @@ def _comparable_dims(ctx, cfg):
                 excluded[j] = "gripper in different units"
             continue
         if not tracks or corr < 0:
-            excluded[j] = _space_of(ctx, i, j)
+            kind = _space_of(ctx, i, j)
+            if kind == "delta command":
+                deltas.append((i, j))
+            else:
+                excluded[j] = kind
             continue
         joints.append((i, j))
-    return joints, grippers, excluded
+    return joints, grippers, deltas, excluded
 
 
 def _still_rows(ctx, i: int) -> np.ndarray:
@@ -229,6 +242,50 @@ class CalibrationDriftCheck(Check):
                      "calibration drift", info)], info
         return [], info
 
+    def _delta_scale(self, ctx, cfg, pair):
+        """Delta-command dims: measured state step regressed on the command.
+        A slope far from 1 means action and state disagree on scale."""
+        i, j = pair
+        s, a = ctx.state[:, i], ctx.action[:, j]
+        xs, ys = [], []
+        for ep in ctx.episode_ids()[:200]:
+            rows = ctx.rows_for(ep)
+            if len(rows) < 3:
+                continue
+            xs.append(a[rows][:-1])
+            ys.append(np.diff(s[rows]))
+        if not xs:
+            return None, None
+        x, y = np.concatenate(xs), np.concatenate(ys)
+        ok = np.isfinite(x) & np.isfinite(y)
+        x, y = x[ok], y[ok]
+        if len(x) < 200 or np.std(x) < 1e-8:
+            return None, None
+        A = np.stack([np.ones_like(x), x], axis=1)
+        (b0, b1), *_ = np.linalg.lstsq(A, y, rcond=None)
+        resid = y - (b0 + b1 * x)
+        var = float(np.var(y))
+        r2 = 1.0 - float(np.var(resid)) / var if var > 1e-12 else 1.0
+        name = f" ({ctx.action_names[j]})" if ctx.action_names and len(ctx.action_names) == ctx.action.shape[1] else ""
+        info = {"joint": j, "kind": "delta_scale", "step_ratio": float(b1), "r2": r2,
+                "frames": int(len(x))}
+        if r2 < cfg.calib_delta_min_r2:
+            return [], info  # steps track too loosely for a scale verdict
+        dev = abs(float(b1) - 1.0)
+        if dev >= cfg.calib_delta_scale_warn:
+            return [(Severity.WARN,
+                     f"delta command {j}{name}: the measured steps of its state dim are "
+                     f"{b1:.2f}x the commanded steps (R^2 {r2:.2f}) - action and state "
+                     "disagree on scale: a conversion-units bug, or commands the robot "
+                     "cannot follow; anything comparing commands to measured motion "
+                     "inherits the mismatch", info)], info
+        if dev >= cfg.calib_delta_scale_info:
+            return [(Severity.INFO,
+                     f"delta command {j}{name}: measured steps run at {b1:.2f}x the "
+                     f"commanded ones (R^2 {r2:.2f}) - mild scale disagreement between "
+                     "action and state", info)], info
+        return [], info
+
     def run(self, ctx, cfg: CheckConfig) -> CheckResult:
         res = CheckResult(self.id, self.title)
         state, action = ctx.state, ctx.action
@@ -239,13 +296,13 @@ class CalibrationDriftCheck(Check):
                 f"state dim {state.shape[1]} != action dim {action.shape[1]} and no "
                 "names to pair them by"
             )
-        joints, grippers, excluded = _comparable_dims(ctx, cfg)
+        joints, grippers, deltas, excluded = _comparable_dims(ctx, cfg)
         _, inferred_grip = action_gripper_dims(ctx)
         # on/off commands beyond the slot prior's reach (odd layouts, e.g. a
         # 7-dim bimanual pair): same downgrade as an inferred gripper
         inferred_grip |= toggle_dims(ctx, exclude=inferred_grip
                                      | velocity_dims(ctx.action_names, ctx.action.shape[1]))
-        if not joints and not grippers:
+        if not joints and not grippers and not deltas:
             kinds = sorted({r.split(" (")[0] for r in excluded.values()})
             return self.skip("no dim where action is a position command for the same joint: "
                              + "; ".join(f"{sum(1 for r in excluded.values() if r.startswith(k))} "
@@ -270,6 +327,14 @@ class CalibrationDriftCheck(Check):
                 if pair in inferred_pairs:
                     msg += " [dim inferred as an unnamed gripper]"
                 res.findings.append(Finding(self.id, sev, msg, details=det))
+        # delta commands: no still-frame offset, but the measured step must
+        # agree with the commanded step in scale
+        for pair in deltas:
+            fs, info = self._delta_scale(ctx, cfg, pair)
+            if info:
+                per_joint.setdefault(str(pair[1]), info)
+            for sev, msg, det in fs or []:
+                res.findings.append(Finding(self.id, sev, msg, details=det))
         if not per_joint:
             return self.skip("not enough still frames to measure calibration")
 
@@ -277,15 +342,22 @@ class CalibrationDriftCheck(Check):
             "per_joint": per_joint,
             "compared_joints": [j for _, j in joints],
             "compared_grippers": [j for _, j in grippers],
+            "compared_deltas": [j for _, j in deltas],
             "excluded_joints": {str(k): v for k, v in excluded.items()},
         }
-        worst = max(per_joint.values(), key=lambda d: abs(d.get("offset_fraction", 0)))
+        offs = [d for d in per_joint.values() if "offset_fraction" in d]
+        worst = max(offs, key=lambda d: abs(d.get("offset_fraction", 0))) if offs else None
         kinds = sorted({r.split(" (")[0] for r in excluded.values()})
         note = ("; not compared: " + ", ".join(
             f"{sum(1 for r in excluded.values() if r.startswith(k))} {k}" for k in kinds)) if kinds else ""
+        if deltas:
+            note += f"; {len(deltas)} delta-command dim(s) checked for scale agreement"
         if not any(f.severity >= Severity.WARN for f in res.findings):
-            res.summary = (f"{len(joints)} joint(s) + {len(grippers)} gripper(s) agree; worst offset "
-                           f"{worst['offset_fraction']:+.1%} of range (joint {worst['joint']}){note}")
+            if worst is not None:
+                res.summary = (f"{len(joints)} joint(s) + {len(grippers)} gripper(s) agree; worst offset "
+                               f"{worst['offset_fraction']:+.1%} of range (joint {worst['joint']}){note}")
+            else:
+                res.summary = f"no position-command dims to compare{note}"
         else:
             n_bad = sum(1 for f in res.findings if f.severity >= Severity.WARN)
             res.summary = f"{n_bad} joint(s) miscalibrated{note}"

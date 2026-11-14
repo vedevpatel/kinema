@@ -172,10 +172,17 @@ def inferred_gripper_dims(action, names: list[str] | None) -> set[int]:
 
     A gripper sits in a predictable slot - the last dim, or the last dim of
     each arm in a bimanual layout - and dwells at its open/closed extremes.
-    Validated against 223 name-labelled action dims from 40+ Hub datasets:
-    precision 0.93, recall 0.90. Data features alone (bimodality, switching)
-    reached only 0.89 / 0.52: teleoperated grippers move continuously.
-    Advisory: callers that would HIDE a finding should downgrade, not drop.
+    The original prior (slot + dwell at either extreme) misfires on joints
+    parked at one end of their range (a waist against its limit reads as a
+    gripper shut for the whole dataset: finding #15, ~7% of slot picks).
+    A real gripper VISITS both ends, so the prior now requires the quieter
+    end to hold at least ~8% of the total dwell: a dim parked at one end
+    is an unused joint, not a gripper. Teleoperated grippers move
+    continuously but still reach both ends over a dataset; a gripper never
+    actuated at all is constant and already excluded. Misses stay safe: an
+    unrecognised gripper's findings keep their severity instead of being
+    downgraded. Advisory: callers that would HIDE a finding should
+    downgrade, not drop.
     """
     import numpy as _np
 
@@ -197,8 +204,10 @@ def inferred_gripper_dims(action, names: list[str] | None) -> set[int]:
         rng = hi - lo
         if rng <= 1e-8:
             continue
-        dwell = float(_np.mean((x <= lo + 0.1 * rng) | (x >= hi - 0.1 * rng)))
-        if dwell >= 0.30:
+        dwell_lo = float(_np.mean(x <= lo + 0.1 * rng))
+        dwell_hi = float(_np.mean(x >= hi - 0.1 * rng))
+        dwell = dwell_lo + dwell_hi
+        if dwell >= 0.30 and min(dwell_lo, dwell_hi) >= max(0.01, 0.08 * dwell):
             out.add(j)
     return out
 

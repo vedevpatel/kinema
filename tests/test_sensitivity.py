@@ -46,7 +46,13 @@ FLOORS = {
 
 # check -> max datasets flagged on untouched data (measured on the eval quick set)
 CEILINGS = {
-    "stats-drift": 0, "timestamp-grid": 0, "dropped-frames": 0, "calibration-drift": 0,
+    # calibration-drift 1: the delta-scale verdict flags xarm_lift_medium_replay -
+    # measured steps run at ~0.07x the commanded delta steps, R^2 0.79-0.98, uniform
+    # across joints 0-2. Read and adjudicated 2026-11-13: either a units mismatch in
+    # the conversion or systematic under-execution by the replay controller; both are
+    # things a QA tool should surface, so the WARN stays and the ceiling is raised
+    # deliberately (docs/checks.md, calibration-drift).
+    "stats-drift": 0, "timestamp-grid": 0, "dropped-frames": 0, "calibration-drift": 1,
     "nan-and-normalization": 0, "duplicate-and-leakage": 0, "deployment-readiness": 0,
     "idle-segments": 2, "stuck-actuator": 3, "action-saturation": 2, "outlier-episodes": 4,
 }

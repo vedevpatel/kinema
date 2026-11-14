@@ -62,9 +62,16 @@ class CheckConfig:
     stats_std_oversize_fail: float = 3.0  # stored action std >= 3x real: FAIL
     stats_range_warn: float = 0.01
     stats_range_fail: float = 0.10
-    # sampled loads without per-episode stats: only gross corruption is conclusive
+    # sampled loads without per-episode stats: gross-corruption backstop
     stats_sample_std_ratio: float = 3.0
     stats_sample_mean_sigma: float = 2.0
+    # ...and the sharper test above it: bootstrap the sampling distribution
+    # of the pooled stats over loaded episodes (the episode is the unit -
+    # frames within one are autocorrelated) and flag stored stats outside
+    # the (1 - alpha) interval
+    stats_sample_min_episodes: int = 8
+    stats_sample_bootstrap: int = 400
+    stats_sample_alpha: float = 0.001
     # timestamp-grid
     grid_warn_frac: float = 0.10  # fraction of the frame period
     # calibration-drift
@@ -76,6 +83,10 @@ class CheckConfig:
     calib_scale_min_r2: float = 0.60  # ...and a line explains the offset
     calib_scale_line_vs_step: float = 1.5  # ...and beats the best two-level step (backlash)
     calib_gripper_warn: float = 0.15  # gripper offset at its free end
+    # delta commands: measured step vs commanded step (regression slope)
+    calib_delta_scale_warn: float = 0.5  # |slope - 1| at/above this gates
+    calib_delta_scale_info: float = 0.25  # milder disagreement: report only
+    calib_delta_min_r2: float = 0.5  # steps must track before a scale verdict
     # idle / stuck
     idle_eps_frac: float = 0.01  # fraction of per-joint action std
     idle_min_seconds: float = 2.0

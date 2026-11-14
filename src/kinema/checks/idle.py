@@ -37,6 +37,32 @@ class IdleSegmentsCheck(Check):
     # Where the idle sits matters: a long still start teaches the policy to
     # wait at t=0 (the "robot never starts" postmortem); stopping after the
     # task is done is correct behaviour unless it dominates the episode.
+    # Without recorded state the check judges from commands alone, and a
+    # constant command is only idling when it commands nothing: a named
+    # velocity command held at a non-neutral level is constant MOTION
+    # (the base driving at 0.5 m/s), the classic false positive of the
+    # old commands-only fallback.
+
+    def _neutral_levels(self, action: np.ndarray, vel: set[int], eps: np.ndarray) -> dict[int, tuple[float, float]]:
+        """Modal (parked) level of each velocity-named dim, with a tolerance
+        wide enough to hold the modal bin: dim -> (level, tolerance)."""
+        out = {}
+        for j in vel:
+            x = action[:, j]
+            x = x[np.isfinite(x)]
+            if len(x) < 20:
+                continue
+            lo, hi = np.percentile(x, [1, 99])
+            if hi - lo <= 1e-8:
+                continue
+            hist, edges = np.histogram(np.clip(x, lo, hi), bins=50, range=(lo, hi))
+            peak = int(np.argmax(hist))
+            members = x[(x >= edges[peak]) & (x <= edges[peak + 1])]
+            if not len(members):
+                continue
+            tol = max(float(eps[j]), float(edges[peak + 1] - edges[peak]))
+            out[j] = (float(np.median(members)), tol)
+        return out
 
     def run(self, ctx, cfg: CheckConfig) -> CheckResult:
         res = CheckResult(self.id, self.title)
@@ -53,6 +79,12 @@ class IdleSegmentsCheck(Check):
         if state is not None:
             srange = np.nanpercentile(state, 99, axis=0) - np.nanpercentile(state, 1, axis=0)
             live_s = srange > 1e-8
+        else:
+            # commands-only fallback: velocity-named dims idle at their modal
+            # level, not merely when unchanged (a held drive command is motion)
+            neutral = self._neutral_levels(
+                action, velocity_dims(ctx.action_names, action.shape[1]), eps
+            )
         min_run = max(2, int(round(cfg.idle_min_seconds * fps)))
 
         n_flagged = 0
@@ -63,7 +95,11 @@ class IdleSegmentsCheck(Check):
             if len(rows) < 3:
                 continue
             n_eps += 1
-            still = (np.abs(np.diff(action[rows], axis=0)) < eps).all(axis=1)
+            unchanged = np.abs(np.diff(action[rows], axis=0)) < eps
+            if state is None:
+                for j, (z, tol) in neutral.items():
+                    unchanged[:, j] = np.abs(action[rows][1:, j] - z) <= tol
+            still = unchanged.all(axis=1)
             idle = np.r_[still[0], still]  # frame 0 idles iff the first step does
             runs = [(s, e) for s, e in _runs(idle) if e - s >= min_run]
             if srange is not None and live_s.any():
@@ -107,7 +143,13 @@ class IdleSegmentsCheck(Check):
                 )
             )
         n_tail = sum(1 for f in res.findings if f.severity == Severity.INFO)
-        basis = "" if state is not None else " (no state recorded: judged from commands alone)"
+        if state is not None:
+            basis = ""
+        elif neutral:
+            basis = (" (no state recorded: judged from commands alone; velocity-named dims "
+                     "count as moving unless parked at their usual level)")
+        else:
+            basis = " (no state recorded: judged from commands alone)"
         if not n_flagged:
             res.summary = (
                 f"no episode starts idle or idles >= {cfg.idle_warn_fraction:.0%}"

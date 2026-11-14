@@ -21,8 +21,12 @@ Sampled loads (`--max-episodes`) are compared against the re-aggregated
 per-episode stats of exactly the loaded episodes - never against
 whole-dataset stats - and `stats.json` is checked against the aggregation of
 all per-episode stats, the way LeRobot builds it. A sampled load without
-per-episode stats can only prove gross corruption (std off >= 3x, mean off
->= 2 sigma); subtler drift needs the stats or a full load.
+per-episode stats gets a bootstrap reference once enough episodes are
+loaded (>= 8): the sampling distribution of the pooled mean/std, resampling
+episodes (frames within one are autocorrelated, so the episode is the
+unit), and stored stats outside the 99.9% interval are flagged. With too
+few episodes only the gross backstop applies (std off >= 3x, mean off
+>= 2 sigma); a full load stays the conclusive audit.
 
 Knobs: `stats_mean_warn_sigma` (0.10), `stats_mean_fail_sigma` (0.50),
 `stats_std_warn` (0.05), `stats_std_fail` (0.25), `stats_std_oversize_fail`
@@ -62,9 +66,14 @@ the unblocked end says anything). Dims that look like unnamed grippers or
 on/off commands - including toggles the slot prior misses, such as odd-sized
 bimanual layouts - are reported but never gated.
 
-Limit: delta or EE-pose actions cannot be compared without the robot's
-kinematics (most Open X-Embodiment conversions); those dims classify as
-"delta command" / "different space" and sit the check out.
+Delta commands (most Open X-Embodiment conversions) get a scale-agreement
+verdict: the measured per-frame step of the paired state dim is regressed
+on the command, and a slope far from 1 (with R^2 >= 0.5) means action and
+state disagree on scale - a conversion-units bug, or commands the robot
+cannot follow (on lerobot/xarm_lift_medium the measured steps run at
+~0.07x the commanded ones, R^2 up to 0.98: flagged). Absolute EE-pose
+actions still cannot be compared without the robot's kinematics; those
+dims classify as "different space" and sit the check out.
 
 Knobs: `calib_warn_range_frac` (0.05), `calib_fail_range_frac` (0.15),
 `calib_min_corr` (0.90), `calib_scale_warn` (0.05), `calib_scale_fail`
@@ -78,9 +87,10 @@ than 2 seconds: the command is held AND the robot is still. Idle stretches
 teach the policy to do nothing - the classic "robot stays still at
 inference" postmortem. A still tail after the task completes is INFO.
 
-Limit: without recorded state, detection falls back to commands alone,
-which is the old false-positive-prone behaviour - a held command while the
-arm is under load reads as idle.
+Limit: without recorded state, detection falls back to commands alone.
+Velocity-named dims count as moving unless parked at their modal level (a
+held drive command is constant motion, not idling), which removes the
+classic false positive; unnamed velocity commands can still read as idle.
 
 Knobs: `idle_eps_frac` (0.01), `idle_min_seconds` (2.0),
 `idle_warn_fraction` (0.30), `idle_state_frac` (0.02).
@@ -100,8 +110,12 @@ are reported but not gated; the toggle detection is data-driven, so odd
 layouts the gripper slot prior misses (e.g. a 7-dim bimanual pair) get the
 same treatment.
 
-Limit: the gripper slot prior itself picks a non-gripper about 7% of the
-time; on a misdetected joint a genuinely stuck motor only shows as INFO.
+Limit: the gripper slot prior still advises from distribution shape
+alone; it now requires the dim to VISIT both ends (the quieter end holds
+>=8% of the dwell), which removes the parked-at-one-end false positives,
+but a genuinely one-ended gripper (shut for the whole dataset) is no
+longer recognised either. Misses stay safe: its findings keep their
+severity instead of being downgraded.
 
 Knobs: `stuck_range_frac` (0.005), `stuck_warn_share` (0.25),
 `stuck_unused_share` (0.90), `follow_min_command` (0.10),

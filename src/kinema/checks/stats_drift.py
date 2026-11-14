@@ -187,18 +187,18 @@ class StatsDriftCheck(Check):
                         live = (sd_s > 1e-6) & (sd_a > 1e-6)
                         ratio = np.where(live, np.maximum(sd_s, sd_a) / np.maximum(np.minimum(sd_s, sd_a), 1e-12), 1.0)
                         shift = np.where(live, np.abs(actual["mean"] - stored["mean"]) / np.maximum(sd_s, 1e-12), 0.0)
-                        for kind, arr, lim, fmt in (("std", ratio, cfg.stats_sample_std_ratio, "{:.1f}x"),
+                        for kind, garr, lim, fmt in (("std", ratio, cfg.stats_sample_std_ratio, "{:.1f}x"),
                                                     ("mean", shift, cfg.stats_sample_mean_sigma, "{:.1f} std devs")):
-                            d = int(np.argmax(arr))
-                            if arr[d] > lim:
+                            d = int(np.argmax(garr))
+                            if garr[d] > lim:
                                 res.findings.append(Finding(
                                     self.id, Severity.WARN,
                                     f"{feat}.{kind}: the sampled data is off the stored stats by "
-                                    f"{fmt.format(float(arr[d]))} on dim {d} - far more than sampling "
+                                    f"{fmt.format(float(garr[d]))} on dim {d} - far more than sampling "
                                     "explains; the stored stats look wrong (sampled audit: load the "
                                     "full dataset to confirm)",
                                     details={"feature": feat, "stat": kind, "dim": d,
-                                             "error": float(arr[d]), "reference": "sampled"},
+                                             "error": float(garr[d]), "reference": "sampled"},
                                 ))
                     if "min" in stored and "max" in stored and stored["min"].shape == actual["min"].shape:
                         rng = np.maximum(stored["max"] - stored["min"], 1e-8)
@@ -215,6 +215,59 @@ class StatsDriftCheck(Check):
                                 "describe this data",
                                 details={"feature": feat, "dim": dim, "outside_range_fraction": e},
                             ))
+
+                    # sharper than the gross-ratio backstop when enough
+                    # episodes are loaded (finding #19): the sampling
+                    # distribution of the pooled mean/std, by bootstrap over
+                    # episodes. The episode is the resampling unit - frames
+                    # within one are autocorrelated, so a per-frame standard
+                    # error would be far too tight. The stored stats are the
+                    # population numbers; they should fall inside the
+                    # sample's bootstrap interval unless they are wrong.
+                    eps_ok = []
+                    for ep_id in loaded:
+                        ep_rows = ctx.rows_for(ep_id)
+                        a = arr[ep_rows]
+                        a = a[np.isfinite(a).all(axis=1)]
+                        if len(a) >= 5:
+                            eps_ok.append((a.mean(axis=0), a.std(axis=0), float(len(a))))
+                    if (len(eps_ok) >= cfg.stats_sample_min_episodes
+                            and "mean" in stored and "std" in stored
+                            and stored["mean"].shape == actual["mean"].shape):
+                        mode = "bootstrap"
+                        em = np.stack([t[0] for t in eps_ok])
+                        es = np.stack([t[1] for t in eps_ok])
+                        ec = np.asarray([t[2] for t in eps_ok])
+                        E = len(eps_ok)
+                        brng = np.random.default_rng(0)
+                        idx = brng.integers(0, E, size=(cfg.stats_sample_bootstrap, E))
+                        W = ec[idx]  # (B, E)
+                        sel_m = em[idx]  # (B, E, D)
+                        wsum = W.sum(axis=1)[:, None]
+                        pm = (W[:, :, None] * sel_m).sum(axis=1) / wsum
+                        pv = (W[:, :, None] * (es[idx] ** 2 + (sel_m - pm[:, None, :]) ** 2)).sum(axis=1) / wsum
+                        ps = np.sqrt(np.maximum(pv, 0.0))
+                        qlo, qhi = cfg.stats_sample_alpha / 2, 1 - cfg.stats_sample_alpha / 2
+                        m_lo, m_hi = np.quantile(pm, [qlo, qhi], axis=0)
+                        s_lo, s_hi = np.quantile(ps, [qlo, qhi], axis=0)
+                        for kind, st, lo, hi in (("mean", stored["mean"], m_lo, m_hi),
+                                                 ("std", stored["std"], s_lo, s_hi)):
+                            out = np.maximum(lo - st, st - hi) / np.maximum((hi - lo) / 2, 1e-12)
+                            d = int(np.argmax(out))
+                            if out[d] > 0:
+                                res.findings.append(Finding(
+                                    self.id, Severity.WARN,
+                                    f"{feat}.{kind}: the stored {kind} is inconsistent with the "
+                                    f"loaded sample on dim {d} (stored {st[d]:.6g}, outside the "
+                                    f"sample's {100 * (1 - cfg.stats_sample_alpha):.1f}% bootstrap "
+                                    f"interval [{lo[d]:.6g}, {hi[d]:.6g}] over {E} episodes) - the "
+                                    "stored stats look wrong (sampled audit: load the full dataset "
+                                    "to confirm)",
+                                    details={"feature": feat, "stat": kind, "dim": d,
+                                             "reference": "bootstrap", "episodes": E,
+                                             "stored": float(st[d]),
+                                             "interval": [float(lo[d]), float(hi[d])]},
+                                ))
 
             # stats.json vs the per-episode stats it should be aggregated from:
             # conclusive on any download, since meta is always complete
@@ -234,11 +287,20 @@ class StatsDriftCheck(Check):
         if mode == "containment":
             res.findings.append(Finding(
                 self.id, Severity.INFO,
-                "sampled subset and no per-episode stats: only range containment is "
-                "checked (mean/std of a sample are not comparable to whole-dataset stats)",
+                "sampled subset, too few loaded episodes for a bootstrap reference: "
+                "only gross mean/std shifts and range containment are checked",
+            ))
+        elif mode == "bootstrap" and not any(
+                f.severity >= Severity.WARN for f in res.findings):
+            res.findings.append(Finding(
+                self.id, Severity.INFO,
+                "sampled subset and no per-episode stats: mean/std checked against "
+                "the bootstrap sampling distribution of the loaded episodes, plus "
+                "range containment (a full load is the conclusive audit)",
             ))
         if not any(f.severity >= Severity.WARN for f in res.findings):
             ref = {"full": f"{ctx.stats_source}", "per-episode": "per-episode stats of the loaded episodes",
+                   "bootstrap": "the sample's bootstrap interval and stored range",
                    "containment": "stored range"}[mode]
             res.summary = f"data matches {ref} (worst {worst:.0%} of the FAIL threshold)"
         else:

@@ -65,6 +65,12 @@ def _frame_budget() -> int:
         return _FRAME_BUDGET_DEFAULT
 
 
+# rows per Arrow read batch while loading frame data: bounds the transient
+# memory of a read to one batch no matter how large the shard's row groups
+# are (a DROID-scale group is larger than a small machine's RAM)
+_READ_BATCH_ROWS = 65536
+
+
 @dataclass
 class EpisodeMeta:
     index: int
@@ -397,12 +403,14 @@ def _effective_stats(
     return stats, source
 
 
-def _column(table: pa.Table, name: str) -> np.ndarray | None:
+def _column(table: "pa.Table | pa.RecordBatch", name: str) -> np.ndarray | None:
     """A vector column as a (rows, dim) float64 array, straight from Arrow
     buffers. Going through Python lists costs ~10x the memory and time."""
     if name not in table.column_names:
         return None
-    col = table.column(name).combine_chunks()
+    col = table.column(name)
+    if isinstance(col, pa.ChunkedArray):
+        col = col.combine_chunks()
     typ = col.type
     is_list = pa.types.is_fixed_size_list(typ) or pa.types.is_list(typ) or pa.types.is_large_list(typ)
     if not is_list:
@@ -422,8 +430,11 @@ def _column(table: pa.Table, name: str) -> np.ndarray | None:
     return np.asarray(col.to_pylist(), dtype=np.float64)
 
 
-def _ints(table: pa.Table, name: str) -> np.ndarray:
-    return table.column(name).to_numpy().astype(np.int64, copy=False)
+def _ints(table: "pa.Table | pa.RecordBatch", name: str) -> np.ndarray:
+    col = table.column(name)
+    if isinstance(col, pa.ChunkedArray):
+        col = col.combine_chunks()
+    return col.to_numpy().astype(np.int64, copy=False)
 
 
 def load_dataset(
@@ -570,41 +581,51 @@ def load_dataset(
                 )
             m = maps[name]
             m[n:n + arr.shape[0]] = arr
+            # force writeback to start now: streaming gigabytes of memmap
+            # writes without flushing lets dirty pages pile up until the
+            # OOM killer steps in on small machines (DROID-scale, #11)
+            m.flush()
         else:
             chunks.setdefault(name, []).append(arr)
 
-    # file at a time, numpy at a time: the Arrow table is dropped before the
-    # next file is read, so peak memory is one shard plus the output arrays
+    # file at a time, batch at a time: each batch is dropped before the
+    # next is read, so peak memory is one read batch plus the output
+    # arrays. Reading whole row groups at once spikes to the full
+    # (decompressed) group - on huge shards (DROID-scale, finding #11)
+    # that alone OOMs small machines even when the frame arrays spill.
     for f, pf, groups in plan:
         cols = [c for c in wanted_cols if c in pf.schema_arrow.names]
-        try:
-            t = pf.read_row_groups(groups, columns=cols)
-        except (OSError, pa.ArrowInvalid) as e:  # truncated / corrupt data pages
-            _bad(f, e)
-            continue
-        t = t.filter(pc.is_in(t.column("episode_index").cast(pa.int64()), value_set=value_set))
-        if not t.num_rows:
-            continue
-        for name in ("episode_index", "frame_index", "task_index"):
-            if name in t.column_names:
-                seen.add(name)
-                _put(name, _ints(t, name))
-        if "timestamp" in t.column_names:
-            seen.add("timestamp")
-            _put("timestamp", t.column("timestamp").to_numpy().astype(np.float64, copy=False))
-        for extra in (reward_col, done_col):
-            if extra and extra in t.column_names:
-                seen.add(extra)
-                _put(extra, t.column(extra).to_numpy().astype(np.float64, copy=False))
-        for canon in (STATE_KEY, ACTION_KEY):
-            name = keys[canon]
-            if name in t.column_names:
-                arr = _column(t, name)
-                if arr is not None:
-                    seen.add(name)
-                    widths.setdefault(name, arr.shape[1] if arr.ndim > 1 else 1)
-                    _put(name, arr)
-        n += t.num_rows
+        for g in groups:
+            try:
+                for t in pf.iter_batches(batch_size=_READ_BATCH_ROWS, row_groups=[g], columns=cols):
+                    t = t.filter(pc.is_in(t.column("episode_index").cast(pa.int64()), value_set=value_set))
+                    if not t.num_rows:
+                        continue
+                    for name in ("episode_index", "frame_index", "task_index"):
+                        if name in t.column_names:
+                            seen.add(name)
+                            _put(name, _ints(t, name))
+                    if "timestamp" in t.column_names:
+                        seen.add("timestamp")
+                        _put("timestamp", t.column("timestamp").to_numpy().astype(np.float64, copy=False))
+                    for extra in (reward_col, done_col):
+                        if extra and extra in t.column_names:
+                            seen.add(extra)
+                            # zero_copy_only=False: boolean columns (done) have no
+                            # zero-copy numpy form
+                            _put(extra, t.column(extra).to_numpy(zero_copy_only=False).astype(np.float64, copy=False))
+                    for canon in (STATE_KEY, ACTION_KEY):
+                        name = keys[canon]
+                        if name in t.column_names:
+                            arr = _column(t, name)
+                            if arr is not None:
+                                seen.add(name)
+                                widths.setdefault(name, arr.shape[1] if arr.ndim > 1 else 1)
+                                _put(name, arr)
+                    n += t.num_rows
+            except (OSError, pa.ArrowInvalid) as e:  # truncated / corrupt data pages
+                _bad(f, e)
+                break
 
     if n == 0 and unreadable:
         raise DatasetError(

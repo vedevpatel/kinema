@@ -202,7 +202,12 @@ def test_unnamed_delta_actions_are_not_compared(base):
     _rewrite_data(base, delta)
     _set_names(base, [f"motor_{i}" for i in range(6)], [f"motor_{i}" for i in range(6)])
     res = run("calibration-drift", load_dataset(str(base)))
-    assert res.skipped and "delta command" in res.skip_reason
+    # not compared as position commands - but since finding #14 the dims get
+    # a delta-scale verdict instead of a bare skip (clean deltas: no findings)
+    assert not res.skipped
+    assert res.details["compared_joints"] == []
+    assert len(res.details["compared_deltas"]) == 6
+    assert gated(res) == []
 
 
 def test_real_calibration_drift_still_caught_with_generic_names(tmp_path):

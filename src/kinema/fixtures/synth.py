@@ -59,15 +59,24 @@ def make_dataset(
     episodes: int = 24,
     defects: list[str] | None = None,
     seed: int = 0,
+    with_state: bool = True,
+    velocity_dim: bool = False,
+    action_mode: str = "position",
+    delta_scale: float = 1.0,
 ) -> Path:
     defects = defects or []
     unknown = set(defects) - set(KNOWN_DEFECTS)
     if unknown:
         raise ValueError(f"unknown defects: {sorted(unknown)} (known: {KNOWN_DEFECTS})")
+    if action_mode not in ("position", "delta"):
+        raise ValueError(f"unknown action_mode: {action_mode!r}")
     rng = np.random.default_rng(seed)
     root = Path(path)
     (root / "meta" / "episodes" / "chunk-000").mkdir(parents=True, exist_ok=True)
     (root / "data" / "chunk-000").mkdir(parents=True, exist_ok=True)
+
+    a_dim = _STATE_DIM + (1 if velocity_dim else 0)
+    a_names = _NAMES + ["base.velocity"] if velocity_dim else _NAMES
 
     rows_ep, rows_fi, rows_ts, rows_state, rows_action, rows_task = [], [], [], [], [], []
     ep_meta = []
@@ -80,6 +89,23 @@ def make_dataset(
         state = _smooth(rng, n, _STATE_DIM)
         # action tracks state (a well-calibrated leader/follower pair)
         action = state + 0.005 * rng.standard_normal(state.shape)
+        if action_mode == "delta":
+            # delta commands: a[t] is the step the state takes next
+            delta = np.diff(state, axis=0)
+            action = np.vstack([delta, delta[-1:]]) * delta_scale
+            action += 0.002 * rng.standard_normal(action.shape)
+        if velocity_dim:
+            # a named velocity command on top of the position arm: parked at
+            # 0 everywhere except episode 4, whose back half drives the base
+            # at a held constant velocity while the arm holds still (the
+            # commands-only idle false positive: constant command, real motion)
+            vel = np.zeros((n, 1))
+            if ep == 4:
+                hold = int(n * 0.6)
+                vel[n - hold:] = 0.6
+                action[n - hold:] = action[n - hold - 1]
+                state[n - hold:] = state[n - hold - 1]
+            action = np.hstack([action, vel])
         if ep == 0:
             first_state, first_action = state.copy(), action.copy()
 
@@ -133,25 +159,26 @@ def make_dataset(
         _a[:, 1] = np.minimum(_a[:, 1], _hi)
         rows_action = _a.tolist()
 
-    table = pa.table(
-        {
-            "episode_index": pa.array(rows_ep, type=pa.int64()),
-            "frame_index": pa.array(rows_fi, type=pa.int64()),
-            "timestamp": pa.array(rows_ts, type=pa.float64()),
-            "observation.state": pa.array(rows_state, type=pa.list_(pa.float64())),
-            "action": pa.array(rows_action, type=pa.list_(pa.float64())),
-            "task_index": pa.array(rows_task, type=pa.int64()),
-        }
-    )
+    cols = {
+        "episode_index": pa.array(rows_ep, type=pa.int64()),
+        "frame_index": pa.array(rows_fi, type=pa.int64()),
+        "timestamp": pa.array(rows_ts, type=pa.float64()),
+        "action": pa.array(rows_action, type=pa.list_(pa.float64())),
+        "task_index": pa.array(rows_task, type=pa.int64()),
+    }
+    if with_state:
+        cols["observation.state"] = pa.array(rows_state, type=pa.list_(pa.float64()))
+    table = pa.table(cols)
     pq.write_table(table, root / "data" / "chunk-000" / "file-000.parquet")
 
     # per-episode stats, as LeRobot v3 writes them (stats/<feature>/<stat>)
     ep_arr = np.asarray(rows_ep)
     state_all, action_all = np.asarray(rows_state), np.asarray(rows_action)
+    feats = [("action", action_all)] + ([("observation.state", state_all)] if with_state else [])
     ep_cols: dict[str, list] = {}
     for m in ep_meta:
         sel = ep_arr == m["episode_index"]
-        for feat, arr in (("observation.state", state_all), ("action", action_all)):
+        for feat, arr in feats:
             for k, v in _stats(arr[sel]).items():
                 ep_cols.setdefault(f"stats/{feat}/{k}", []).append(v)
     pq.write_table(
@@ -178,13 +205,22 @@ def make_dataset(
         root / "meta" / "tasks.parquet",
     )
 
-    stats = {
-        "observation.state": _stats(state_all),
-        "action": _stats(action_all),
-    }
+    stats = {"action": _stats(action_all)}
+    if with_state:
+        stats["observation.state"] = _stats(state_all)
     if "stats-drift" in defects:
         for k in ("mean", "std"):
             stats["action"][k] = (np.asarray(stats["action"][k]) * 1.08).tolist()
+
+    features = {
+        "action": {"dtype": "float64", "shape": [a_dim], "names": a_names},
+        "timestamp": {"dtype": "float64", "shape": [1]},
+        "frame_index": {"dtype": "int64", "shape": [1]},
+        "episode_index": {"dtype": "int64", "shape": [1]},
+        "task_index": {"dtype": "int64", "shape": [1]},
+    }
+    if with_state:
+        features["observation.state"] = {"dtype": "float64", "shape": [_STATE_DIM], "names": _NAMES}
 
     (root / "meta" / "stats.json").write_text(json.dumps(stats, indent=2))
     (root / "meta" / "info.json").write_text(
@@ -194,14 +230,7 @@ def make_dataset(
                 "fps": _FPS,
                 "total_episodes": episodes,
                 "total_frames": global_index,
-                "features": {
-                    "observation.state": {"dtype": "float64", "shape": [_STATE_DIM], "names": _NAMES},
-                    "action": {"dtype": "float64", "shape": [_STATE_DIM], "names": _NAMES},
-                    "timestamp": {"dtype": "float64", "shape": [1]},
-                    "frame_index": {"dtype": "int64", "shape": [1]},
-                    "episode_index": {"dtype": "int64", "shape": [1]},
-                    "task_index": {"dtype": "int64", "shape": [1]},
-                },
+                "features": features,
                 "data_path": "data/chunk-{chunk_index:03d}/file-{file_index:03d}.parquet",
             },
             indent=2,
