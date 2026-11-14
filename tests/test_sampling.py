@@ -139,3 +139,74 @@ def test_spilled_sampled_load(tmp_path, monkeypatch):
     ctx = load_dataset(str(root), max_episodes=8)
     assert ctx.total_episodes == 8 and ctx.truncated
     assert np.unique(np.asarray(ctx.episode_index)).size == 8
+
+
+def _v3_meta_with_video(root, mapping):
+    """v3 meta/episodes with data AND per-camera video shard locations."""
+    d = root / "meta" / "episodes" / "chunk-000"
+    d.mkdir(parents=True)
+    pq.write_table(
+        pa.table(
+            {
+                "episode_index": pa.array([m[0] for m in mapping], type=pa.int64()),
+                "length": pa.array([10] * len(mapping), type=pa.int64()),
+                "data/chunk_index": pa.array([m[1] for m in mapping], type=pa.int64()),
+                "data/file_index": pa.array([m[2] for m in mapping], type=pa.int64()),
+                "videos/cam/chunk_index": pa.array([m[1] for m in mapping], type=pa.int64()),
+                "videos/cam/file_index": pa.array([m[2] for m in mapping], type=pa.int64()),
+            }
+        ),
+        d / "file-000.parquet",
+    )
+    (root / "meta" / "info.json").write_text(json.dumps({
+        "video_path": "videos/{video_key}/chunk-{chunk_index:03d}/file-{file_index:03d}.mp4",
+        "chunks_size": 1000,
+        "features": {"cam": {"dtype": "video"}},
+    }))
+
+
+def test_v3_video_targets_only_shards_holding_the_sample(tmp_path):
+    from kinema.dataset import _target_video_files
+
+    mapping = [(ep, ep // 10, 0) for ep in range(200)]
+    _v3_meta_with_video(tmp_path, mapping)
+    targets = _target_video_files(tmp_path, 10)
+    assert targets is not None
+    assert all(t.startswith("videos/cam/chunk-") for t in targets)
+    assert len(targets) <= 10  # not the whole 20-shard tree
+    assert "videos/cam/chunk-000/file-000.mp4" in targets
+    assert "videos/cam/chunk-019/file-000.mp4" in targets
+
+
+def test_v21_video_targets_one_mp4_per_sampled_episode(tmp_path):
+    from kinema.dataset import _target_video_files
+
+    _v21_meta(tmp_path, list(range(100)))
+    (tmp_path / "meta" / "info.json").write_text(json.dumps({
+        "video_path": "videos/chunk-{episode_chunk:03d}/{video_key}/episode_{episode_index:06d}.mp4",
+        "chunks_size": 1000,
+        "features": {"observation.images.top": {"dtype": "video"}},
+    }))
+    targets = _target_video_files(tmp_path, 5)
+    assert targets is not None and len(targets) == 5
+    assert "videos/chunk-000/observation.images.top/episode_000000.mp4" in targets
+    assert "videos/chunk-000/observation.images.top/episode_000099.mp4" in targets
+
+
+def test_video_sample_at_or_above_total_downloads_everything(tmp_path):
+    from kinema.dataset import _target_video_files
+
+    _v21_meta(tmp_path, list(range(10)))
+    (tmp_path / "meta" / "info.json").write_text(json.dumps({
+        "video_path": "videos/{video_key}/episode_{episode_index:06d}.mp4",
+        "features": {"cam": {"dtype": "video"}},
+    }))
+    assert _target_video_files(tmp_path, 50) == ["videos/**"]
+
+
+def test_video_targets_none_without_video_path(tmp_path):
+    from kinema.dataset import _target_video_files
+
+    _v21_meta(tmp_path, list(range(10)))
+    (tmp_path / "meta" / "info.json").write_text(json.dumps({"features": {}}))
+    assert _target_video_files(tmp_path, 5) is None

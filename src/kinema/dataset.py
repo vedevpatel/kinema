@@ -195,6 +195,84 @@ def _target_data_files(root: Path, max_episodes: int) -> list[str] | None:
     return None
 
 
+def _target_video_files(root: Path, max_episodes: int) -> list[str] | None:
+    """Repo-relative video files holding the same spread sample of episodes,
+    so a sampled --video audit downloads only the shards it will read.
+
+    Without this, --video fetches every video in the repo before the sampler
+    runs: on DROID that is 823 files for a 4-episode sample. v3.0 records
+    each episode's video shard per camera in meta/episodes
+    (videos/<cam>/chunk_index, videos/<cam>/file_index); v2.1 names one mp4
+    per episode. None when the layout says neither - the caller falls back
+    to a full videos/ download."""
+    try:
+        info = json.loads((root / "meta" / "info.json").read_text())
+        episodes = _load_episode_meta(root)
+    except (OSError, json.JSONDecodeError, DatasetError):
+        return None
+    template = info.get("video_path")
+    if not template:
+        return None
+    cams = [k for k, f in (info.get("features") or {}).items()
+            if isinstance(f, dict) and f.get("dtype") == "video"]
+    if not cams:
+        return None
+    ids = sorted({e.index for e in episodes})
+    if not ids or max_episodes >= len(ids):
+        return ["videos/**"]
+    wanted = set(_spread(ids, max_episodes))
+    chunk_size = int(info.get("chunks_size") or 1000)
+
+    def render(cam: str, ep: int, ch: int, fi: int) -> str | None:
+        try:
+            # alias both naming generations: v3 uses chunk_index/file_index,
+            # v2 templates use episode_chunk/episode_index
+            return template.format(video_key=cam, episode_index=ep,
+                                   episode_chunk=ep // chunk_size,
+                                   chunk_index=ch, file_index=fi)
+        except (KeyError, IndexError, ValueError):
+            return None
+
+    ep_dir = root / "meta" / "episodes"
+    if ep_dir.is_dir():
+        files: set[str] = set()
+        for f in sorted(ep_dir.glob("**/*.parquet")):
+            try:
+                names = pq.read_schema(f).names
+                cam_cols = {c: (f"videos/{c}/chunk_index", f"videos/{c}/file_index")
+                            for c in cams
+                            if f"videos/{c}/chunk_index" in names
+                            and f"videos/{c}/file_index" in names}
+                if not cam_cols:
+                    continue  # episodes parquet without video shard locations
+                cols = ["episode_index"] + [c for pair in cam_cols.values() for c in pair]
+                t = pq.read_table(f, columns=cols).to_pydict()
+            except (OSError, pa.ArrowInvalid, ValueError):
+                return None  # unreadable meta: targeting is best-effort
+            for row, ep in enumerate(t["episode_index"]):
+                if int(ep) not in wanted:
+                    continue
+                for cam, (ccol, fcol) in cam_cols.items():
+                    ch, fi = t[ccol][row], t[fcol][row]
+                    if ch is None or fi is None:
+                        continue
+                    path = render(cam, int(ep), int(ch), int(fi))
+                    if path is None:
+                        return None
+                    files.add(path)
+        return sorted(files) if files else None
+    if (root / "meta" / "episodes.jsonl").exists():
+        out = []
+        for i in sorted(wanted):
+            for cam in cams:
+                path = render(cam, i, i // chunk_size, i)
+                if path is None:
+                    return None
+                out.append(path)
+        return out
+    return None
+
+
 def _resolve_source(
     source: str, video: bool = False, max_episodes: int | None = None
 ) -> tuple[Path, str | None]:
@@ -229,7 +307,7 @@ def _resolve_source(
     if "@" in src:
         src, revision = src.rsplit("@", 1)
     patterns = ["meta/**", "*.json", "*.jsonl"]
-    if video:
+    if video and max_episodes is None:
         patterns.append("videos/**")
     if max_episodes is None:
         patterns.append("data/**")
@@ -243,6 +321,11 @@ def _resolve_source(
             # sampled audit: fetch only the shards the sampled episodes live
             # in (droid's full data/ is ~14 GB; a 50-episode sample is not)
             targets = _target_data_files(local, max_episodes) or ["data/**"]
+            if video:
+                # sampled --video audits fetch only the video shards of the
+                # sampled episodes, not the whole videos/ tree (823 files
+                # for a 4-episode DROID sample before this)
+                targets += _target_video_files(local, max_episodes) or ["videos/**"]
             snapshot_download(
                 repo_id=src,
                 repo_type="dataset",
