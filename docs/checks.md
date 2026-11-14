@@ -10,6 +10,50 @@ training outright). Exit code is 1 on any FAIL; `--fail-on warn` also gates
 on WARN. A SKIP means the check could not run on this dataset - the reason
 says why, and it is not a verdict on the data.
 
+## Health score
+
+Score model `tiered-v1` (reports, report JSON `score_model`, and the
+leaderboard all name it). Start at 100; each FAIL check costs 25; each WARN
+check costs its weight below; floor at 0. Billing is per check, never per
+finding: a check that lists 40 flagged episodes costs the same as one that
+lists 5, and making a check more detailed never moves a score. Limit: one
+defect that trips several checks still pays each of them (idle padding often
+also trips stuck-actuator). The score is derived from stored per-check verdicts, so
+any stored result can be rescored without re-running checks. Results with no
+`score_model` field were scored by `legacy-v0` (hand-tuned weights); scores
+are not comparable across models.
+
+A FAIL is a "data is not what it claims" blocker; its cost is trust, not
+measured training damage, so it is not harm-scaled. WARN weights come in
+three tiers anchored on the harm study v0 (`scripts/harm_study.py`: ridge
+behavior cloning, state-only, held-out action MSE delta vs clean, pusht):
+
+| tier | meaning | held-out MSE delta | weight |
+| --- | --- | --- | --- |
+| A | training killer | >= 100% | 10 |
+| B | skews learning | 10-100% | 6 |
+| C | review list | < 10% | 2 |
+
+The band edges are provisional - three measurements define them - and get
+re-anchored once when the full harm table lands. Each check's weight carries
+its basis in report JSON (`weight`, `weight_basis`):
+
+| check | weight | basis |
+| --- | --- | --- |
+| idle-segments | 10 | measured: +881% (tier A) |
+| calibration-drift | 10 | measured: +347% (tier A) |
+| duplicate-and-leakage | 2 | measured: +0.1% (tier C) |
+| stats-drift, nan-and-normalization, deployment-readiness, timestamp-grid | 10 | placeholder |
+| dropped-frames | 8 | placeholder |
+| stuck-actuator, action-saturation, visual-quality | 6 | placeholder |
+| outlier-episodes | 3 | placeholder |
+| any other check (task-strings, reward-done, ...) | 8 | placeholder |
+
+Placeholder weights are the hand-tuned legacy values, kept until the harm
+study measures them. Limit: every measured number is one linear-BC MSE
+delta, not rollout success; tiers are re-checked against success-rate
+deltas when the GPU protocol runs.
+
 ## stats-drift
 
 Stored normalization stats (`meta/stats.json`, or per-episode stats on v2.1)
@@ -75,6 +119,11 @@ cannot follow (on lerobot/xarm_lift_medium the measured steps run at
 actions still cannot be compared without the robot's kinematics; those
 dims classify as "different space" and sit the check out.
 
+Limit (score weight): a WARN costs 10, tier A, measured - action scale 0.5x
+in 25% of episodes (the delta-scale defect) raised held-out action MSE by
+347% in the harm study v0 (ridge BC). Constant offsets on absolute commands
+share the weight without a measurement of their own.
+
 Knobs: `calib_warn_range_frac` (0.05), `calib_fail_range_frac` (0.15),
 `calib_min_corr` (0.90), `calib_scale_warn` (0.05), `calib_scale_fail`
 (0.15), `calib_scale_min_r2` (0.60), `calib_scale_line_vs_step` (1.5),
@@ -91,6 +140,9 @@ Limit: without recorded state, detection falls back to commands alone.
 Velocity-named dims count as moving unless parked at their modal level (a
 held drive command is constant motion, not idling), which removes the
 classic false positive; unnamed velocity commands can still read as idle.
+
+Limit (score weight): a WARN costs 10, tier A, measured - 30 idle frames
+prepended raised held-out action MSE by 881% in the harm study v0 (ridge BC).
 
 Knobs: `idle_eps_frac` (0.01), `idle_min_seconds` (2.0),
 `idle_warn_fraction` (0.30), `idle_state_frac` (0.02).
@@ -158,6 +210,12 @@ No knobs.
   sample with an INFO note saying so.
 - leakage: any of the above spanning two splits declared in info.json -
   eval would be measured on training data (WARN).
+
+Limit (score weight): a WARN costs 2, tier C, measured - 20% duplicate
+episodes moved held-out action MSE by +0.1% in the harm study v0 (ridge BC):
+easy to detect, nearly harmless to linear BC. That reading is not yet
+confirmed against a high-capacity policy, and split leakage inflates
+evaluation rather than hurting training, a harm this weight does not price.
 
 No knobs.
 

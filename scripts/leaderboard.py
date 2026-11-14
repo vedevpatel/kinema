@@ -3,6 +3,12 @@
 Hugging Face Hub and render a static site (docs/ -> GitHub Pages).
 
 Usage: python scripts/leaderboard.py [--limit 50] [--out docs] [--max-episodes 50]
+       python scripts/leaderboard.py --rescore [--out docs]
+
+--rescore recomputes every stored score from its stored per-check verdicts
+under the current score model (kinema.report.SCORE_MODEL) and re-renders
+the site - no downloads, no check re-runs. Every normal run rescores the
+board it resumes from the same way, so a score-model change lands in one run.
 
 Datasets whose parquet payload exceeds --size-cap-mb are listed as
 "not audited (too large for the sampled audit)" instead of being
@@ -15,6 +21,7 @@ import argparse
 import datetime as dt
 import html
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -23,7 +30,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from kinema.checks import ALL_CHECKS, CheckConfig, Severity  # noqa: E402
 from kinema.dataset import DatasetError, load_dataset  # noqa: E402
 from kinema.engine import engine_version  # noqa: E402
-from kinema.report import DatasetReport, report_to_dict  # noqa: E402
+from kinema.report import (  # noqa: E402
+    SCORE_MODEL,
+    DatasetReport,
+    report_from_dict,
+    report_to_dict,
+    rescore_report_dict,
+)
 
 SIZE_CAP_MB_DEFAULT = 200
 
@@ -347,7 +360,7 @@ def audit_one(repo_id: str, max_episodes: int, cap_bytes: int) -> DatasetReport:
     return rep
 
 
-def render_dataset_page(rep: DatasetReport) -> str:
+def render_dataset_page(rep: DatasetReport, audited: str | None = None) -> str:
     rows = "".join(
         f"<tr><td><code>{esc(r.check_id)}</code></td>"
         f"<td>{badge('SKIP' if r.skipped else r.verdict.name)}</td>"
@@ -370,8 +383,9 @@ def render_dataset_page(rep: DatasetReport) -> str:
         f"<h2>Health score: {rep.score}/100</h2>"
         f"<table><tr><th>check</th><th>verdict</th><th>summary</th></tr>{rows}</table>"
         f"<h2>Warnings &amp; failures</h2><ul>{''.join(findings) or '<li>none</li>'}</ul>"
-        f"<p class=dim>audited {dt.datetime.now(dt.timezone.utc):%Y-%m-%d %H:%M UTC} by "
-        "<a href='https://github.com/vedevpatel/kinema'>kinema</a></p>"
+        f"<p class=dim>audited {esc(audited or f'{dt.datetime.now(dt.timezone.utc):%Y-%m-%d %H:%M UTC}')} by "
+        "<a href='https://github.com/vedevpatel/kinema'>kinema</a>"
+        f" | score model <code>{esc(SCORE_MODEL)}</code></p>"
     )
     return page(f"{rep.source} - kinema audit", body)
 
@@ -388,6 +402,10 @@ def render_index(entries: list[dict], generated: str) -> str:
             r = e["report"]
             link = f"<a href='dataset/{esc(e['slug'])}.html'>{esc(e['id'])}</a>"
             score = f"<span class=score>{r['score']}</span>"
+            model = r.get("score_model", "legacy-v0")
+            if model != SCORE_MODEL:
+                score += f' <span class=dim>({esc(model)})</span>'
+
             verdict = badge(r["verdict"])
             checks = " ".join(
                 badge(c["verdict"]) for c in r["checks"] if c["verdict"] in ("WARN", "FAIL")
@@ -411,14 +429,18 @@ def render_index(entries: list[dict], generated: str) -> str:
         "<a href='https://github.com/vedevpatel/kinema'>kinema</a>. "
         f"Generated {esc(generated)} by engine <code>{esc(engine)}</code>"
         + (f"; {n_stale} result(s) from older check logic are being re-audited" if n_stale else "")
-        + ". Scores are heuristic: 100 minus a per-check penalty for each warning/failing "
-        "check, weighted by how directly it breaks training. Video checks are not run "
+        + f". Scores use model <code>{esc(SCORE_MODEL)}</code>: 100 minus 25 per failing "
+        "check and a per-check weight for each warning check (10 / 6 / 2 by measured "
+        "training harm where the harm study has measured it, hand-tuned otherwise; "
+        "<a href='https://github.com/vedevpatel/kinema/blob/main/docs/checks.md#health-score'>"
+        "details</a>). Scores are not comparable across score models. Video checks are not run "
         "here (MP4s are hundreds of MB per camera); run <code>kinema check --video</code> "
         "locally.</p>"
         "<p id=pager><button onclick=pg(-1)>&larr; Prev</button> "
         "<span id=pglabel></span> "
         "<button onclick=pg(1)>Next &rarr;</button></p>"
-        "<table id=lb><thead><tr><th>#</th><th>dataset</th><th>downloads</th><th>score</th>"
+        "<table id=lb><thead><tr><th>#</th><th>dataset</th><th>downloads</th>"
+        f"<th>score <span class=dim>({esc(SCORE_MODEL)})</span></th>"
         "<th>verdict</th><th>flags</th></tr></thead><tbody>"
         + "".join(rows)
         + "</tbody></table>"
@@ -438,12 +460,68 @@ def render_index(entries: list[dict], generated: str) -> str:
 
 def _write(out: Path, entries: list, generated: str) -> None:
     """Atomic writes so a kill mid-run never leaves a corrupt or missing site."""
-    data = json.dumps({"generated": generated, "datasets": entries}, indent=2, default=str)
+    data = json.dumps(
+        {"generated": generated, "score_model": SCORE_MODEL, "datasets": entries},
+        indent=2, default=str,
+    )
     idx = render_index(entries, generated)
     for name, text in (("data.json", data), ("index.html", idx)):
         tmp = out / f".{name}.tmp"
         tmp.write_text(text)
         tmp.replace(out / name)
+
+
+def rescore_entries(entries: list[dict]) -> int:
+    """Rescore every audited entry in place from its stored per-check verdicts
+    (never per finding, never a check re-run); returns how many scores moved."""
+    moved = 0
+    for e in entries:
+        if e.get("report"):
+            before = e["report"].get("score")
+            rescore_report_dict(e["report"])
+            moved += e["report"]["score"] != before
+    return moved
+
+
+_AUDITED_RE = re.compile(r"audited (\d{4}-\d\d-\d\d \d\d:\d\d UTC)")
+
+
+def rewrite_dataset_pages(out: Path, entries: list[dict]) -> None:
+    """Re-render each audited entry's dataset page + report JSON from its
+    stored report, keeping the page's original audit stamp."""
+    for e in entries:
+        if not e.get("report"):
+            continue
+        page_path = out / "dataset" / f"{e['slug']}.html"
+        m = _AUDITED_RE.search(page_path.read_text()) if page_path.exists() else None
+        rep = report_from_dict(e["report"])
+        # the page renders from the round-tripped report; it must agree with
+        # the stored verdicts the board score was computed from
+        if rep.score != e["report"]["score"]:
+            raise RuntimeError(f"{e['id']}: round-tripped score {rep.score} != stored "
+                               f"{e['report']['score']}")
+        for name, text in (
+            (f"{e['slug']}.json", json.dumps(e["report"], indent=2, default=str)),
+            (f"{e['slug']}.html", render_dataset_page(rep, audited=m.group(1) if m else "unknown")),
+        ):
+            tmp = out / "dataset" / f".{name}.tmp"
+            tmp.write_text(text)
+            tmp.replace(out / "dataset" / name)
+
+
+def rescore_site(out: Path) -> int:
+    """--rescore: recompute data.json, index.html and every dataset page from
+    the stored verdicts. Keeps the board's generated stamp and each page's
+    audit stamp - nothing was re-audited."""
+    data_json = out / "data.json"
+    board = json.loads(data_json.read_text())
+    entries = board.get("datasets", [])
+    moved = rescore_entries(entries)
+    rewrite_dataset_pages(out, entries)
+    _write(out, entries, board.get("generated", "unknown"))
+    n = sum(1 for e in entries if e.get("report"))
+    print(f"rescored {n} datasets under {SCORE_MODEL}: {moved} score(s) changed")
+    return 0
 
 
 def main() -> int:
@@ -458,9 +536,13 @@ def main() -> int:
     ap.add_argument("--time-budget", type=float, default=0, help="stop starting new audits after N seconds")
     ap.add_argument("--workers", type=int, default=1)
     ap.add_argument("--worklist", default="", help="cache file for the dataset list")
+    ap.add_argument("--rescore", action="store_true",
+                    help="recompute stored scores under the current score model; no audits")
     args = ap.parse_args()
 
     out = Path(args.out)
+    if args.rescore:
+        return rescore_site(out)
     (out / "dataset").mkdir(parents=True, exist_ok=True)
 
     worklist_path = Path(args.worklist) if args.worklist else None
@@ -502,6 +584,9 @@ def main() -> int:
             else:
                 print(f"listing returned {len(current)} datasets for a board of {len(entries)}; "
                       "not pruning")
+            # stored results carry their verdicts: rescore them under the
+            # current model so the whole board swaps models in this run
+            n_moved = rescore_entries(entries)
             done_ids = {
                 e["id"] for e in entries
                 if e.get("status") == "gated" or e.get("engine") == engine
@@ -509,7 +594,11 @@ def main() -> int:
             n_stale = sum(1 for e in entries if e["id"] not in done_ids)
             print(f"resuming: {len(done_ids)} current, {n_stale} stale (engine {engine})")
         except Exception:
-            entries, done_ids = [], set()
+            entries, done_ids, n_moved = [], set(), 0
+        if n_moved:
+            # outside the try: a page-render error must not wipe the board
+            rewrite_dataset_pages(out, entries)
+            print(f"rescored stored results under {SCORE_MODEL}: {n_moved} score(s) changed")
     stale_ids = {e["id"] for e in entries if e["id"] not in done_ids}
 
     import time
