@@ -12,16 +12,40 @@ says why, and it is not a verdict on the data.
 
 ## Health score
 
-Score model `tiered-v1` (reports, report JSON `score_model`, and the
+Score model `tiered-v1.1` (reports, report JSON `score_model`, and the
 leaderboard all name it). Start at 100; each FAIL check costs 25; each WARN
-check costs its weight below; floor at 0. Billing is per check, never per
-finding: a check that lists 40 flagged episodes costs the same as one that
-lists 5, and making a check more detailed never moves a score. Limit: one
-defect that trips several checks still pays each of them (idle padding often
-also trips stuck-actuator). The score is derived from stored per-check verdicts, so
-any stored result can be rescored without re-running checks. Results with no
-`score_model` field were scored by `legacy-v0` (hand-tuned weights); scores
-are not comparable across models.
+check costs its weight below, unless a correlated-check waiver (below) waives
+it; floor at 0. Billing is per check, never per finding: a check that lists
+40 flagged episodes costs the same as one that lists 5, and making a check
+more detailed never moves a score. The score is derived from stored per-check
+verdicts and stored findings, so any stored result can be rescored without
+re-running checks. `tiered-v1.1` is `tiered-v1` (same tiers, weights and FAIL
+cost) plus the waiver. Results with no `score_model` field were scored by
+`legacy-v0` (hand-tuned weights); scores are not comparable across models.
+
+Correlated checks: one defect can trip two checks. A declared waiver edge
+(upstream -> downstream) waives the downstream check's WARN weight when the
+upstream check is charged (WARN or FAIL), the downstream check is WARN, both
+checks expose non-empty flagged episode sets in the report, and the Jaccard
+overlap of those sets is >= 0.5 (inclusive): half or more of all flagged
+episodes are shared, so the episodes say one defect. Otherwise both checks
+pay. One edge ships:
+
+| upstream | downstream | mechanism |
+| --- | --- | --- |
+| idle-segments | stuck-actuator | an episode that never moves is one idle run end to end and also a "no joint moves at all" dead recording - one dead-episode defect trips both |
+
+FAILs are never waived (an upstream FAIL still counts as charged). Both
+verdicts and all findings still show; only the charge changes. Report JSON
+carries, per check, `charge` (the WARN weight after any waiver: equal to
+`weight` unless waived, then 0) and, when waived, `waived_by` (the upstream
+check id) and `waiver_evidence` (`shared_episodes`, `overlap`); leaderboard
+dataset pages annotate the waived row. Each check's flagged episode set is
+the union of its findings' `episode_index` and `details.episodes`. Limit:
+the waiver reads stored episode sets, so a check that reports none can never
+be waived; and the gate only removes a double charge where the episodes
+coincide - idle padding on episodes whose arm then works, plus dead joints
+elsewhere, still pay both checks.
 
 A FAIL is a "data is not what it claims" blocker; its cost is trust, not
 measured training damage, so it is not harm-scaled. WARN weights come in
@@ -168,6 +192,11 @@ alone; it now requires the dim to VISIT both ends (the quieter end holds
 but a genuinely one-ended gripper (shut for the whole dataset) is no
 longer recognised either. Misses stay safe: its findings keep their
 severity instead of being downgraded.
+
+Limit (score weight): a WARN costs 6, placeholder. It is waived when
+idle-segments is also charged and the two checks' flagged episode sets
+overlap at the gate (Jaccard >= 0.5) - the same dead episodes counted
+twice; see Health score.
 
 Knobs: `stuck_range_frac` (0.005), `stuck_warn_share` (0.25),
 `stuck_unused_share` (0.90), `follow_min_command` (0.10),

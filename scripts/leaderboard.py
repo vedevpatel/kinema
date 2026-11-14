@@ -360,11 +360,20 @@ def audit_one(repo_id: str, max_episodes: int, cap_bytes: int) -> DatasetReport:
     return rep
 
 
+def _waiver_note(charge: dict) -> str:
+    up = charge.get("waived_by")
+    if not up:
+        return ""
+    return f" <span class=dim>(charge waived - same episodes as {esc(up)})</span>"
+
+
 def render_dataset_page(rep: DatasetReport, audited: str | None = None) -> str:
+    charges = rep.charges()  # the same waiver the stored charge/waived_by fields record
     rows = "".join(
         f"<tr><td><code>{esc(r.check_id)}</code></td>"
         f"<td>{badge('SKIP' if r.skipped else r.verdict.name)}</td>"
-        f"<td>{esc(r.skip_reason if r.skipped else r.summary)}</td></tr>"
+        f"<td>{esc(r.skip_reason if r.skipped else r.summary)}"
+        f"{_waiver_note(charges.get(r.check_id, {}))}</td></tr>"
         for r in rep.results
     )
     findings = []

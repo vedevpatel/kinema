@@ -3,19 +3,37 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable
+import numbers
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
+from fractions import Fraction
 from typing import Any
 
 from kinema.checks.base import CheckResult, Severity
 
-# Health score, model "tiered-v1" (docs/checks.md, "Health score"): start at
-# 100, pay per failing/warning CHECK - never per finding, so correlated
+# Health score, model "tiered-v1.1" (docs/checks.md, "Health score"): start
+# at 100, pay per failing/warning CHECK - never per finding, so correlated
 # findings and verbose checks do not double-bill one defect. Floor at 0.
-# Stored results without a "score_model" field were scored by legacy-v0
-# (hand-tuned weights); the score is derived from stored per-check verdicts,
-# so any stored result can be rescored without re-running checks.
-SCORE_MODEL = "tiered-v1"
+# tiered-v1.1 = tiered-v1's tiers, weights and FAIL cost plus the
+# correlated-check waiver below. Stored results without a "score_model"
+# field were scored by legacy-v0 (hand-tuned weights); the score is derived
+# from stored per-check verdicts and stored findings, so any stored result
+# can be rescored without re-running checks.
+SCORE_MODEL = "tiered-v1.1"
+
+# Correlated-check waiver edges, (upstream, downstream). When the upstream
+# check is charged (WARN or FAIL) and the downstream check is WARN, the
+# downstream WARN weight is waived iff both checks expose non-empty flagged
+# episode sets and their Jaccard overlap is >= WAIVER_MIN_OVERLAP. FAILs are
+# never waived; missing episode evidence on either side never waives.
+WAIVER_EDGES: tuple[tuple[str, str], ...] = (
+    # mechanism: an episode that never moves is one idle run end to end AND a
+    # "no joint moves at all" dead recording - one dead-episode defect trips
+    # both checks. Idle padding on an episode whose arm then works, or a dead
+    # joint elsewhere, are separate defects; the episode gate tells them apart.
+    ("idle-segments", "stuck-actuator"),
+)
+WAIVER_MIN_OVERLAP = Fraction(1, 2)  # inclusive
 
 # A FAIL is a "data is not what it claims" blocker: its cost is trust, not
 # measured training damage, so it is not harm-scaled.
@@ -76,25 +94,123 @@ def warn_weight(check_id: str) -> tuple[int, str]:
     return _WARN_COST.get(check_id, _WARN_COST_DEFAULT), basis
 
 
-def score_from_verdicts(verdicts: Iterable[tuple[str, str]]) -> int:
+def flagged_episodes(result: CheckResult) -> set[int]:
+    """Episodes a check's findings point at: each Finding.episode_index plus
+    the int entries of Finding.details["episodes"]. The one reader of a
+    check's episode evidence (the waiver gate); a check that exposes neither
+    yields an empty set and so can never be waived. Lives here, not on
+    CheckResult in checks/base.py, because checks/*.py feed the engine hash
+    (kinema.engine) - a scoring helper there would mark every stored result
+    stale and force re-audits for a billing-only change."""
+    out: set[int] = set()
+    for f in result.findings:
+        if f.episode_index is not None:
+            out.add(int(f.episode_index))
+        eps = f.details.get("episodes") if isinstance(f.details, dict) else None
+        if isinstance(eps, (list, tuple, set)):
+            out.update(int(e) for e in eps
+                       if isinstance(e, numbers.Integral) and not isinstance(e, bool))
+    return out
+
+
+def check_charges(
+    verdicts: Iterable[tuple[str, str]],
+    episodes: Mapping[str, set[int]] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Per check id: {"charge": int} - the WARN weight after any waiver
+    (== warn_weight unless waived, then 0) - plus "waived_by" and
+    "waiver_evidence" ({"shared_episodes", "overlap"}) when waived.
+
+    `episodes` maps check id -> flagged episode set
+    (flagged_episodes(result)); without it no waiver can fire, which is exactly
+    tiered-v1. A pure function of its inputs: input order never matters."""
+    verdict = dict(verdicts)
+    eps = episodes or {}
+    out: dict[str, dict[str, Any]] = {cid: {"charge": warn_weight(cid)[0]} for cid in verdict}
+    for up, down in WAIVER_EDGES:
+        if verdict.get(up) not in ("WARN", "FAIL") or verdict.get(down) != "WARN":
+            continue
+        a, b = eps.get(up) or set(), eps.get(down) or set()
+        if not a or not b:
+            continue  # no episode evidence on one side: never waive
+        shared, union = len(a & b), len(a | b)
+        if Fraction(shared, union) >= WAIVER_MIN_OVERLAP:
+            out[down] = {
+                "charge": 0,
+                "waived_by": up,
+                "waiver_evidence": {"shared_episodes": shared,
+                                    "overlap": round(shared / union, 2)},
+            }
+    return out
+
+
+def score_from_verdicts(
+    verdicts: Iterable[tuple[str, str]],
+    episodes: Mapping[str, set[int]] | None = None,
+) -> int:
     """Health score from (check_id, verdict) pairs - verdict as stored in report
-    JSON ("PASS", "INFO", "WARN", "FAIL", "SKIP"). One entry per check."""
+    JSON ("PASS", "INFO", "WARN", "FAIL", "SKIP"). One entry per check.
+    `episodes` (check id -> flagged episode set) enables the correlated-check
+    waiver; verdicts alone score exactly as tiered-v1."""
+    pairs = list(verdicts)
+    charges = check_charges(pairs, episodes)
     score = 100
-    for check_id, verdict in verdicts:
+    for check_id, verdict in pairs:
         if verdict == "FAIL":
             score -= _FAIL_COST
         elif verdict == "WARN":
-            score -= warn_weight(check_id)[0]
+            score -= charges[check_id]["charge"]
     return max(0, score)
 
 
+def _result_from_dict(cdict: dict[str, Any]) -> CheckResult:
+    from kinema.checks.base import Finding
+
+    inv = {v: k for k, v in _MARK.items()}
+    r = CheckResult(
+        check_id=cdict["id"],
+        title=cdict.get("title", ""),
+        summary=cdict.get("summary", ""),
+        skipped=cdict.get("skipped", False),
+        skip_reason=cdict.get("skip_reason", ""),
+        details=cdict.get("details", {}),
+    )
+    for fd in cdict.get("findings", []):
+        r.findings.append(
+            Finding(
+                check_id=cdict["id"],
+                severity=inv.get(fd.get("severity", "INFO"), Severity.INFO),
+                message=fd.get("message", ""),
+                episode_index=fd.get("episode_index"),
+                details=fd.get("details", {}),
+            )
+        )
+    return r
+
+
+def _apply_charge_fields(c: dict[str, Any], charge: dict[str, Any]) -> None:
+    c["charge"] = charge["charge"]
+    for key in ("waived_by", "waiver_evidence"):
+        if key in charge:
+            c[key] = charge[key]
+        else:
+            c.pop(key, None)
+
+
 def rescore_report_dict(d: dict[str, Any]) -> dict[str, Any]:
-    """Re-derive score, score_model and per-check weights of a stored report
-    dict in place from its stored per-check verdicts; no check re-runs."""
-    d["score"] = score_from_verdicts((c["id"], c["verdict"]) for c in d.get("checks", []))
+    """Re-derive score, score_model, per-check weights and charges of a
+    stored report dict in place from its stored per-check verdicts and
+    stored findings (the waiver's episode evidence); no check re-runs.
+    Idempotent."""
+    checks = d.get("checks", [])
+    verdicts = [(c["id"], c["verdict"]) for c in checks]
+    episodes = {c["id"]: flagged_episodes(_result_from_dict(c)) for c in checks}
+    d["score"] = score_from_verdicts(verdicts, episodes)
     d["score_model"] = SCORE_MODEL
-    for c in d.get("checks", []):
+    charges = check_charges(verdicts, episodes)
+    for c in checks:
         c["weight"], c["weight_basis"] = warn_weight(c["id"])
+        _apply_charge_fields(c, charges[c["id"]])
     return d
 
 
@@ -113,9 +229,19 @@ class DatasetReport:
         vs = [r.verdict for r in self.results if r.verdict != Severity.SKIP]
         return max(vs, default=Severity.OK)
 
+    def _verdicts_and_episodes(self) -> tuple[list[tuple[str, str]], dict[str, set[int]]]:
+        verdicts = [(r.check_id, _MARK[r.verdict]) for r in self.results]
+        episodes = {r.check_id: flagged_episodes(r) for r in self.results}
+        return verdicts, episodes
+
+    def charges(self) -> dict[str, dict[str, Any]]:
+        """Per check id: charge after the correlated-check waiver (see
+        check_charges), read from the in-memory findings."""
+        return check_charges(*self._verdicts_and_episodes())
+
     @property
     def score(self) -> int:
-        return score_from_verdicts((r.check_id, _MARK[r.verdict]) for r in self.results)
+        return score_from_verdicts(*self._verdicts_and_episodes())
 
     def counts(self) -> dict[str, int]:
         out = {"fail": 0, "warn": 0, "info": 0}
@@ -226,7 +352,8 @@ def render_markdown(report: DatasetReport) -> str:
 
 
 def report_to_dict(report: DatasetReport) -> dict[str, Any]:
-    return {
+    charges = report.charges()
+    d: dict[str, Any] = {
         "source": report.source,
         "format_version": report.format_version,
         "episodes": report.episodes,
@@ -260,6 +387,9 @@ def report_to_dict(report: DatasetReport) -> dict[str, Any]:
             for r in report.results
         ],
     }
+    for c in d["checks"]:
+        _apply_charge_fields(c, charges[c["id"]])
+    return d
 
 
 def render_json(report: DatasetReport) -> str:
@@ -267,8 +397,6 @@ def render_json(report: DatasetReport) -> str:
 
 
 def report_from_dict(d: dict[str, Any]) -> DatasetReport:
-    from kinema.checks.base import Finding
-
     rep = DatasetReport(
         source=d["source"],
         format_version=d.get("format_version", "?"),
@@ -277,25 +405,6 @@ def report_from_dict(d: dict[str, Any]) -> DatasetReport:
         fps=d.get("fps"),
         truncated=d.get("truncated", False),
     )
-    inv = {v: k for k, v in _MARK.items()}
     for cdict in d.get("checks", []):
-        r = CheckResult(
-            check_id=cdict["id"],
-            title=cdict.get("title", ""),
-            summary=cdict.get("summary", ""),
-            skipped=cdict.get("skipped", False),
-            skip_reason=cdict.get("skip_reason", ""),
-            details=cdict.get("details", {}),
-        )
-        for fd in cdict.get("findings", []):
-            r.findings.append(
-                Finding(
-                    check_id=cdict["id"],
-                    severity=inv.get(fd.get("severity", "INFO"), Severity.INFO),
-                    message=fd.get("message", ""),
-                    episode_index=fd.get("episode_index"),
-                    details=fd.get("details", {}),
-                )
-            )
-        rep.results.append(r)
+        rep.results.append(_result_from_dict(cdict))
     return rep
