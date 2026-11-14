@@ -33,7 +33,7 @@ from __future__ import annotations
 import numpy as np
 
 from kinema.checks.base import Check, CheckConfig, CheckResult, Finding, Severity
-from kinema.stats import action_gripper_dims, canonical, gripper_dims, is_generic, is_velocity
+from kinema.stats import action_gripper_dims, canonical, gripper_dims, is_generic, is_velocity, toggle_dims, velocity_dims
 
 
 def _space_of(ctx, i: int, j: int) -> str:
@@ -199,8 +199,8 @@ class CalibrationDriftCheck(Check):
                              f"of range varies with position but not along a line (a step fits "
                              f"{1 / max(line_vs_step, 1e-9):.1f}x as well) - backlash, load, contact or a joint limit "
                              "rather than calibration", {**info, "kind": "irregular"}))
-        if j in inferred_grip:  # unnamed dim in a gripper slot: do not gate on it
-            findings = [(Severity.INFO, m + " [dim looks like an unnamed gripper: not gated]", d)
+        if j in inferred_grip:  # unnamed gripper-slot or on/off dim: do not gate on it
+            findings = [(Severity.INFO, m + " [dim looks like an unnamed gripper or on/off command: not gated]", d)
                         for sev, m, d in findings]
         return findings, info
 
@@ -241,6 +241,10 @@ class CalibrationDriftCheck(Check):
             )
         joints, grippers, excluded = _comparable_dims(ctx, cfg)
         _, inferred_grip = action_gripper_dims(ctx)
+        # on/off commands beyond the slot prior's reach (odd layouts, e.g. a
+        # 7-dim bimanual pair): same downgrade as an inferred gripper
+        inferred_grip |= toggle_dims(ctx, exclude=inferred_grip
+                                     | velocity_dims(ctx.action_names, ctx.action.shape[1]))
         if not joints and not grippers:
             kinds = sorted({r.split(" (")[0] for r in excluded.values()})
             return self.skip("no dim where action is a position command for the same joint: "

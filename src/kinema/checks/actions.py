@@ -6,7 +6,7 @@ import numpy as np
 
 from kinema.checks.base import Check, CheckConfig, CheckResult, Finding, Severity
 from kinema.dataset import ACTION_KEY, STATE_KEY
-from kinema.stats import action_gripper_dims
+from kinema.stats import action_gripper_dims, toggle_dims, velocity_dims
 
 
 class ActionSaturationCheck(Check):
@@ -25,6 +25,11 @@ class ActionSaturationCheck(Check):
         n = action.shape[1]
         named_grip, inferred_grip = action_gripper_dims(ctx)
         grip = named_grip  # inferred grippers are checked but only reported at INFO
+        # on/off commands beyond the gripper slots (odd layouts the slot prior
+        # misses) get the same downgrade: piling up at an extreme is their
+        # normal operation, not clipping
+        toggles = toggle_dims(ctx, exclude=named_grip | inferred_grip
+                              | velocity_dims(ctx.action_names, n))
         finite = np.isfinite(action).all(axis=1)
         a = action[finite]
         if len(a) < 20:
@@ -70,15 +75,16 @@ class ActionSaturationCheck(Check):
                         details={"dim": j, "saturated_fraction": f, "side": side},
                     ))
                     continue
-                likely_grip = j in inferred_grip
+                likely_grip = j in inferred_grip or j in toggles
+                note = (" [dim looks like an unnamed gripper, so not gated]" if j in inferred_grip
+                        else " [two-level on/off command, so not gated]" if j in toggles else "")
                 res.findings.append(
                     Finding(
                         self.id,
                         Severity.INFO if likely_grip else Severity.WARN,
                         f"action dim {j}{name}: {f:.1%} of commands during motion are pinned at "
                         f"exactly its {side} ({(hi if side == 'max' else lo)[j]:.6g}) - clipped "
-                        "commands the policy will imitate"
-                        + (" [dim looks like an unnamed gripper, so not gated]" if likely_grip else ""),
+                        "commands the policy will imitate" + note,
                         details={"dim": j, "saturated_fraction": f, "side": side},
                     )
                 )

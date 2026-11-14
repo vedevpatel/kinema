@@ -172,3 +172,61 @@ def test_synth_rejects_unknown_defect(tmp_path):
     with pytest.raises(ValueError):
         make_dataset(tmp_path / "x", defects=["not-a-defect"])
     assert "visual" not in " ".join(KNOWN_DEFECTS)  # video defects need real MP4s
+
+
+# --- deployment readiness: policy declarations from policies.json ----------
+
+def test_policy_declarations_come_from_the_data_file():
+    from kinema.checks.deployment import POLICY_DEFAULTS, _load_policies
+    policies = _load_policies()
+    assert policies is POLICY_DEFAULTS or policies == POLICY_DEFAULTS
+    for name, p in policies.items():
+        assert isinstance(p["chunk_size"], int) and p["chunk_size"] > 0, name
+        assert isinstance(p["quantile_norm"], bool), name
+
+
+def test_policy_without_camera_input_warns(tmp_path):
+    # a vision-language policy cannot be served by a state-only dataset
+    root = make_dataset(tmp_path / "ds", episodes=24)
+    ctx = load_dataset(str(root))
+    res = run("deployment-readiness", ctx, CheckConfig(policy="pi0"))
+    assert any(f.severity == Severity.WARN and "camera input" in f.message for f in res.findings)
+    # a policy the data file does not declare images for: no such finding
+    res = run("deployment-readiness", ctx, CheckConfig(policy=None))
+    assert not [f for f in res.findings if "camera input" in f.message]
+
+
+def test_language_policy_without_task_strings_warns(tmp_path):
+    root = make_dataset(tmp_path / "ds", episodes=24)
+    ctx = load_dataset(str(root))
+    # the synth dataset carries task strings: quiet for a language policy
+    res = run("deployment-readiness", ctx, CheckConfig(policy="smolvla"))
+    assert not [f for f in res.findings if "language" in f.message]
+
+    mf = root / "meta" / "episodes" / "chunk-000" / "file-000.parquet"
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    m = pq.read_table(mf).to_pydict()
+    m["tasks"] = [[] for _ in m["episode_index"]]
+    pq.write_table(pa.table(m), mf)
+    ctx = load_dataset(str(root))
+    res = run("deployment-readiness", ctx, CheckConfig(policy="smolvla"))
+    assert any(f.severity == Severity.WARN and "language" in f.message for f in res.findings)
+
+
+def test_resolution_below_policy_typical_is_info(tmp_path):
+    import json
+    root = make_dataset(tmp_path / "ds", episodes=24)
+    p = root / "meta" / "info.json"
+    info = json.loads(p.read_text())
+    info["features"]["observation.images.wrist"] = {
+        "dtype": "video", "shape": [3, 96, 96], "names": ["channel", "height", "width"],
+    }
+    p.write_text(json.dumps(info))
+    ctx = load_dataset(str(root))
+    # act is usually trained on 640x480: a 96x96 camera is usable but smaller
+    res = run("deployment-readiness", ctx, CheckConfig(policy="act"))
+    assert any(f.severity == Severity.INFO and "640x480" in f.message for f in res.findings)
+    # diffusion is typically 96x96: no resolution note
+    res = run("deployment-readiness", ctx, CheckConfig(policy="diffusion"))
+    assert not [f for f in res.findings if "usually trained at" in f.message]

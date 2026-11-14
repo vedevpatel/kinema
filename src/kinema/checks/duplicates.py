@@ -104,11 +104,13 @@ class DuplicateCheck(Check):
                 for k in range(i + 1, len(g)):
                     pairs[(g[i], g[k])] = "exact"
 
-        # 2. partial copies: shared windows of motion. WHERE they sit matters:
-        #    scripted sims replay the same opening motion (aligned, from frame
-        #    0) - a copied beginning or a deterministic start, reported as
-        #    INFO; a shared stretch anywhere else is a splice or a botched
-        #    merge, and even ~17 frames of identical motion is no accident.
+        # 2. partial copies: shared windows of motion. WHERE they sit and WHO
+        #    shares them matters: scripted sims replay the same opening motion
+        #    (aligned, from frame 0) across the dataset, reported as INFO; the
+        #    same aligned opening shared by ONLY two episodes is a copied
+        #    beginning (botched merge, re-recorded head), a WARN; a shared
+        #    stretch anywhere else is a splice or a botched merge, and even
+        #    ~17 frames of identical motion is no accident.
         std = np.nanstd(action, axis=0)
         move_eps = np.maximum(1e-8, 0.01 * std)
         owner: dict[bytes, dict[int, int]] = {}
@@ -122,12 +124,15 @@ class DuplicateCheck(Check):
                 owner.setdefault(win, {})[ep] = start
         partial_found: list[Finding] = []
         shared: dict[tuple[int, int], list[tuple[int, int]]] = {}
+        exclusive: dict[tuple[int, int], bool] = {}  # every shared window owned by just this pair
         for owners in owner.values():
             if 2 <= len(owners) <= _COMMON_WINDOW_EPISODES:
                 o = sorted(owners)
                 for i in range(len(o)):
                     for k in range(i + 1, len(o)):
                         shared.setdefault((o[i], o[k]), []).append((owners[o[i]], owners[o[k]]))
+                        pair = (o[i], o[k])
+                        exclusive[pair] = exclusive.get(pair, True) and len(owners) == 2
         for (e1, e2), pos in sorted(shared.items()):
             n = len(pos)
             smaller = max(1, min(n_windows.get(e1, 0), n_windows.get(e2, 0)))
@@ -135,6 +140,15 @@ class DuplicateCheck(Check):
             aligned_opening = all(p1 == p2 for p1, p2 in pos) and min(p1 for p1, _ in pos) <= 2
             if share >= 0.8:
                 sev, what = Severity.WARN, "a near-complete copy"
+            elif aligned_opening and n >= 10 and exclusive.get((e1, e2)):
+                # an opening ONLY this pair shares, long enough to matter: a
+                # scripted start replays across the dataset (windows in more
+                # than _COMMON_WINDOW_EPISODES episodes never reach here), so
+                # an exclusive opening is a copied beginning - a botched merge
+                # or a re-recorded head - and deserves the gate, not an INFO
+                sev, what = (Severity.WARN,
+                             "a copied beginning - only these two episodes share this opening; "
+                             "a scripted start would repeat across the dataset")
             elif aligned_opening and n >= 5:
                 sev, what = Severity.INFO, "an identical opening (scripted start, or a copied beginning)"
             elif n >= 10 or (n >= 5 and share >= 0.10):

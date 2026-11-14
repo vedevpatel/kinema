@@ -258,11 +258,18 @@ DEFECTS = [
 DATASETS_FILE = Path(__file__).resolve().parent / "calibration_datasets.txt"
 
 
-def pinned_datasets(quick: bool = False) -> list[str]:
+def pinned_datasets(quick: bool = False, role: str | None = None) -> list[str]:
+    """The pinned list, optionally one role. `tune` is where thresholds,
+    floors and ceilings come from; `eval` is the held-out half the nightly
+    sensitivity guard runs on (tests/test_sensitivity.py)."""
+    if role not in (None, "tune", "eval"):
+        raise ValueError(f"role must be 'tune' or 'eval', got {role!r}")
     out = []
     for line in DATASETS_FILE.read_text().splitlines():
         parts = line.split()
         if not parts or parts[0].startswith("#"):
+            continue
+        if role and role not in parts[1:]:
             continue
         if quick and "quick" not in parts[1:]:
             continue
@@ -297,11 +304,14 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("datasets", nargs="*", help="default: the pinned list")
     ap.add_argument("--quick", action="store_true", help="the pinned list's small subset")
+    ap.add_argument("--role", choices=["tune", "eval"],
+                    help="one half of the pinned list: tune is where thresholds come "
+                    "from, eval is the held-out half the nightly guard runs on")
     ap.add_argument("--max-episodes", type=int, default=50)
     ap.add_argument("--markdown", default="")
     args = ap.parse_args()
 
-    sources = args.datasets or pinned_datasets(quick=args.quick)
+    sources = args.datasets or pinned_datasets(quick=args.quick, role=args.role)
     ctxs = {}
     for src in sources:
         try:

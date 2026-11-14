@@ -210,3 +210,41 @@ def action_gripper_dims(ctx) -> tuple[set[int], set[int]]:
     n = ctx.action.shape[1]
     named = gripper_dims(ctx.action_names, n)
     return named, inferred_gripper_dims(ctx.action, ctx.action_names) - named
+
+
+# --- two-level (toggle) commands --------------------------------------------
+
+
+def is_toggle(ctx, j: int, std: float) -> bool:
+    """A two-level command (an unnamed gripper, an on/off switch): its large
+    steps are all the same size. A glitch varies in size and snaps back; a
+    toggle jumps by exactly the gap between its levels, every time."""
+    big = []
+    for ep in ctx.episode_ids():
+        rows = ctx.rows_for(ep)
+        if len(rows) < 2:
+            continue
+        z = np.abs(np.diff(ctx.action[rows, j])) / std
+        big.extend(z[z > 1.0].tolist())
+    if len(big) < 3:
+        return False
+    arr = np.asarray(big)
+    return float(arr.std() / arr.mean()) < 0.05
+
+
+def toggle_dims(ctx, exclude: set[int] | None = None) -> set[int]:
+    """On/off command dims, found wherever they sit. The slot prior in
+    inferred_gripper_dims assumes a gripper sits in a predictable slot;
+    odd-sized layouts (a 7-dim bimanual pair whose grippers are not last /
+    mid-last) put them elsewhere, and only this data-driven test catches
+    those. Treat the result like inferred grippers: evidence to downgrade a
+    finding, never to hide one."""
+    if ctx.action is None:
+        return set()
+    std = np.nanstd(ctx.action, axis=0)
+    skip = exclude or set()
+    return {
+        j
+        for j in range(ctx.action.shape[1])
+        if j not in skip and std[j] > 1e-8 and is_toggle(ctx, j, std[j])
+    }

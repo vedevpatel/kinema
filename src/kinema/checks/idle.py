@@ -11,7 +11,7 @@ from __future__ import annotations
 import numpy as np
 
 from kinema.checks.base import Check, CheckConfig, CheckResult, Finding, Severity
-from kinema.stats import action_gripper_dims, canonical, is_generic
+from kinema.stats import action_gripper_dims, canonical, is_generic, toggle_dims, velocity_dims
 
 _PICK_WORDS = ("pick", "place", "grasp", "grab", "lift")
 
@@ -137,6 +137,12 @@ class StuckActuatorCheck(Check):
         n = action.shape[1]
         named_grip, inferred_grip = action_gripper_dims(ctx)
         grip = named_grip | inferred_grip
+        # on/off commands the slot prior misses (odd layouts, e.g. a 7-dim
+        # bimanual pair): a shut/open command idles legitimately, so it gets
+        # the inferred-gripper treatment everywhere below
+        toggles = toggle_dims(ctx, exclude=named_grip | inferred_grip
+                              | velocity_dims(ctx.action_names, n))
+        grip |= toggles
         lo = np.nanpercentile(action, 1, axis=0)
         hi = np.nanpercentile(action, 99, axis=0)
         glob = hi - lo
@@ -182,8 +188,9 @@ class StuckActuatorCheck(Check):
             else:
                 sev, why = Severity.INFO, "the task may not need it in every episode"
             name = f" ({ctx.action_names[j]})" if ctx.action_names and len(ctx.action_names) == n else ""
-            if j in inferred_grip:  # a shut/open gripper idles legitimately: report, do not gate
-                sev, why = Severity.INFO, why + " [dim looks like an unnamed gripper]"
+            if j in inferred_grip or j in toggles:  # a shut/open gripper idles legitimately: report, do not gate
+                sev, why = Severity.INFO, why + (" [dim looks like an unnamed gripper]" if j in inferred_grip
+                                                 else " [two-level on/off command]")
             res.findings.append(Finding(
                 self.id, sev,
                 f"joint {j}{name} does not move in {len(stuck_eps)}/{n_eps} episodes "

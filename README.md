@@ -27,7 +27,7 @@ Works on LeRobot **v3.0 and v2.1** layouts, local directories, `.zip`s, and Hub 
 `kinema check lerobot/pusht --policy smolvla`:
 
 ```
-lerobot/pusht  health score 87/100
+lerobot/pusht  health score 79/100
 format v3.0 | 206 episodes | 25650 frames | fps 10.0
 
  check                 verdict  summary
@@ -40,17 +40,24 @@ format v3.0 | 206 episodes | 25650 frames | fps 10.0
  action-saturation     PASS     no continuous action dim pinned at a limit above 5% (2 dims checked)
  nan-and-normalization PASS     no NaN/Inf; all dims have usable variance
  duplicate-and-leakage PASS     no exact, partial or near duplicates
- outlier-episodes      WARN     3 episode(s) to review, 22 mild, of 206; worst: [107, 159, 50, ...]
+ outlier-episodes      WARN     2 episode(s) to review, 23 mild, of 206; worst: [107, 159, 15, 97, ...]
+ embedded-images       PASS     no image features declared
+ camera-coverage       PASS     1 camera(s) over 206 episodes; 0 missing segments
+ task-strings          PASS     206 episodes, 1 tasks in meta/tasks; 0 finding(s)
+ reward-done           WARN     done is True before the last frame in 206 episodes - the trajectory continues after termination
  visual-quality        SKIP     pass --video to run (downloads MP4s; needs the video extra)
  deployment-readiness  WARN     0 blocker(s), 1 warning(s) for smolvla
 
-verdict: WARN (0 fail, 4 warn, 22 info)
+verdict: WARN (0 fail, 4 warn, 23 info)
 ```
 
 Exit code is `1` on any FAIL (`--fail-on warn` to also gate on warnings), so it drops
 straight into CI as a pre-training gate.
 
 ## The checks
+
+The long form of each check - method, severity logic, config knobs, known limits -
+lives in [docs/checks.md](docs/checks.md).
 
 | check | what it catches | why it kills fine-tunes |
 |---|---|---|
@@ -62,14 +69,14 @@ straight into CI as a pre-training gate.
 | `stuck-actuator` | episodes where nothing moves; a joint that moves in most episodes but not in a few; gripper never firing on pick/place | the policy learns to ignore that joint |
 | `action-saturation` | >5% of commands during motion pinned at exactly the min/max of a continuous, non-gripper dim | clipped commands the policy will imitate |
 | `nan-and-normalization` | NaN/Inf, zero-variance dims, std < 1e-6 | one NaN poisons the loss for the whole batch |
-| `duplicate-and-leakage` | exact-copy episodes, near-duplicates (exact scan up to 100k episodes with memory-bounded blocks, an even sample with a note above that) | silent metric inflation |
+| `duplicate-and-leakage` | exact-copy episodes, partial copies (an opening only two episodes share is a copied beginning, not a scripted start), near-duplicates (exact scan up to 100k episodes with memory-bounded blocks, an even sample with a note above that) | silent metric inflation |
 | `outlier-episodes` | IQR outliers on the harmful side only: duration and end pose within a task, jerk/velocity per dim in std units without grippers or velocity commands (recognised by name or by tracking the state's delta, not its level - a spike beyond a velocity dim's own step scale still counts). WARN when two independent signals agree or one is far out (Tukey k=3, >=3x median, and for end pose >= half the end-pose range) | a handful of broken episodes dominate the gradient |
 | `embedded-images` | image features stored inside the parquet shards instead of MP4 video chunks | bloated shards; every frame decodes on read |
 | `camera-coverage` | episodes with no video for a declared camera (v3 segment metadata, or the v2.1 files with `--video`) | a modality silently drops out for those episodes |
 | `task-strings` | empty task strings, frames pointing at a `task_index` the task table does not define, episode tasks with no table entry | language conditioning trains on `""` or an unrecoverable task |
 | `reward-done` | constant or NaN reward, `done` never True, `done` True mid-episode with frames after it | RL / reward-conditioned training gets labels with no signal |
 | `visual-quality` | blur (variance of Laplacian, frames decimated to ~VGA first so one threshold works at any resolution), underexposure (95th-percentile brightness) and overexposure (pixels clipped at the codec's brightest level), per camera, sampled inside each episode's segment (v2.1 per-episode and v3 shared MP4s) | bad visuals cost ~30% of training loss ([HF GIGO](https://huggingface.co/blog/robotdata/gigo)). Needs `--video` and the `video` extra |
-| `deployment-readiness` | episode length vs action chunk, stats coverage, quantile-norm support, declared shapes, timestamp grid | the openpi #906 failure mode: low loss, failed robot |
+| `deployment-readiness` | episode length vs the policy's action chunk, stats coverage, quantile-norm support, declared shapes, and what the policy conditions on (camera input, task language, typical resolution - declared per policy in `src/kinema/policies.json`) | the openpi #906 failure mode: low loss, failed robot |
 
 ## Deployment readiness
 
@@ -81,8 +88,16 @@ kinema check ./so100-pickplace --policy pi0
 
 It verifies the dataset can actually serve that policy: episodes long enough to fill an
 action chunk, stats.json covering what the normalizer consumes, `q01/q99` quantiles when
-the policy normalizes that way (openpi does), and that declared shapes and timestamps
-match what the policy's data loader will assume.
+the policy normalizes that way (openpi does), that declared shapes and timestamps
+match what the policy's data loader will assume, and that the dataset carries what the
+policy conditions on - camera input for vision policies, task strings for
+language-conditioned ones, and a note when a camera is smaller than the resolution the
+policy is usually trained at.
+
+What each policy expects is declared in `src/kinema/policies.json` (chunk size,
+normalization, camera/language needs, typical resolution). Adding or updating a policy
+is a JSON edit, no code change; an unknown `--policy` still gets the policy-agnostic
+checks.
 
 ## Tuning the thresholds
 
@@ -116,8 +131,8 @@ The most-downloaded LeRobot datasets on Hugging Face, audited nightly:
 Board audits a sample of 50 episodes per dataset (`--max-episodes 50`), spread
 evenly across the dataset, to keep a nightly run of 200 datasets feasible; a
 local `kinema check` scans the full dataset.
-Sampled and full scans can score differently - for example pusht scores 67 on the
-board and 84 on a full local scan, because a 50-episode sample's recomputed stats
+Sampled and full scans can score differently - for example pusht scores 89 on the
+board and 79 on a full local scan, because a 50-episode sample's recomputed stats
 are compared against stats.json values computed over all 206 episodes.
 
 ## Try it on the demo dataset
@@ -154,6 +169,14 @@ FAIL, known defects must still be caught, and the sensitivity guard
 detection rates a little under the measured ones - a drop means a threshold
 lost its teeth. Its **ceilings** are the measured baseline: how many untouched
 datasets each check already flags.
+
+The pinned calibration list splits into disjoint `tune` and `eval` halves
+(`scripts/calibration_datasets.txt`): thresholds, floors and ceilings are derived
+from the tune half, and the sensitivity guard runs on the eval half - the numbers
+that protect the checks were never tuned on the data that guards them.
+
+These suites need the Hub. If huggingface.co itself is unreachable they skip with a
+visible reason (`tests/netcheck.py`) instead of failing CI on someone else's outage.
 
 A ceiling failure is not automatically a false positive: it can also be a real
 issue a change newly surfaces (a new check firing, a sharper threshold). When

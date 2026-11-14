@@ -10,20 +10,48 @@ inference is the community's top diagnosis).
 
 from __future__ import annotations
 
+import json
+from importlib import resources
+
 import numpy as np
 
 from kinema.checks.base import Check, CheckConfig, CheckResult, Finding, Severity
 from kinema.dataset import ACTION_KEY, STATE_KEY
 
-# Documented default action horizons / chunk sizes. Conservative: used
-# only to flag episodes too short to fill one chunk.
-POLICY_DEFAULTS = {
-    "act": {"chunk_size": 100, "quantile_norm": False},
-    "diffusion": {"chunk_size": 16, "quantile_norm": False},
-    "smolvla": {"chunk_size": 50, "quantile_norm": False},
-    "pi0": {"chunk_size": 50, "quantile_norm": True},
-    "pi0_fast": {"chunk_size": 50, "quantile_norm": True},
-}
+
+def _load_policies() -> dict:
+    """Known-policy declarations from src/kinema/policies.json.
+
+    One entry per policy: chunk_size (action horizon), quantile_norm (the
+    normalizer consumes q01/q99), needs_images / needs_language (the policy
+    is vision- / language-conditioned), typical_resolution ([w, h] the
+    policy is usually trained at). Add a policy by editing the JSON - no
+    code change."""
+    with resources.files("kinema").joinpath("policies.json").open() as f:
+        return json.load(f)
+
+
+POLICY_DEFAULTS = _load_policies()
+
+
+def _camera_features(ctx) -> dict[str, dict]:
+    """Declared image/video features (embedded or MP4 chunks)."""
+    return {k: f for k, f in (ctx.info.get("features") or {}).items()
+            if isinstance(f, dict) and f.get("dtype") in ("image", "video")}
+
+
+def _spatial_size(feat: dict) -> tuple[int, int] | None:
+    """(width, height) from a [C, H, W]-style declared shape."""
+    shape = feat.get("shape")
+    if isinstance(shape, list) and len(shape) >= 2:
+        h, w = int(shape[-2]), int(shape[-1])
+        if h > 0 and w > 0:
+            return w, h
+    return None
+
+
+def _has_task_strings(ctx) -> bool:
+    return any(meta.tasks for meta in ctx.episodes if meta is not None and meta.tasks)
 
 
 class DeploymentReadinessCheck(Check):
@@ -111,6 +139,46 @@ class DeploymentReadinessCheck(Check):
                         Severity.FAIL,
                         f"{key}: info.json declares shape {declared} but the data has "
                         f"{arr.shape[1]} dims",
+                    )
+                )
+
+        # 5. what the policy conditions on (declared in policies.json)
+        if policy:
+            cams = _camera_features(ctx)
+            if policy.get("needs_images") and not cams:
+                res.findings.append(
+                    Finding(
+                        self.id,
+                        Severity.WARN,
+                        f"{cfg.policy} is trained with camera input but this dataset declares "
+                        "no image or video features - a state-only dataset cannot serve it as-is",
+                    )
+                )
+            typical = policy.get("typical_resolution")
+            if typical and cams:
+                tw, th = int(typical[0]), int(typical[1])
+                small = []
+                for cam_key, cam_feat in cams.items():
+                    size = _spatial_size(cam_feat)
+                    if size and (size[0] < tw or size[1] < th):
+                        small.append(f"{cam_key} {size[0]}x{size[1]}")
+                if small:
+                    res.findings.append(
+                        Finding(
+                            self.id,
+                            Severity.INFO,
+                            f"{cfg.policy} is usually trained at {tw}x{th}; "
+                            f"{', '.join(sorted(small))} is smaller - usable (the loader "
+                            "resizes), but the policy sees less detail than it was built for",
+                        )
+                    )
+            if policy.get("needs_language") and not _has_task_strings(ctx):
+                res.findings.append(
+                    Finding(
+                        self.id,
+                        Severity.WARN,
+                        f"{cfg.policy} conditions on language but no episode declares a task "
+                        "string - training here teaches a task-agnostic policy",
                     )
                 )
 

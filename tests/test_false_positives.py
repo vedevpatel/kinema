@@ -597,11 +597,37 @@ def test_big_offset_on_misdetected_joint_still_gated(base):
 
 
 def test_identical_scripted_opening_is_info_not_warn(base):
-    # robomme: scripted demos replay the same opening motion from frame 0
-    _rewrite_data(base, lambda s, a, ep: (s, _paste(a, ep, 2, 9, 0, 25)))
+    # robomme: scripted demos replay the same opening motion from frame 0 -
+    # across the dataset, not just between two episodes
+    def opening(a, ep):
+        for e in (5, 9, 14, 19, 22):
+            a = _paste(a, ep, 2, e, 0, 25)
+        return a
+    _rewrite_data(base, lambda s, a, ep: (s, opening(a, ep)))
     res = run("duplicate-and-leakage", load_dataset(str(base)))
     hit = [f for f in res.findings if f.details.get("kind") == "partial"]
-    assert hit and all(f.severity == Severity.INFO and f.details["aligned_opening"] for f in hit)
+    assert all(f.severity == Severity.INFO and f.details["aligned_opening"] for f in hit)
+
+
+def test_copied_opening_between_two_episodes_warns(base):
+    # a real copied beginning: the same long opening appears in exactly two
+    # episodes. A scripted start would repeat across the dataset; this is a
+    # botched merge or a re-recorded head and must gate, not report as INFO.
+    _rewrite_data(base, lambda s, a, ep: (s, _paste(a, ep, 2, 9, 0, 25)))
+    res = run("duplicate-and-leakage", load_dataset(str(base)))
+    hit = [f for f in res.findings if f.details.get("kind") == "partial"
+           and f.details["episodes"] == [2, 9]]
+    assert hit and all(f.severity == Severity.WARN and f.details["aligned_opening"] for f in hit)
+
+
+def test_short_shared_opening_stays_info(base):
+    # 5-9 identical opening windows between two episodes: too brief to call
+    # a copy on its own - a scripted reset can produce that by chance
+    _rewrite_data(base, lambda s, a, ep: (s, _paste(a, ep, 2, 9, 0, 12)))
+    res = run("duplicate-and-leakage", load_dataset(str(base)))
+    hit = [f for f in res.findings if f.details.get("kind") == "partial"
+           and f.details["episodes"] == [2, 9]]
+    assert all(f.severity == Severity.INFO for f in hit)
 
 
 def test_short_splice_at_another_offset_is_flagged(base):
@@ -668,3 +694,67 @@ def test_two_level_toggle_does_not_drive_outliers(base):
     _rewrite_data(base, toggle)
     res = run("outlier-episodes", load_dataset(str(base)))
     assert not any(f.severity == Severity.WARN for f in res.findings)
+
+
+# --- two-level (toggle) commands in layouts the slot prior misses -----------
+
+def _toggle_data(s, a, ep, stuck_eps=(), offset=0.08):
+    """Dim 2 as an unnamed two-level command (a gripper in a 7-dim-style odd
+    slot): alternating open/shut, held flat in `stuck_eps`, measured with a
+    constant offset (leader/follower style)."""
+    s, a = s.copy(), a.copy()
+    for e in np.unique(ep):
+        rows = np.flatnonzero(ep == e)
+        if e in stuck_eps:
+            a[rows, 2] = 0.0
+            s[rows, 2] = -offset
+        else:
+            a[rows, 2] = (np.arange(len(rows)) // 13) % 2
+            s[rows, 2] = a[rows, 2] - offset
+    return s, a
+
+
+def test_toggle_command_in_odd_slot_is_not_gated(base):
+    # utokyo-style layout: generic motor_N names, the on/off command sits in
+    # a dim the gripper slot prior cannot see (last-dim / mid-last-dim only)
+    names = [f"motor_{i}" for i in range(6)]
+    _set_names(base, names, names)
+    _rewrite_data(base, lambda s, a, ep: _toggle_data(s, a, ep, stuck_eps=(3, 4, 5)))
+    ctx = load_dataset(str(base))
+    from kinema.stats import toggle_dims
+    assert 2 in toggle_dims(ctx)
+
+    # stuck: the flat episodes are reported as a legitimately idle on/off
+    # command (INFO), not a dead-motor WARN. The pick/place "gripper never
+    # actuates" WARN may still fire - a real gripper that never closes in a
+    # pick task is exactly what that rule is for.
+    res = run("stuck-actuator", ctx)
+    assert not [f for f in res.findings
+                if f.severity >= Severity.WARN and f.details.get("joint") == 2
+                and "does not move in" in f.message]
+    assert any(f.details.get("joint") == 2 and "on/off" in f.message for f in res.findings)
+
+    # calibration: the constant offset shows at INFO with the downgrade
+    # note, and the gripper free-end test keeps watching the dim
+    res = run("calibration-drift", ctx)
+    assert not [f for f in res.findings
+                if f.severity >= Severity.WARN and "joint 2" in f.message]
+    assert any("joint 2" in f.message for f in res.findings)
+
+
+def test_continuous_dim_in_odd_layout_still_warns_when_stuck(base):
+    # the toggle test must not grow teeth-blunting reach: a smooth continuous
+    # dim that dies in a few episodes is still a dead-motor WARN
+    names = [f"motor_{i}" for i in range(6)]
+    _set_names(base, names, names)
+
+    def stall(s, a, ep):
+        a = a.copy()
+        for e in (3, 4, 5):
+            rows = np.flatnonzero(ep == e)
+            a[rows, 1] = a[rows[0], 1]
+        return s, a
+    _rewrite_data(base, lambda s, a, ep: stall(s, a, ep))
+    res = run("stuck-actuator", load_dataset(str(base)))
+    assert any(f.severity == Severity.WARN and f.details.get("joint") == 1
+               for f in res.findings)

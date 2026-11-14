@@ -28,7 +28,7 @@ from __future__ import annotations
 import numpy as np
 
 from kinema.checks.base import Check, CheckConfig, CheckResult, Finding, Severity
-from kinema.stats import action_gripper_dims, structural_velocity_dims, velocity_dims
+from kinema.stats import action_gripper_dims, is_toggle, structural_velocity_dims, velocity_dims
 
 # metric -> (which side is harmful, evidence family)
 _METRICS = {
@@ -47,23 +47,6 @@ _ABS_FLOOR = {"static_fraction": 0.15}
 
 
 _MIN_MOTION_FRAMES = 22  # >= 20 jerk samples, so p95 is not just the max
-
-
-def _is_toggle(ctx, j: int, std: float) -> bool:
-    """A two-level command (an unnamed gripper, an on/off switch): its large
-    steps are all the same size. A glitch varies in size and snaps back; a
-    toggle jumps by exactly the gap between its levels, every time."""
-    big = []
-    for ep in ctx.episode_ids():
-        rows = ctx.rows_for(ep)
-        if len(rows) < 2:
-            continue
-        z = np.abs(np.diff(ctx.action[rows, j])) / std
-        big.extend(z[z > 1.0].tolist())
-    if len(big) < 3:
-        return False
-    arr = np.asarray(big)
-    return float(arr.std() / arr.mean()) < 0.05
 
 
 def _iqr_flags(values: np.ndarray, k: float, side: str = "both",
@@ -150,7 +133,7 @@ class OutlierEpisodesCheck(Check):
 
             def _cont(j: int) -> bool:
                 return (std[j] > 1e-8 and len(np.unique(action[:, j])) > 10
-                        and not _is_toggle(ctx, j, std[j]))
+                        and not is_toggle(ctx, j, std[j]))
 
             vel_dims = [j for j in sorted(vel) if _cont(j)]
             motion_dims = [j for j in range(n) if _cont(j) and j not in grip and j not in vel]

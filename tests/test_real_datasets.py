@@ -9,17 +9,14 @@ KINEMA_E2E=1 (CI nightly).
 
 from __future__ import annotations
 
-import os
-
 import pytest
+
+from netcheck import e2e_mark
 
 from kinema.checks import ALL_CHECKS, CheckConfig, Severity
 from kinema.dataset import load_dataset
 
-pytestmark = pytest.mark.skipif(
-    os.environ.get("KINEMA_E2E", os.environ.get("ROLLOUTQA_E2E")) != "1",
-    reason="set KINEMA_E2E=1 to run",
-)
+pytestmark = e2e_mark()
 
 HEALTHY = {
     # 50-of-206-episode sample was compared to whole-dataset stats

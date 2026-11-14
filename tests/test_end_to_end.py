@@ -6,18 +6,14 @@ nightly leg, and it is the command used to generate the README demo.
 
 from __future__ import annotations
 
-import os
 
-import pytest
+from netcheck import e2e_mark
 
 from kinema.checks import ALL_CHECKS, CheckConfig
 from kinema.dataset import load_dataset
 from kinema.report import DatasetReport, render_markdown
 
-pytestmark = pytest.mark.skipif(
-    os.environ.get("KINEMA_E2E", os.environ.get("ROLLOUTQA_E2E")) != "1",
-    reason="set KINEMA_E2E=1 to run",
-)
+pytestmark = e2e_mark()
 
 
 def test_pusht_end_to_end():
