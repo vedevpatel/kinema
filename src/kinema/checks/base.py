@@ -51,6 +51,9 @@ class CheckResult:
 class CheckConfig:
     video: bool = False
     policy: str | None = None
+    # per-run policies.json overrides (the MCP diagnosis layer passes these;
+    # not a threshold, so --config JSON files cannot set it)
+    policy_overrides: dict = field(default_factory=dict)
     # stats-drift (mean in std devs, std as a ratio, min/max as range fraction)
     stats_mean_warn_sigma: float = 0.10
     stats_mean_fail_sigma: float = 0.50
@@ -90,14 +93,17 @@ class CheckConfig:
 
 
 # runtime flags live on CheckConfig but are not thresholds: --video/--policy
-_CONFIG_ONLY = ("video", "policy")
+# and the MCP layer's policy_overrides dict
+_CONFIG_ONLY = ("video", "policy", "policy_overrides")
 
 
-def load_config_overrides(path: str) -> dict[str, float]:
+def load_config_overrides(path: str) -> dict[str, Any]:
     """Threshold overrides from a JSON file (`kinema check --config`).
 
     Keys are CheckConfig field names; unknown keys, non-numeric values and
-    the runtime flags are rejected so a typo never silently tunes nothing."""
+    the runtime flags are rejected so a typo never silently tunes nothing.
+    The return is typed Any so `CheckConfig(**overrides)` type-checks -
+    the values are validated numeric above."""
     with open(path) as f:
         data = json.load(f)
     known = {f.name for f in fields(CheckConfig)} - set(_CONFIG_ONLY)

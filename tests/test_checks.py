@@ -177,12 +177,44 @@ def test_synth_rejects_unknown_defect(tmp_path):
 # --- deployment readiness: policy declarations from policies.json ----------
 
 def test_policy_declarations_come_from_the_data_file():
-    from kinema.checks.deployment import POLICY_DEFAULTS, _load_policies
-    policies = _load_policies()
-    assert policies is POLICY_DEFAULTS or policies == POLICY_DEFAULTS
+    from kinema.checks.deployment import POLICY_ALIASES, POLICY_DEFAULTS, _load_policies
+    raw = _load_policies()
+    policies = {k: v for k, v in raw.items() if not k.startswith("_")}
+    assert policies == POLICY_DEFAULTS
+    for alias, target in raw.get("_aliases", {}).items():
+        assert target in policies, alias
+        assert POLICY_ALIASES[alias.lower()] == target
     for name, p in policies.items():
         assert isinstance(p["chunk_size"], int) and p["chunk_size"] > 0, name
         assert isinstance(p["quantile_norm"], bool), name
+
+
+def test_policy_aliases_resolve_to_the_family_entry():
+    from kinema.checks.deployment import canonical_policy_name, resolve_policy
+    assert canonical_policy_name("pi0.5") == "pi05"
+    name, entry = resolve_policy("pi0_5")
+    assert name == "pi05" and entry is not None
+    # pi05, verified against openpi's Pi0Config(pi05=True): quantile norm,
+    # horizon default 50, 224x224 cameras, language-conditioned
+    assert entry["quantile_norm"] is True and entry["chunk_size"] == 50
+    assert entry["typical_resolution"] == [224, 224] and entry["needs_language"] is True
+
+
+def test_per_run_policy_overrides_merge_and_validate(tmp_path):
+    from kinema.checks.deployment import resolve_policy
+    root = make_dataset(tmp_path / "ds", episodes=24)
+    ctx = load_dataset(str(root))
+    # chunk override: a 100-frame chunk flags the 60-frame synth episodes
+    res = run("deployment-readiness", ctx, CheckConfig(policy="pi0", policy_overrides={"chunk_size": 100}))
+    assert any("action chunk (100 frames)" in f.message for f in res.findings)
+    # quantile_norm off: the quantile warning disappears for this run only
+    res = run("deployment-readiness", ctx, CheckConfig(policy="pi0", policy_overrides={"quantile_norm": False}))
+    assert not [f for f in res.findings if "q01/q99" in f.message]
+    assert resolve_policy("pi0")[1]["quantile_norm"] is True  # defaults untouched
+    # unknown keys fail loudly instead of tuning nothing
+    import pytest
+    with pytest.raises(ValueError, match="unknown policy override"):
+        run("deployment-readiness", ctx, CheckConfig(policy="pi0", policy_overrides={"chunk": 10}))
 
 
 def test_policy_without_camera_input_warns(tmp_path):
@@ -230,3 +262,33 @@ def test_resolution_below_policy_typical_is_info(tmp_path):
     # diffusion is typically 96x96: no resolution note
     res = run("deployment-readiness", ctx, CheckConfig(policy="diffusion"))
     assert not [f for f in res.findings if "usually trained at" in f.message]
+
+
+def test_quantile_warn_reads_raw_stats_json(tmp_path):
+    # v2.1 case: the effective stats (per-episode aggregates) keep only
+    # mean/std/min/max/count, so checking them cries wolf when the raw
+    # meta/stats.json ships quantiles - openpi reads stats.json directly
+    import json
+    root = make_dataset(tmp_path / "ds", episodes=24)
+    p = root / "meta" / "stats.json"
+    stats = json.loads(p.read_text())
+    for feat in ("observation.state", "action"):
+        e = stats[feat]
+        e["q01"] = e["min"]
+        e["q99"] = e["max"]
+    p.write_text(json.dumps(stats))
+    ctx = load_dataset(str(root))
+    # simulate the v2.1 aggregate: effective stats without quantiles,
+    # raw stats.json carrying them -> no warning
+    ctx.stats = {k: {s: v for s, v in e.items() if s not in ("q01", "q99")}
+                 for k, e in ctx.stats.items()}
+    res = run("deployment-readiness", ctx, CheckConfig(policy="pi0"))
+    assert not [f for f in res.findings if "q01/q99" in f.message]
+    # stats.json without quantiles at all -> the warning stands
+    stats = json.loads(p.read_text())
+    for feat in ("observation.state", "action"):
+        stats[feat] = {k: v for k, v in stats[feat].items() if k not in ("q01", "q99")}
+    p.write_text(json.dumps(stats))
+    ctx = load_dataset(str(root))
+    res = run("deployment-readiness", ctx, CheckConfig(policy="pi0"))
+    assert any(f.severity == Severity.WARN and "q01/q99" in f.message for f in res.findings)

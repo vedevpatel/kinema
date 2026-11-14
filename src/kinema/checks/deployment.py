@@ -26,12 +26,53 @@ def _load_policies() -> dict:
     normalizer consumes q01/q99), needs_images / needs_language (the policy
     is vision- / language-conditioned), typical_resolution ([w, h] the
     policy is usually trained at). Add a policy by editing the JSON - no
-    code change."""
+    code change. A top-level "_aliases" object maps alternate spellings
+    (pi0.5) to the canonical entry (pi05)."""
     with resources.files("kinema").joinpath("policies.json").open() as f:
         return json.load(f)
 
 
-POLICY_DEFAULTS = _load_policies()
+_POLICIES = _load_policies()
+POLICY_DEFAULTS = {k: v for k, v in _POLICIES.items() if not k.startswith("_")}
+POLICY_ALIASES = {k.lower(): v for k, v in _POLICIES.get("_aliases", {}).items()}
+
+# fields a per-call policy_overrides dict may set - the policies.json schema
+OVERRIDEABLE_POLICY_FIELDS = (
+    "chunk_size",
+    "quantile_norm",
+    "needs_images",
+    "needs_language",
+    "typical_resolution",
+)
+
+
+def canonical_policy_name(name: str) -> str:
+    """Resolve an alias (pi0.5) to the canonical policies.json key (pi05)."""
+    low = name.lower()
+    return POLICY_ALIASES.get(low, low)
+
+
+def resolve_policy(name: str | None, overrides: dict | None = None):
+    """The declared defaults for a policy, merged with per-call overrides.
+
+    Returns (canonical_name, entry); (canonical_name_or_None, None) when the
+    policy is unknown. Overrides are validated against the policies.json
+    schema so a typo fails loudly instead of tuning nothing."""
+    if not name:
+        return None, None
+    canon = canonical_policy_name(name)
+    entry = POLICY_DEFAULTS.get(canon)
+    if entry is None:
+        return canon, None
+    merged = dict(entry)
+    for key, val in (overrides or {}).items():
+        if key not in OVERRIDEABLE_POLICY_FIELDS:
+            raise ValueError(
+                f"unknown policy override {key!r} "
+                f"(valid: {', '.join(OVERRIDEABLE_POLICY_FIELDS)})"
+            )
+        merged[key] = val
+    return canon, merged
 
 
 def _camera_features(ctx) -> dict[str, dict]:
@@ -58,9 +99,21 @@ class DeploymentReadinessCheck(Check):
     id = "deployment-readiness"
     title = "Deployment readiness (would this dataset serve a policy?)"
 
+    def _quantile_entry(self, ctx, feat: str) -> dict:
+        """The stats entry a quantile normalizer actually consumes.
+
+        openpi reads meta/stats.json directly, so the raw file wins when it
+        carries quantiles; the effective stats (per-episode aggregates on
+        v2.1) keep only mean/std/min/max/count and would cry wolf about
+        missing quantiles on datasets whose stats.json ships them."""
+        raw = ctx.stats_json.get(feat) if getattr(ctx, "stats_json", None) else None
+        if isinstance(raw, dict) and "q01" in raw and "q99" in raw:
+            return raw
+        return ctx.stats.get(feat) or {}
+
     def run(self, ctx, cfg: CheckConfig) -> CheckResult:
         res = CheckResult(self.id, self.title)
-        policy = POLICY_DEFAULTS.get(cfg.policy.lower()) if cfg.policy else None
+        canon, policy = resolve_policy(cfg.policy, cfg.policy_overrides or None)
         if cfg.policy and policy is None:
             res.findings.append(
                 Finding(
@@ -70,6 +123,8 @@ class DeploymentReadinessCheck(Check):
                     f"(known: {', '.join(sorted(POLICY_DEFAULTS))})",
                 )
             )
+        # the name findings cite: the canonical policies.json key
+        pname = canon or cfg.policy
 
         # 1. stats coverage: training consumes observation.state + action
         for feat, arr in ((STATE_KEY, ctx.state), (ACTION_KEY, ctx.action)):
@@ -90,27 +145,30 @@ class DeploymentReadinessCheck(Check):
                         Severity.FAIL,
                         f"{feat}: no normalization stats (meta/stats.json or per-episode "
                         "stats) - the policy cannot normalize inputs/outputs at inference",
+                        details={"feature": feat},
                     )
                 )
 
-        # 2. quantile normalization support (openpi normalizes with q01/q99)
+        # 2. quantile normalization support (pi0-family normalizers consume q01/q99)
         if policy and policy["quantile_norm"]:
             for feat in (STATE_KEY, ACTION_KEY):
-                entry = ctx.stats.get(feat) or {}
+                entry = self._quantile_entry(ctx, feat)
                 if entry and not ("q01" in entry and "q99" in entry):
                     res.findings.append(
                         Finding(
                             self.id,
                             Severity.WARN,
-                            f"{cfg.policy} normalizes with q01/q99 quantiles but stats.json "
-                            f"has none for {feat} - recompute stats with quantiles or the "
-                            "openpi normalizer will estimate them itself",
+                            f"{pname} normalizes with q01/q99 quantiles but "
+                            f"{ctx.stats_source} has none for {feat} - recompute stats "
+                            "with quantiles or the openpi normalizer will estimate "
+                            "them itself",
+                            details={"feature": feat, "policy": pname, "stats": sorted(entry)},
                         )
                     )
 
         # 3. episode length vs action chunk
         if policy:
-            chunk = policy["chunk_size"]
+            chunk = int(policy["chunk_size"])
             short = [e.index for e in ctx.episodes if 0 < e.length < chunk]
             if short:
                 res.findings.append(
@@ -118,7 +176,7 @@ class DeploymentReadinessCheck(Check):
                         self.id,
                         Severity.WARN,
                         f"{len(short)}/{ctx.total_episodes} episodes are shorter than "
-                        f"{cfg.policy}'s action chunk ({chunk} frames): {short[:10]}"
+                        f"{pname}'s action chunk ({chunk} frames): {short[:10]}"
                         f"{'...' if len(short) > 10 else ''} - they train on padded or "
                         "truncated chunks",
                         details={"episodes": short, "chunk_size": chunk},
@@ -139,6 +197,7 @@ class DeploymentReadinessCheck(Check):
                         Severity.FAIL,
                         f"{key}: info.json declares shape {declared} but the data has "
                         f"{arr.shape[1]} dims",
+                        details={"feature": key, "declared": declared, "actual": arr.shape[1]},
                     )
                 )
 
@@ -150,8 +209,9 @@ class DeploymentReadinessCheck(Check):
                     Finding(
                         self.id,
                         Severity.WARN,
-                        f"{cfg.policy} is trained with camera input but this dataset declares "
+                        f"{pname} is trained with camera input but this dataset declares "
                         "no image or video features - a state-only dataset cannot serve it as-is",
+                        details={"policy": pname},
                     )
                 )
             typical = policy.get("typical_resolution")
@@ -167,9 +227,10 @@ class DeploymentReadinessCheck(Check):
                         Finding(
                             self.id,
                             Severity.INFO,
-                            f"{cfg.policy} is usually trained at {tw}x{th}; "
+                            f"{pname} is usually trained at {tw}x{th}; "
                             f"{', '.join(sorted(small))} is smaller - usable (the loader "
                             "resizes), but the policy sees less detail than it was built for",
+                            details={"policy": pname, "expected": [tw, th], "smaller": sorted(small)},
                         )
                     )
             if policy.get("needs_language") and not _has_task_strings(ctx):
@@ -177,19 +238,20 @@ class DeploymentReadinessCheck(Check):
                     Finding(
                         self.id,
                         Severity.WARN,
-                        f"{cfg.policy} conditions on language but no episode declares a task "
+                        f"{pname} conditions on language but no episode declares a task "
                         "string - training here teaches a task-agnostic policy",
+                        details={"policy": pname},
                     )
                 )
 
         if not res.findings:
             res.summary = (
-                f"ready for {cfg.policy}" if cfg.policy else "no deployment blockers found"
+                f"ready for {pname}" if cfg.policy else "no deployment blockers found"
             )
         else:
             n_fail = sum(1 for f in res.findings if f.severity == Severity.FAIL)
             n_warn = sum(1 for f in res.findings if f.severity == Severity.WARN)
             res.summary = f"{n_fail} blocker(s), {n_warn} warning(s)"
             if cfg.policy:
-                res.summary += f" for {cfg.policy}"
+                res.summary += f" for {pname}"
         return res
