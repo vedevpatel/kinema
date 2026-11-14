@@ -179,7 +179,15 @@ def inferred_gripper_dims(action, names: list[str] | None) -> set[int]:
     end to hold at least ~8% of the total dwell: a dim parked at one end
     is an unused joint, not a gripper. Teleoperated grippers move
     continuously but still reach both ends over a dataset; a gripper never
-    actuated at all is constant and already excluded. Misses stay safe: an
+    actuated at all is constant and already excluded.
+    Revalidated on the 22 name-labelled datasets of the leaderboard
+    catalog (scripts/revalidate_gripper_prior.py, 40-episode samples):
+    the either-end rule picks a non-gripper in 7.7% of its 26 slot picks
+    (reproducing finding #15's ~7%); the both-ends rule drops that to
+    4.8% of 21 picks (95% precision) - it clears the parked-arm false
+    positive and leaves only a mobile-base angular_z that genuinely
+    dwells at both ends. Recall falls from 89% to 74% of slot grippers;
+    that trade is safe because misses keep their severity. Misses stay safe: an
     unrecognised gripper's findings keep their severity instead of being
     downgraded. Advisory: callers that would HIDE a finding should
     downgrade, not drop.

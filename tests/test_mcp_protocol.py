@@ -198,3 +198,50 @@ def test_cancellation_between_checks(tmp_path):
     (reply,) = s.take()
     assert reply["result"]["isError"] is True
     assert "cancelled" in reply["result"]["content"][0]["text"]
+
+
+def test_cancellation_arriving_mid_run_over_the_wire(tmp_path):
+    """A real client sends notifications/cancelled AFTER the run starts.
+    Regression: the read loop used to block inside the running call, so the
+    cancel sat in the pipe until the run finished and never landed."""
+    import os
+    import threading
+    import time
+
+    root = make_dataset(tmp_path / "ds", episodes=8)
+    out = io.StringIO()
+    srv = McpServer(out=out, err=io.StringIO())
+
+    # slow each progress emission a touch so the cancel has a wide window
+    orig_progress = srv._progress
+
+    def slow_progress(token, done, total, message):
+        time.sleep(0.1)
+        orig_progress(token, done, total, message)
+
+    srv._progress = slow_progress
+
+    r, w = os.pipe()
+    t = threading.Thread(target=srv.serve, kwargs={"inp": os.fdopen(r)}, daemon=True)
+    t.start()
+    wf = os.fdopen(w, "w")
+    wf.write(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                         "params": {"name": "run_checks",
+                                    "arguments": {"dataset": str(root), "max_episodes": 4,
+                                                  "report_path": str(tmp_path / "r.json")},
+                                    "_meta": {"progressToken": "p"}}}) + "\n")
+    wf.flush()
+    deadline = time.time() + 15
+    while "notifications/progress" not in out.getvalue():
+        assert time.time() < deadline, "run never started"
+        time.sleep(0.01)
+    wf.write(json.dumps({"jsonrpc": "2.0", "method": "notifications/cancelled",
+                         "params": {"requestId": 1}}) + "\n")
+    wf.flush()
+    wf.close()
+    t.join(timeout=30)
+    replies = [json.loads(ln) for ln in out.getvalue().splitlines()
+               if ln.strip() and '"id"' in ln]
+    (reply,) = [m for m in replies if m.get("id") == 1]
+    assert reply["result"]["isError"] is True
+    assert "cancelled" in reply["result"]["content"][0]["text"]

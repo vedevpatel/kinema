@@ -285,16 +285,40 @@ class McpServer:
     # ---- main loop ----
 
     def serve(self, inp=None) -> None:
+        """Read requests on a reader thread so notifications take effect
+        while a tool call runs: a real client's notifications/cancelled must
+        land DURING run_checks, not after it - a single-threaded read loop
+        blocks inside handle() for the whole call, so the cancel would sit
+        in the pipe until the run finished (found by the SDK-client
+        shakedown: mid-run cancels never landed)."""
+        import queue
+
         stream = inp or sys.stdin
-        for line in stream:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                msg = json.loads(line)
-            except json.JSONDecodeError:
-                self._error(None, -32700, "parse error")
-                continue
+        pending: queue.Queue = queue.Queue()
+
+        def reader() -> None:
+            for line in stream:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    msg = json.loads(line)
+                except json.JSONDecodeError:
+                    self._error(None, -32700, "parse error")
+                    continue
+                if isinstance(msg, dict) and msg.get("id") is None:
+                    # a notification: never queued behind a running request
+                    self._notify(msg.get("method"), msg.get("params") or {})
+                else:
+                    pending.put(msg)
+            pending.put(None)
+
+        t = threading.Thread(target=reader, daemon=True)
+        t.start()
+        while True:
+            msg = pending.get()
+            if msg is None:
+                break
             self.handle(msg)
 
 
