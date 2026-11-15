@@ -349,3 +349,19 @@ def test_heartbeat_thread_keeps_the_ledger_current(tmp_path):
     ht.run_plan(m, ht.RunConfig(), ["clean"], [0], silent, clock=clock, log=lambda s: None,
                 heartbeat_seconds=0.01)
     assert seen.is_set()
+
+
+def test_renderer_notes_pin(tmp_path):
+    """A top-level "notes" field renders as a dim paragraph; absent, nothing."""
+    lb = _load("leaderboard")
+    out = tmp_path / "docs"
+    out.mkdir()
+    doc = _doc(compute={"gpu": ["NVIDIA H100"], "ledger_gpu_hours": 2.5})
+    ht.write_table(out / "harm-table.json", doc)
+    lb._write(out, [], "2026-11-15 00:00 UTC")
+    assert "notes-probe" not in (out / "harm-table.html").read_text()
+
+    doc["notes"] = "notes-probe: success deltas unmeasurable"
+    ht.write_table(out / "harm-table.json", doc)
+    lb._write(out, [], "2026-11-15 00:00 UTC")
+    assert "notes-probe: success deltas unmeasurable" in (out / "harm-table.html").read_text()

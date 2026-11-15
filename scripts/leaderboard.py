@@ -522,7 +522,8 @@ def render_harm_table(doc: dict) -> str:
         f"Generated {esc(doc.get('generated', ''))}"
         + (f"; {esc(comp['ledger_gpu_hours'])} GPU-hours on {esc(gpu)}" if "ledger_gpu_hours" in comp else "")
         + ".</p>"
-        "<table><thead><tr><th>defect</th><th>check</th><th>recipe</th>"
+        + (f"<p class=dim>{esc(doc['notes'])}</p>" if doc.get("notes") else "")
+        + "<table><thead><tr><th>defect</th><th>check</th><th>recipe</th>"
         "<th>held-out MSE &Delta;</th><th class=dim>per seed</th>"
         "<th>rollout success &Delta;</th><th class=dim>per seed</th></tr></thead><tbody>"
         + "".join(rows)

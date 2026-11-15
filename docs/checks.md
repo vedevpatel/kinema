@@ -102,13 +102,13 @@ harm table (v1) re-measures defects on a real policy, with rollouts:
   dataset, frozen to its episode-start value in 30% of episodes.
 - Policy: LeRobot's diffusion-policy pusht example
   (`examples/training/train_policy.py`, `lerobot==0.5.1`): `DiffusionConfig`
-  defaults (`num_inference_steps` at its default), Adam lr 1e-4, 5000
+  defaults (`num_inference_steps` at its default), Adam lr 1e-4, 20000
   optimizer steps, batch 32 for every arm, normalization stats from each
   arm's own training frames. Seeds 0, 1, 2; a seed fixes the defect draw and
   the training randomness.
 - Outcomes, defect vs clean under the same seed: held-out action MSE delta
   (%, the action the policy executes at each held-out frame, raw units) and
-  rollout success delta (points, 20 `gym_pusht` episodes, LeRobot's own eval
+  rollout success delta (points, 50 `gym_pusht` episodes, LeRobot's own eval
   loop, env seeds identical across arms).
 - Compute: every GPU run is on a manifest; completed runs are resumed, never
   retrained; an arm whose projected cumulative GPU time exceeds 15 GPU-hours
@@ -116,9 +116,12 @@ harm table (v1) re-measures defects on a real policy, with rollouts:
 - `--dry-run` reruns the four recipes through the harm study's ridge-BC math
   on CPU (no rollouts) as a reproducibility check of the v0 numbers.
 
-Limit: 3 seeds, 20 eval episodes and 5k steps make the table indicative
-ordering evidence, not claim-grade; one rollout is 5 points of success, so
-success deltas are coarse. `stuck_joint_30pct` freezes a joint in more
+Limit: 3 seeds, 50 eval episodes and 20k steps make the table indicative
+ordering evidence, not claim-grade. This table is v1.1; it supersedes the
+5k-step v1 table of 2026-11-14. Rollout success stayed at the floor for
+every arm at both budgets (clean 2%/4%/2% at 20k steps), so success deltas
+cannot separate defects in this protocol - held-out MSE is the outcome
+metric. `stuck_joint_30pct` freezes a joint in more
 than `stuck_warn_share` (25%) of episodes, so stuck-actuator reports that
 joint as INFO, not WARN - its row measures harm the score does not charge.
 
