@@ -27,6 +27,11 @@ from kinema.report import (
     report_from_dict,
 )
 
+# Below this many sampled episodes a check verdict can still flip as the
+# sample grows (observed on the finding-#11 scale ladder: robocasa stats-drift
+# and outlier-episodes, DROID stuck-actuator, all stable only from ~250).
+_SAMPLED_VERDICT_MIN_EPISODES = 250
+
 
 def _run_checks(args) -> int:
     try:
@@ -40,6 +45,18 @@ def _run_checks(args) -> int:
     except DatasetError as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
+
+    if (
+        args.max_episodes is not None
+        and args.max_episodes < _SAMPLED_VERDICT_MIN_EPISODES
+        and ctx.truncated
+    ):
+        print(
+            f"note: sampled audit of {ctx.total_episodes} episodes - verdicts below "
+            f"~{_SAMPLED_VERDICT_MIN_EPISODES} sampled episodes can flip either way; "
+            "a full load is conclusive",
+            file=sys.stderr,
+        )
 
     report = DatasetReport(
         source=args.source,
