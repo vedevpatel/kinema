@@ -403,10 +403,14 @@ def audit_stale(entry: dict, engine: str, max_episodes: int) -> bool:
     """Whether a stored board entry is queued for re-audit: older check logic
     (engine mismatch), or a truncated audit that a higher --max-episodes would
     deepen (report.episodes below the current flag). max_episodes=0 disables
-    the depth check (rescore-only renders queue nothing)."""
+    the depth check (rescore-only renders queue nothing). Gated rows are
+    never queued; unsupported rows are retried on an engine rotation - a
+    newer engine may support them."""
+    if entry.get("status") == "gated":
+        return False  # gated repos stay gated whatever the engine
     rep = entry.get("report")
     if not rep:
-        return False  # gated/unsupported/error rows carry no audit to redo
+        return entry.get("engine") != engine  # unsupported: retry per engine
     if entry.get("engine") != engine:
         return True
     return bool(rep.get("truncated")) and int(rep.get("episodes") or 0) < max_episodes

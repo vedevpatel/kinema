@@ -236,7 +236,11 @@ def test_audit_stale_depth_rules():
     assert not lb.audit_stale(_depth_entry(eng, episodes=250), eng, 250)
     assert not lb.audit_stale(_depth_entry(eng, episodes=40, truncated=False), eng, 250)
     assert lb.audit_stale(_depth_entry("older-engine"), eng, 50)      # engine mismatch
-    assert not lb.audit_stale({"id": "org/ds", "status": "gated"}, eng, 250)  # no report
+    assert not lb.audit_stale({"id": "org/ds", "status": "gated"}, eng, 250)  # gated: never
+    assert not lb.audit_stale({"id": "org/ds", "status": "gated", "engine": "old"}, eng, 250)
+    # unsupported rows retry on an engine rotation, stay put under the same engine
+    assert not lb.audit_stale({"id": "org/ds", "status": "unsupported", "engine": eng}, eng, 250)
+    assert lb.audit_stale({"id": "org/ds", "status": "unsupported", "engine": "old"}, eng, 250)
 
 
 def test_index_marks_depth_stale_only_with_flag():
