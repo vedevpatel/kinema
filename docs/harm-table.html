@@ -1,0 +1,20 @@
+<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>Harm table</title><style>
+:root { color-scheme: light dark; }
+body { font-family: ui-sans-serif, system-ui, sans-serif; max-width: 1080px;
+       margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; padding: .4rem .6rem; border-bottom: 1px solid #8884; }
+th { position: sticky; top: 0; background: Canvas; }
+tr:hover td { background: #8881; }
+.badge { display: inline-block; padding: .05rem .5rem; border-radius: 1rem;
+         font-size: .8rem; font-weight: 600; }
+.b-PASS { background: #2da44e22; color: #2da44e; }
+.b-INFO { background: #0969da22; color: #0969da; }
+.b-WARN { background: #bf870022; color: #bf8700; }
+.b-FAIL { background: #cf222e22; color: #cf222e; }
+.b-SKIP, .b-NA { background: #8882; color: #888; }
+.score { font-weight: 700; }
+.dim { color: #888; }
+a { color: #0969da; }
+h1 { margin-bottom: 0; }
+</style><h1>Harm table</h1><p><b>3 seeds / 20 eval episodes / 5k steps - indicative ordering evidence, not claim-grade.</b> Each injected defect is trained against a clean arm under the same seed; deltas are defect minus clean. Health-score weights are not derived from this table yet (<a href='https://github.com/vedevpatel/kinema/blob/main/docs/checks.md#harm-table'>protocol</a>, <a href='https://github.com/vedevpatel/kinema/blob/main/docs/checks.md#health-score'>weights</a>, <a href='index.html'>leaderboard</a>).</p><p class=dim>Policy: diffusion (lerobot==0.5.1 examples/training/train_policy.py (diffusion, pusht)), batch 32. Dataset: <code>lerobot/pusht@7628202a2180</code>, 120 train / 24 held-out episodes (kinema load_dataset(max_episodes=144): ids spread evenly over the dataset; first 120 train, last 24 held out (harm_study.py split)). Seeds [0, 1, 2]. Generated 2026-11-15; 2.88 GPU-hours on NVIDIA A100-SXM4-40GB.</p><table><thead><tr><th>defect</th><th>check</th><th>recipe</th><th>held-out MSE &Delta;</th><th class=dim>per seed</th><th>rollout success &Delta;</th><th class=dim>per seed</th></tr></thead><tbody><tr><td><code>duplicates_20pct</code></td><td><a href='https://github.com/vedevpatel/kinema/blob/main/docs/checks.md#duplicate-and-leakage'>duplicate-and-leakage</a></td><td>copy 20% of training episodes (appended)</td><td class=score>+3.9%</td><td class=dim>+13.6% / -1.6% / -0.4%</td><td class=score>-1.7 pts</td><td class=dim>-5.0 / +0.0 / +0.0</td></tr><tr><td><code>idle_start_30f</code></td><td><a href='https://github.com/vedevpatel/kinema/blob/main/docs/checks.md#idle-segments'>idle-segments</a></td><td>prepend 30 still frames to every episode (first observation repeated, zero action)</td><td class=score>+331.7%</td><td class=dim>+722.5% / +111.0% / +161.7%</td><td class=score>-1.7 pts</td><td class=dim>-5.0 / +0.0 / +0.0</td></tr><tr><td><code>scale_mismatch_0.5x_25pct</code></td><td><a href='https://github.com/vedevpatel/kinema/blob/main/docs/checks.md#calibration-drift'>calibration-drift</a></td><td>actions x0.5 in ~25% of episodes (Bernoulli per episode), states untouched</td><td class=score>+665.1%</td><td class=dim>+271.3% / +772.6% / +951.5%</td><td class=score>-1.7 pts</td><td class=dim>-5.0 / +0.0 / +0.0</td></tr><tr><td><code>stuck_joint_30pct</code></td><td><a href='https://github.com/vedevpatel/kinema/blob/main/docs/checks.md#stuck-actuator'>stuck-actuator</a></td><td>one action dim frozen to its episode-start value in 30% of episodes</td><td class=score>+544.6%</td><td class=dim>+520.1% / +525.8% / +588.1%</td><td class=score>+0.0 pts</td><td class=dim>+0.0 / +0.0 / +0.0</td></tr></tbody></table>
