@@ -58,10 +58,13 @@ def test_schema_pin():
     assert ht.validate_table(doc) == []
     assert doc["schema"] == "kinema.harm-table/v1"
     assert [r["defect"] for r in doc["rows"]] == [
-        "duplicates_20pct", "idle_start_30f", "scale_mismatch_0.5x_25pct", "stuck_joint_30pct"]
+        "duplicates_20pct", "idle_start_30f", "scale_mismatch_0.5x_25pct", "stuck_joint_30pct",
+        "action_saturation_30pct", "dropped_frames_10pct_25pct"]
     assert {r["defect"]: r["check"] for r in doc["rows"]} == {
         "duplicates_20pct": "duplicate-and-leakage", "idle_start_30f": "idle-segments",
-        "scale_mismatch_0.5x_25pct": "calibration-drift", "stuck_joint_30pct": "stuck-actuator"}
+        "scale_mismatch_0.5x_25pct": "calibration-drift", "stuck_joint_30pct": "stuck-actuator",
+        "action_saturation_30pct": "action-saturation",
+        "dropped_frames_10pct_25pct": "dropped-frames"}
     row = doc["rows"][0]
     assert set(row) == {"defect", "check", "recipe", "policy", "dataset_revision", "steps", "seeds",
                         "mse_delta_pct", "success_delta_pts", "date", "confidence"}
@@ -70,7 +73,7 @@ def test_schema_pin():
     # duplicates arm: mse 110+s vs clean 100+s; success 45 vs 50
     assert row["mse_delta_pct"]["per_seed"] == [10.0, round(1000 / 101, 3), round(1000 / 102, 3)]
     assert row["success_delta_pts"] == {"per_seed": [-5.0, -5.0, -5.0], "mean": -5.0}
-    assert len(doc["runs"]) == 15
+    assert len(doc["runs"]) == 21
     assert len(json.dumps(doc)) < 100_000
 
 
@@ -376,3 +379,57 @@ def test_harm_table_page_names_the_weight_source(tmp_path):
     page = (out / "harm-table.html").read_text()
     assert "derived from this table where measured" in page
     assert "not derived from this table yet" not in page
+
+
+# --- v1.2 arms: action_saturation_30pct and dropped_frames_10pct_25pct --------
+
+def test_action_saturation_injector_pins_at_bounds():
+    eps = _eps(n=30, frames=60, adim=3)
+    out = ht.inject_action_saturation(eps, np.random.default_rng(0))
+    assert [len(s) for s, _ in out] == [len(s) for s, _ in eps]  # rows kept, values clipped
+    a_all = np.concatenate([a for _, a in out])
+    raw = np.concatenate([a for _, a in eps])
+    lo, hi = np.quantile(raw, 0.35, axis=0), np.quantile(raw, 0.65, axis=0)
+    assert (a_all >= lo - 1e-12).all() and (a_all <= hi + 1e-12).all()
+    for j in range(a_all.shape[1]):  # every dim piles up at BOTH bounds
+        assert (np.abs(a_all[:, j] - hi[j]) < 1e-9).mean() > 0.25
+        assert (np.abs(a_all[:, j] - lo[j]) < 1e-9).mean() > 0.25
+    assert ht.action_saturation_self_check(eps, 0) == []
+
+
+def test_action_saturation_injector_trips_the_check(tmp_path):
+    """The arm is the defect the action-saturation check measures: injecting
+    it into a clean synthetic dataset flips that check to WARN."""
+    from kinema.checks import ALL_CHECKS, CheckConfig, Severity
+    from kinema.dataset import load_dataset
+    from kinema.fixtures.synth import make_dataset
+
+    root = make_dataset(tmp_path / "sat", episodes=32)
+    ctx = load_dataset(str(root))
+    eps = [(ctx.state[ctx.rows_for(ep)], ctx.action[ctx.rows_for(ep)])
+           for ep in ctx.episode_ids()]
+    out = ht.inject_action_saturation(eps, np.random.default_rng(0))
+    ctx.action = np.concatenate([a for _, a in out])
+    res = {c.id: c for c in ALL_CHECKS}["action-saturation"].run(ctx, CheckConfig())
+    assert res.verdict == Severity.WARN, [f.message for f in res.findings]
+
+
+def test_dropped_frames_injector_drops_interior_only():
+    eps = _eps(n=40, frames=50)
+    out = ht.inject_dropped_frames(eps, np.random.default_rng(0))
+    dropped = [i for i in range(len(eps)) if len(out[i][0]) < len(eps[i][0])]
+    assert dropped, "the recipe must drop somewhere"
+    for i in dropped:  # ~10% of interior frames, first/last survive
+        assert len(out[i][0]) == pytest.approx(len(eps[i][0]) * 0.9, abs=2)
+        assert np.array_equal(out[i][0][0], eps[i][0][0]) and np.array_equal(out[i][0][-1], eps[i][0][-1])
+        assert len(out[i][0]) == len(out[i][1])  # state and action drop together
+    assert ht.dropped_frames_self_check(eps, 0) == []
+
+
+def test_new_injectors_deterministic_per_seed():
+    eps = _eps(n=20, frames=40)
+    for fn in (ht.inject_action_saturation, ht.inject_dropped_frames):
+        a = fn(eps, np.random.default_rng(3))
+        b = fn(eps, np.random.default_rng(3))
+        assert all(np.array_equal(x[0], y[0]) and np.array_equal(x[1], y[1])
+                   for x, y in zip(a, b, strict=True))

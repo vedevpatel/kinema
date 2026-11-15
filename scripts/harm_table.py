@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""Harm table v1: four injected defects on lerobot/pusht, each scored by
+"""Harm table v1: injected defects on lerobot/pusht, each scored by
 what it does to a trained policy - held-out action MSE and rollout success -
 against a clean arm trained the same way.
 
 Arms: clean + duplicates_20pct, idle_start_30f, scale_mismatch_0.5x_25pct
 (the harm study v0 recipes, imported from scripts/harm_study.py unchanged)
 + stuck_joint_30pct (one action dim frozen to its episode-start value in
-30% of episodes). Policy: LeRobot's diffusion-policy pusht example
+30% of episodes) + action_saturation_30pct (actions clipped to the central
+30% of each dim's range in every episode) + dropped_frames_10pct_25pct
+(10% of interior frames deleted in 25% of episodes). Policy: LeRobot's diffusion-policy pusht example
 (examples/training/train_policy.py at lerobot==0.5.1: DiffusionConfig
 defaults, Adam lr 1e-4, 5000 steps), batch 32 for every arm. Outcomes:
 held-out action MSE on the 24 episodes after the 120 training episodes (the
@@ -95,6 +97,79 @@ def inject_stuck_joint(eps, rng, fraction: float = 0.30):
     return out
 
 
+def inject_action_saturation(eps, rng, low: float = 0.35, high: float = 0.65):
+    """Actions clipped to the central 30% of each dim's range in EVERY
+    episode - a controller saturating at its limits for the whole recording,
+    so commands pile up at exactly the dataset min/max: the action-saturation
+    check's target. Bounds are the train split's per-dim 35th/65th
+    percentiles, computed before clipping; states are untouched. (Clipping
+    only some episodes would leave the unclipped ones holding the global
+    extremes, and the pile-up would sit off the limit the check measures.)"""
+    if not eps:
+        return []
+    a_all = np.concatenate([a for _, a in eps])
+    lo = np.quantile(a_all, low, axis=0)
+    hi = np.quantile(a_all, high, axis=0)
+    return [(s, np.clip(a, lo, hi)) for s, a in eps]
+
+
+def action_saturation_self_check(eps, seed: int, low: float = 0.35, high: float = 0.65) -> list[str]:
+    """Problems with the saturation recipe on these episodes ([] = pass):
+    after injection at least one action dim must pin >=25% of its frames
+    exactly at a clip bound - below that the recipe is not the defect the
+    action-saturation check measures."""
+    out = inject_action_saturation(eps, np.random.default_rng(seed), low, high)
+    if not out:
+        return ["no episodes"]
+    a_all = np.concatenate([a for _, a in out])
+    lo = np.quantile(np.concatenate([a for _, a in eps]), low, axis=0)
+    hi = np.quantile(np.concatenate([a for _, a in eps]), high, axis=0)
+    best = 0.0
+    for j in range(a_all.shape[1]):
+        tol = 1e-9 * max(1.0, abs(hi[j] - lo[j]))
+        pinned = ((np.abs(a_all[:, j] - hi[j]) <= tol) | (np.abs(a_all[:, j] - lo[j]) <= tol)).mean()
+        best = max(best, float(pinned))
+    if best < 0.25:
+        return [f"best dim pins only {best:.0%} of frames at a bound after clipping"]
+    return []
+
+
+def inject_dropped_frames(eps, rng, drop: float = 0.10, fraction: float = 0.25):
+    """10% of interior frames deleted in 25% of episodes - the dropped-frames
+    defect as the learner experiences it (missing transitions). The check
+    spots the gap in frame_index metadata; the harm question is what the
+    missing rows do to training, which is what this arm measures. First and
+    last frames always survive; states and actions drop together."""
+    out = []
+    for s, a in eps:
+        if len(s) > 2 and rng.random() < fraction:
+            interior = np.arange(1, len(s) - 1)
+            k = max(1, int(round(drop * len(interior))))
+            keep = np.ones(len(s), dtype=bool)
+            keep[rng.choice(interior, size=k, replace=False)] = False
+            s, a = s[keep], a[keep]
+        out.append((s, a))
+    return out
+
+
+def dropped_frames_self_check(eps, seed: int, drop: float = 0.10, fraction: float = 0.25) -> list[str]:
+    """Problems with the dropped-frames recipe on these episodes ([] = pass):
+    the same seed must drop the same frames, and some episode must lose
+    frames (a recipe that never drops is not the defect)."""
+    if not eps:
+        return ["no episodes"]
+    a = inject_dropped_frames(eps, np.random.default_rng(seed), drop, fraction)
+    b = inject_dropped_frames(eps, np.random.default_rng(seed), drop, fraction)
+    if [len(s) for s, _ in a] != [len(s) for s, _ in b]:
+        return ["not deterministic for a fixed seed"]
+    if [len(s) for s, _ in a] == [len(s) for s, _ in eps]:
+        return ["no frames dropped"]
+    if any(not np.array_equal(a[i][0][0], eps[i][0][0]) or not np.array_equal(a[i][0][-1], eps[i][0][-1])
+           for i in range(len(eps)) if len(eps[i][0]) > 2):
+        return ["first/last frame lost"]
+    return []
+
+
 def stuck_joint_self_check(eps, seed: int, fraction: float = 0.30) -> list[str]:
     """Problems with the stuck_joint recipe on these episodes ([] = pass):
     exactly one dim frozen to its start value, round(30%) of episodes,
@@ -155,6 +230,12 @@ DEFECTS: dict[str, Defect] = {
     "stuck_joint_30pct": Defect(
         "stuck-actuator", "one action dim frozen to its episode-start value in 30% of episodes",
         {"frozen_dims": 1, "episode_fraction": 0.30, "frozen_value": "episode start"}, inject_stuck_joint),
+    "action_saturation_30pct": Defect(
+        "action-saturation", "actions clipped to the central 30% of each dim's range in every episode",
+        {"clip_quantiles": [0.35, 0.65]}, inject_action_saturation),
+    "dropped_frames_10pct_25pct": Defect(
+        "dropped-frames", "10% of interior frames deleted in 25% of episodes (first/last kept)",
+        {"drop_fraction": 0.10, "episode_fraction": 0.25}, inject_dropped_frames),
 }
 ARMS = ("clean", *DEFECTS)
 
@@ -577,6 +658,11 @@ def gate0_report(doc: dict, self_check: list[str]) -> bool:
               f"target {target:+.1f}% +/-{tol:.1f} -> {'PASS' if hit else 'FAIL'}")
     sj = rows["stuck_joint_30pct"]["mse_delta_pct"]
     finite = all(_num(v) for v in sj["per_seed"]) and _num(sj["mean"])
+    for arm in ("action_saturation_30pct", "dropped_frames_10pct_25pct"):
+        m = rows[arm]["mse_delta_pct"]
+        arm_finite = all(_num(v) for v in m["per_seed"]) and _num(m["mean"])
+        ok &= arm_finite
+        print(f"[gate0] {arm:28s} mean {m['mean']:+.1f}% per-seed {m['per_seed']} finite={arm_finite}")
     ok &= finite and not self_check
     print(f"[gate0] stuck_joint_30pct            mean {sj['mean']:+.1f}% per-seed {sj['per_seed']} "
           f"finite={finite}; self-check {'PASS' if not self_check else 'FAIL: ' + '; '.join(self_check)}")
@@ -588,6 +674,10 @@ def main_dry_run(args) -> int:
     train_ids, held_ids, eps = harm_split()
     train_eps, held_eps = eps[:TRAIN_EPISODES], eps[TRAIN_EPISODES:]
     problems = [p for s in args.seeds for p in stuck_joint_self_check(train_eps, s)]
+    problems += [f"action_saturation: {p}" for s in args.seeds
+                 for p in action_saturation_self_check(train_eps, s)]
+    problems += [f"dropped_frames: {p}" for s in args.seeds
+                 for p in dropped_frames_self_check(train_eps, s)]
     results = dry_run(train_eps, held_eps, args.seeds)
     for (arm, seed), r in sorted(results.items(), key=lambda kv: (kv[0][1], ARMS.index(kv[0][0]))):
         print(f"seed {seed} {arm:28s} held-out MSE {r['heldout_mse']:.5f}")

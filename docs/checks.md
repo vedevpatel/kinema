@@ -102,12 +102,17 @@ harm table (v1) re-measures defects on a real policy, with rollouts:
   the harm study split: kinema's 144-episode sample (ids spread evenly over
   the 206 episodes), the first 120 for training, the last 24 held out. The
   table records both id lists.
-- Arms: clean plus four defects, each the target of one check -
+- Arms: clean plus six defects, each the target of one check -
   `duplicates_20pct` (duplicate-and-leakage), `idle_start_30f`
   (idle-segments), `scale_mismatch_0.5x_25pct` (calibration-drift), with the
   recipes imported unchanged from `scripts/harm_study.py`, and
   `stuck_joint_30pct` (stuck-actuator): one action dim, drawn once per
-  dataset, frozen to its episode-start value in 30% of episodes.
+  dataset, frozen to its episode-start value in 30% of episodes;
+  `action_saturation_30pct` (action-saturation): actions clipped to the
+  central 30% of each dim's range in every episode, so commands pile up at
+  exactly the dataset min/max; `dropped_frames_10pct_25pct` (dropped-frames):
+  10% of interior frames deleted in 25% of episodes. The last two arms are
+  added before their runs start; their rows land when the runs complete.
 - Policy: LeRobot's diffusion-policy pusht example
   (`examples/training/train_policy.py`, `lerobot==0.5.1`): `DiffusionConfig`
   defaults (`num_inference_steps` at its default), Adam lr 1e-4, 20000
@@ -121,8 +126,10 @@ harm table (v1) re-measures defects on a real policy, with rollouts:
 - Compute: every GPU run is on a manifest; completed runs are resumed, never
   retrained; an arm whose projected cumulative GPU time exceeds 15 GPU-hours
   is refused before it launches.
-- `--dry-run` reruns the four recipes through the harm study's ridge-BC math
-  on CPU (no rollouts) as a reproducibility check of the v0 numbers.
+- `--dry-run` reruns every recipe through the harm study's ridge-BC math
+  on CPU (no rollouts): the v0 arms must reproduce the v0 numbers within
+  tolerance; the newer arms self-check (the recipe bites as designed) and
+  print indicative numbers.
 
 Limit: 3 seeds, 50 eval episodes and 20k steps make the table indicative
 ordering evidence, not claim-grade. This table is v1.1; it supersedes the
