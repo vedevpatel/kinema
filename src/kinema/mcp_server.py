@@ -65,6 +65,7 @@ from kinema.diagnose import (
     summarize_report,
 )
 from kinema.report import render_json
+from kinema.similar import fetch_board, load_query_report, rank
 
 SUPPORTED_PROTOCOL_VERSIONS = ["2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25"]
 # 2025-03-26 added JSON-RPC batching (receivers MUST accept batches);
@@ -175,6 +176,34 @@ TOOLS: list[dict[str, Any]] = [
                 },
             },
             ["dataset"],
+        ),
+    },
+    {
+        "name": "similar_datasets",
+        "description": "Datasets like yours: rank your report against every dataset audited on "
+        "the kinema leaderboard (a labelled corpus of real robot data and its defects) and "
+        "return the closest matches with shared warnings, their measured harm, and links to "
+        "their full audits. Give either a dataset to audit or a report_path from an earlier "
+        "run_checks call.",
+        "inputSchema": _schema(
+            {
+                "dataset": _DATASET_ARG,
+                "k": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 20,
+                    "description": "How many matches to return (default 5)",
+                },
+                "policy": {"type": "string", "description": "Target policy (optional)"},
+                "policy_overrides": _POLICY_OVERRIDES_ARG,
+                "max_episodes": _MAX_EPISODES_ARG,
+                "report_path": {
+                    "type": "string",
+                    "description": "Absolute path of a kinema JSON report from an earlier "
+                    "run_checks call; skips re-auditing the dataset",
+                },
+            },
+            [],
         ),
     },
 ]
@@ -594,6 +623,34 @@ class McpServer:
                     cancelled=cancel,
                     progress=progress,
                 )
+            elif name == "similar_datasets":
+                if not args.get("dataset") and not args.get("report_path"):
+                    emit(self._tool_error(
+                        req_id, "invalid arguments: one of dataset or report_path is required"))
+                    return
+                if args.get("report_path") and not args.get("dataset"):
+                    query = load_query_report(args["report_path"])
+                else:
+                    query, _ctx = run_checks(
+                        dataset=args["dataset"],
+                        checks=None,
+                        policy=args.get("policy"),
+                        policy_overrides=args.get("policy_overrides"),
+                        max_episodes=args.get("max_episodes"),
+                        cancelled=cancel,
+                        progress=progress,
+                    )
+                entries, corpus = fetch_board()
+                payload = {
+                    "query": {
+                        "dataset": query.get("dataset"),
+                        "score": query.get("score"),
+                        "verdict": query.get("verdict"),
+                    },
+                    "corpus": corpus,
+                    "matches": rank(query, entries, k=args.get("k") or 5,
+                                    exclude_id=query.get("dataset")),
+                }
             else:  # run_checks
                 report, _ctx = run_checks(
                     dataset=args["dataset"],
@@ -614,7 +671,7 @@ class McpServer:
         except CancelledError as e:
             self._log(f"request {req_id!r} {e}; no response sent")
             return
-        except (DatasetError, ValueError, OSError) as e:
+        except (DatasetError, ValueError, OSError, RuntimeError) as e:
             emit(self._tool_error(req_id, f"{type(e).__name__}: {e}"))
             return
         except Exception as e:  # noqa: BLE001 - a crashed tool is still a tool error

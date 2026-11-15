@@ -397,7 +397,7 @@ def test_tools_list_shape():
     s.send(jsonrpc="2.0", id=1, method="tools/list")
     (reply,) = s.take()
     tools = {t["name"]: t for t in reply["result"]["tools"]}
-    assert set(tools) == {"diagnose_finetune", "list_checks", "run_checks"}
+    assert set(tools) == {"diagnose_finetune", "list_checks", "run_checks", "similar_datasets"}
     for t in tools.values():
         assert t["inputSchema"]["type"] == "object"
     schema = tools["diagnose_finetune"]["inputSchema"]
