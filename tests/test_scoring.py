@@ -216,6 +216,41 @@ def test_index_labels_unrescored_legacy_rows():
     assert "(legacy-v0)" in html
 
 
+# --- depth staleness: a truncated audit re-queues when --max-episodes rises ---
+
+
+def _depth_entry(engine, *, episodes=50, truncated=True):
+    return {"id": "org/ds", "slug": "org--ds", "downloads": 1, "engine": engine,
+            "report": {"verdict": "WARN", "score": 90, "score_model": "tiered-v2",
+                       "episodes": episodes, "truncated": truncated, "checks": []}}
+
+
+def test_audit_stale_depth_rules():
+    from kinema.engine import engine_version
+    lb = _load_leaderboard()
+    eng = engine_version()
+    e = _depth_entry(eng)
+    assert lb.audit_stale(e, eng, 250)           # 50 < 250 and truncated: deepen
+    assert not lb.audit_stale(e, eng, 50)        # already at the flag: current
+    assert not lb.audit_stale(e, eng, 0)         # rescore-only render queues nothing
+    assert not lb.audit_stale(_depth_entry(eng, episodes=250), eng, 250)
+    assert not lb.audit_stale(_depth_entry(eng, episodes=40, truncated=False), eng, 250)
+    assert lb.audit_stale(_depth_entry("older-engine"), eng, 50)      # engine mismatch
+    assert not lb.audit_stale({"id": "org/ds", "status": "gated"}, eng, 250)  # no report
+
+
+def test_index_marks_depth_stale_only_with_flag():
+    from kinema.engine import engine_version
+    lb = _load_leaderboard()
+    eng = engine_version()
+    entries = [_depth_entry(eng)]
+    html = lb.render_index(entries, "now", max_episodes=250)
+    assert "deepening to 250 queued" in html
+    assert "queued for re-audit" in html
+    html = lb.render_index(entries, "now")  # no flag: nothing queued, nothing marked
+    assert "stale - re-audit queued" not in html
+
+
 # --- correlated-check waiver (tiered-v1.1) -----------------------------------
 
 IDLE, STUCK = "idle-segments", "stuck-actuator"

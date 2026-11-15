@@ -399,7 +399,20 @@ def render_dataset_page(rep: DatasetReport, audited: str | None = None) -> str:
     return page(f"{rep.source} - kinema audit", body)
 
 
-def render_index(entries: list[dict], generated: str, harm_table: bool = False) -> str:
+def audit_stale(entry: dict, engine: str, max_episodes: int) -> bool:
+    """Whether a stored board entry is queued for re-audit: older check logic
+    (engine mismatch), or a truncated audit that a higher --max-episodes would
+    deepen (report.episodes below the current flag). max_episodes=0 disables
+    the depth check (rescore-only renders queue nothing)."""
+    rep = entry.get("report")
+    if not rep:
+        return False  # gated/unsupported/error rows carry no audit to redo
+    if entry.get("engine") != engine:
+        return True
+    return bool(rep.get("truncated")) and int(rep.get("episodes") or 0) < max_episodes
+
+
+def render_index(entries: list[dict], generated: str, harm_table: bool = False, max_episodes: int = 0) -> str:
     engine = engine_version()
     rows = []
     n_stale = 0
@@ -411,7 +424,7 @@ def render_index(entries: list[dict], generated: str, harm_table: bool = False) 
         ),
     )  # health score first, downloads break ties, unaudited last
     for i, e in enumerate(entries, 1):
-        stale = e.get("report") and e.get("engine") != engine
+        stale = audit_stale(e, engine, max_episodes)
         n_stale += bool(stale)
         if e.get("report"):
             r = e["report"]
@@ -426,7 +439,9 @@ def render_index(entries: list[dict], generated: str, harm_table: bool = False) 
                 badge(c["verdict"]) for c in r["checks"] if c["verdict"] in ("WARN", "FAIL")
             ) or '<span class=dim>all clear</span>'
             if stale:
-                checks += ' <span class=dim title="audited by older check logic">(stale - re-audit queued)</span>'
+                why = ("audited by older check logic" if e.get("engine") != engine
+                       else f"audited at {r.get('episodes')} episodes - deepening to {max_episodes} queued")
+                checks += f' <span class=dim title="{why}">(stale - re-audit queued)</span>'
         else:
             link = esc(e["id"])
             score = '<span class=dim>-</span>'
@@ -443,7 +458,7 @@ def render_index(entries: list[dict], generated: str, harm_table: bool = False) 
         f"<p class=dim>The most-downloaded LeRobot datasets on Hugging Face, audited nightly by "
         "<a href='https://github.com/vedevpatel/kinema'>kinema</a>. "
         f"Generated {esc(generated)} by engine <code>{esc(engine)}</code>"
-        + (f"; {n_stale} result(s) from older check logic are being re-audited" if n_stale else "")
+        + (f"; {n_stale} result(s) are queued for re-audit" if n_stale else "")
         + f". Scores use model <code>{esc(SCORE_MODEL)}</code>: 100 minus 25 per failing "
         "check and a per-check weight for each warning check (10 / 6 / 2 by measured "
         "training harm where the harm table has measured it, hand-tuned otherwise; "
@@ -552,13 +567,13 @@ def write_harm_table(out: Path) -> bool:
     return True
 
 
-def _write(out: Path, entries: list, generated: str) -> None:
+def _write(out: Path, entries: list, generated: str, max_episodes: int = 0) -> None:
     """Atomic writes so a kill mid-run never leaves a corrupt or missing site."""
     data = json.dumps(
         {"generated": generated, "score_model": SCORE_MODEL, "datasets": entries},
         indent=2, default=str,
     )
-    idx = render_index(entries, generated, harm_table=write_harm_table(out))
+    idx = render_index(entries, generated, harm_table=write_harm_table(out), max_episodes=max_episodes)
     for name, text in (("data.json", data), ("index.html", idx)):
         tmp = out / f".{name}.tmp"
         tmp.write_text(text)
@@ -683,7 +698,7 @@ def main() -> int:
             n_moved = rescore_entries(entries)
             done_ids = {
                 e["id"] for e in entries
-                if e.get("status") == "gated" or e.get("engine") == engine
+                if e.get("status") == "gated" or not audit_stale(e, engine, args.max_episodes)
             }
             n_stale = sum(1 for e in entries if e["id"] not in done_ids)
             print(f"resuming: {len(done_ids)} current, {n_stale} stale (engine {engine})")
@@ -730,7 +745,7 @@ def main() -> int:
         else:
             entries.append(entry)
         generated = f"{dt.datetime.now(dt.timezone.utc):%Y-%m-%d %H:%M UTC}"
-        _write(out, entries, generated)
+        _write(out, entries, generated, max_episodes=args.max_episodes)
 
     # submit incrementally: the queue stays shallow so --time-budget actually
     # bounds the run (at most max_pending audits in flight when it expires)
@@ -765,7 +780,7 @@ def main() -> int:
                 print(f"    dropped in-flight audit: {type(e).__name__}", flush=True)
 
     generated = f"{dt.datetime.now(dt.timezone.utc):%Y-%m-%d %H:%M UTC}"
-    _write(out, entries, generated)
+    _write(out, entries, generated, max_episodes=args.max_episodes)
     n_ok = sum(1 for e in entries if e.get("report"))
     print(f"done: {n_ok}/{len(entries)} audited -> {out}/index.html")
     return 0
