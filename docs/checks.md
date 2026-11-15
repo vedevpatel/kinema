@@ -186,7 +186,9 @@ verdict: the measured per-frame step of the paired state dim is regressed
 on the command, and a slope far from 1 (with R^2 >= 0.5) means action and
 state disagree on scale - a conversion-units bug, or commands the robot
 cannot follow (on lerobot/xarm_lift_medium the measured steps run at
-~0.07x the commanded ones, R^2 up to 0.98: flagged). Absolute EE-pose
+~0.07x the commanded ones, R^2 up to 0.98: flagged). A delta command has
+no still-frame offset or backlash to fit - scale agreement is the only
+measurable signal on deltas. Absolute EE-pose
 actions still cannot be compared without the robot's kinematics; those
 dims classify as "different space" and sit the check out.
 
@@ -238,7 +240,9 @@ alone; it now requires the dim to VISIT both ends (the quieter end holds
 >=8% of the dwell), which removes the parked-at-one-end false positives,
 but a genuinely one-ended gripper (shut for the whole dataset) is no
 longer recognised either. Misses stay safe: its findings keep their
-severity instead of being downgraded.
+severity instead of being downgraded. A genuinely bimodal joint can
+still be picked as a gripper; a real stuck or clipped joint misread as
+one is reported but not gated, so it surfaces as INFO, not WARN.
 
 Limit (score weight): a WARN costs 6, placeholder. It is waived when
 idle-segments is also charged and the two checks' flagged episode sets
