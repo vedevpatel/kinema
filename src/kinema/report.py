@@ -11,15 +11,15 @@ from typing import Any
 
 from kinema.checks.base import CheckResult, Severity
 
-# Health score, model "tiered-v1.1" (docs/checks.md, "Health score"): start
+# Health score, model "tiered-v2" (docs/checks.md, "Health score"): start
 # at 100, pay per failing/warning CHECK - never per finding, so correlated
 # findings and verbose checks do not double-bill one defect. Floor at 0.
-# tiered-v1.1 = tiered-v1's tiers, weights and FAIL cost plus the
-# correlated-check waiver below. Stored results without a "score_model"
-# field were scored by legacy-v0 (hand-tuned weights); the score is derived
-# from stored per-check verdicts and stored findings, so any stored result
-# can be rescored without re-running checks.
-SCORE_MODEL = "tiered-v1.1"
+# tiered-v2 = tiered-v1.1 (tiers, FAIL cost, correlated-check waiver below)
+# with WARN weights re-anchored on harm table v1.1. Stored results without a
+# "score_model" field were scored by legacy-v0 (hand-tuned weights); the
+# score is derived from stored per-check verdicts and stored findings, so
+# any stored result can be rescored without re-running checks.
+SCORE_MODEL = "tiered-v2"
 
 # Correlated-check waiver edges, (upstream, downstream). When the upstream
 # check is charged (WARN or FAIL) and the downstream check is WARN, the
@@ -39,22 +39,24 @@ WAIVER_MIN_OVERLAP = Fraction(1, 2)  # inclusive
 # measured training damage, so it is not harm-scaled.
 _FAIL_COST = 25
 
-# WARN tiers, anchored on the harm study v0 (scripts/harm_study.py: ridge BC,
-# state-only, held-out action MSE delta vs clean). Band edges are provisional
-# - three data points define them - and get re-anchored once when the full
-# harm table lands. (tier, label, lower edge in % MSE delta, weight),
-# highest band first.
+# WARN tiers, anchored on the harm table v1.1 (scripts/harm_table.py:
+# diffusion-policy pusht, 20k steps, 3 seeds, held-out action MSE delta vs
+# clean). Band edges were re-anchored once for tiered-v2 and stay 100/10/0.
+# (tier, label, lower edge in % MSE delta, weight), highest band first.
 WARN_TIERS: tuple[tuple[str, str, float, int], ...] = (
     ("A", "training killer", 100.0, 10),
     ("B", "skews learning", 10.0, 6),
     ("C", "review list", 0.0, 2),
 )
 
-# measured harm per check: held-out MSE delta (%) of the defect it targets
+# measured harm per check: held-out MSE delta (%) of the defect it targets,
+# harm table v1.1 (diffusion pusht, 20k steps, 3 seeds, 50 eval episodes;
+# docs/harm-table.json)
 _MEASURED_HARM_PCT = {
-    "idle-segments": 881.0,  # 30 idle frames prepended
-    "calibration-drift": 347.0,  # action scale 0.5x in 25% of episodes
-    "duplicate-and-leakage": 0.1,  # 20% duplicate episodes
+    "calibration-drift": 1475.3,  # action scale 0.5x in 25% of episodes
+    "stuck-actuator": 697.8,  # one joint frozen in 30% of episodes
+    "idle-segments": 75.1,  # 30 idle frames prepended
+    "duplicate-and-leakage": -3.6,  # 20% duplicate episodes
 }
 
 # hand-tuned until the harm study measures them: wrong normalization or
@@ -66,7 +68,6 @@ _PLACEHOLDER_COST = {
     "deployment-readiness": 10,
     "timestamp-grid": 10,
     "dropped-frames": 8,
-    "stuck-actuator": 6,
     "action-saturation": 6,
     "visual-quality": 6,
     "outlier-episodes": 3,
@@ -122,8 +123,8 @@ def check_charges(
     "waiver_evidence" ({"shared_episodes", "overlap"}) when waived.
 
     `episodes` maps check id -> flagged episode set
-    (flagged_episodes(result)); without it no waiver can fire, which is exactly
-    tiered-v1. A pure function of its inputs: input order never matters."""
+    (flagged_episodes(result)); without it no waiver can fire (every WARN pays
+    its full weight). A pure function of its inputs: input order never matters."""
     verdict = dict(verdicts)
     eps = episodes or {}
     out: dict[str, dict[str, Any]] = {cid: {"charge": warn_weight(cid)[0]} for cid in verdict}
@@ -151,7 +152,7 @@ def score_from_verdicts(
     """Health score from (check_id, verdict) pairs - verdict as stored in report
     JSON ("PASS", "INFO", "WARN", "FAIL", "SKIP"). One entry per check.
     `episodes` (check id -> flagged episode set) enables the correlated-check
-    waiver; verdicts alone score exactly as tiered-v1."""
+    waiver; verdicts alone pay every WARN its full weight."""
     pairs = list(verdicts)
     charges = check_charges(pairs, episodes)
     score = 100

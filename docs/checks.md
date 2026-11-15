@@ -12,15 +12,16 @@ says why, and it is not a verdict on the data.
 
 ## Health score
 
-Score model `tiered-v1.1` (reports, report JSON `score_model`, and the
+Score model `tiered-v2` (reports, report JSON `score_model`, and the
 leaderboard all name it). Start at 100; each FAIL check costs 25; each WARN
 check costs its weight below, unless a correlated-check waiver (below) waives
 it; floor at 0. Billing is per check, never per finding: a check that lists
 40 flagged episodes costs the same as one that lists 5, and making a check
 more detailed never moves a score. The score is derived from stored per-check
 verdicts and stored findings, so any stored result can be rescored without
-re-running checks. `tiered-v1.1` is `tiered-v1` (same tiers, weights and FAIL
-cost) plus the waiver. Results with no `score_model` field were scored by
+re-running checks. `tiered-v2` is `tiered-v1.1` (same tiers, FAIL cost and
+waiver; `tiered-v1.1` was `tiered-v1` plus the waiver) with WARN weights
+re-anchored on harm table v1.1. Results with no `score_model` field were scored by
 `legacy-v0` (hand-tuned weights); scores are not comparable across models.
 
 Correlated checks: one defect can trip two checks. A declared waiver edge
@@ -49,8 +50,9 @@ elsewhere, still pay both checks.
 
 A FAIL is a "data is not what it claims" blocker; its cost is trust, not
 measured training damage, so it is not harm-scaled. WARN weights come in
-three tiers anchored on the harm study v0 (`scripts/harm_study.py`: ridge
-behavior cloning, state-only, held-out action MSE delta vs clean, pusht):
+three tiers anchored on the harm table v1.1 (`scripts/harm_table.py`:
+diffusion policy, pusht, 20k training steps, 3 seeds, 50 eval episodes,
+held-out action MSE delta vs clean):
 
 | tier | meaning | held-out MSE delta | weight |
 | --- | --- | --- | --- |
@@ -58,29 +60,32 @@ behavior cloning, state-only, held-out action MSE delta vs clean, pusht):
 | B | skews learning | 10-100% | 6 |
 | C | review list | < 10% | 2 |
 
-The band edges are provisional - three measurements define them - and get
-re-anchored once when the full harm table lands. Each check's weight carries
+The band edges were re-anchored once for tiered-v2 and stay 100/10/0;
+re-anchoring moved memberships, not edges. Each check's weight carries
 its basis in report JSON (`weight`, `weight_basis`):
 
 | check | weight | basis |
 | --- | --- | --- |
-| idle-segments | 10 | measured: +881% (tier A) |
-| calibration-drift | 10 | measured: +347% (tier A) |
-| duplicate-and-leakage | 2 | measured: +0.1% (tier C) |
+| calibration-drift | 10 | measured: +1475.3% (tier A) |
+| stuck-actuator | 10 | measured: +697.8% (tier A) |
+| idle-segments | 6 | measured: +75.1% (tier B) |
+| duplicate-and-leakage | 2 | measured: -3.6% (tier C) |
 | stats-drift, nan-and-normalization, deployment-readiness, timestamp-grid | 10 | placeholder |
 | dropped-frames | 8 | placeholder |
-| stuck-actuator, action-saturation, visual-quality | 6 | placeholder |
+| action-saturation, visual-quality | 6 | placeholder |
 | outlier-episodes | 3 | placeholder |
 | any other check (task-strings, reward-done, ...) | 8 | placeholder |
 
-Measurements for placeholder weights come from the [harm table](#harm-table)
-(stuck-actuator is the placeholder it measures today); the table is evidence,
-and re-anchoring a weight on it is a separate decision.
+Measurements for placeholder weights come from the [harm table](#harm-table);
+the table is evidence, and re-anchoring a weight on it is a separate
+decision. The v1.1 re-anchor moved stuck-actuator from placeholder to
+measured.
 
 Placeholder weights are the hand-tuned legacy values, kept until the harm
-study measures them. Limit: every measured number is one linear-BC MSE
-delta, not rollout success; tiers are re-checked against success-rate
-deltas when the GPU protocol runs.
+table measures them. Limit: every measured number is a held-out MSE delta,
+not rollout success; success floors for every arm in the v1.1 protocol
+(clean 2%/4%/2% at 20k steps), so MSE is the outcome metric and no
+success-rate re-check is pending.
 
 ## Harm table
 
@@ -194,7 +199,7 @@ dims classify as "different space" and sit the check out.
 
 Limit (score weight): a WARN costs 10, tier A, measured - action scale 0.5x
 in 25% of episodes (the delta-scale defect) raised held-out action MSE by
-347% in the harm study v0 (ridge BC). Constant offsets on absolute commands
+1475.3% in harm table v1.1 (diffusion policy, 20k steps). Constant offsets on absolute commands
 share the weight without a measurement of their own.
 
 Knobs: `calib_warn_range_frac` (0.05), `calib_fail_range_frac` (0.15),
@@ -214,8 +219,9 @@ Velocity-named dims count as moving unless parked at their modal level (a
 held drive command is constant motion, not idling), which removes the
 classic false positive; unnamed velocity commands can still read as idle.
 
-Limit (score weight): a WARN costs 10, tier A, measured - 30 idle frames
-prepended raised held-out action MSE by 881% in the harm study v0 (ridge BC).
+Limit (score weight): a WARN costs 6, tier B, measured - 30 idle frames
+prepended raised held-out action MSE by 75.1% in harm table v1.1 (diffusion
+policy, 20k steps).
 
 Knobs: `idle_eps_frac` (0.01), `idle_min_seconds` (2.0),
 `idle_warn_fraction` (0.30), `idle_state_frac` (0.02).
@@ -244,9 +250,10 @@ severity instead of being downgraded. A genuinely bimodal joint can
 still be picked as a gripper; a real stuck or clipped joint misread as
 one is reported but not gated, so it surfaces as INFO, not WARN.
 
-Limit (score weight): a WARN costs 6, placeholder. It is waived when
-idle-segments is also charged and the two checks' flagged episode sets
-overlap at the gate (Jaccard >= 0.5) - the same dead episodes counted
+Limit (score weight): a WARN costs 10, tier A, measured - one joint frozen
+in 30% of episodes raised held-out action MSE by 697.8% in harm table v1.1
+(diffusion policy, 20k steps). It is waived when idle-segments is also
+charged and the two checks' flagged episode sets overlap at the gate (Jaccard >= 0.5) - the same dead episodes counted
 twice; see Health score.
 
 Knobs: `stuck_range_frac` (0.005), `stuck_warn_share` (0.25),
@@ -292,10 +299,10 @@ No knobs.
   eval would be measured on training data (WARN).
 
 Limit (score weight): a WARN costs 2, tier C, measured - 20% duplicate
-episodes moved held-out action MSE by +0.1% in the harm study v0 (ridge BC):
-easy to detect, nearly harmless to linear BC. That reading is not yet
-confirmed against a high-capacity policy, and split leakage inflates
-evaluation rather than hurting training, a harm this weight does not price.
+episodes moved held-out action MSE by -3.6% in harm table v1.1 (diffusion
+policy, 20k steps): easy to detect, benign at both measured budgets. Split
+leakage inflates evaluation rather than hurting training, a harm this weight
+does not price.
 
 No knobs.
 
