@@ -160,6 +160,8 @@ Knobs: `stats_mean_warn_sigma` (0.10), `stats_mean_fail_sigma` (0.50),
 
 Timestamps off the 1/fps sampling grid, and non-monotonic runs.
 `delta_timestamps` sampling returns misaligned windows when the grid slips.
+Off-grid episodes are one aggregated finding listing them all; non-monotonic
+runs stay per-episode FAILs.
 
 Knobs: `grid_warn_frac` (0.10, as a fraction of the frame period).
 
@@ -299,7 +301,11 @@ No knobs.
   memory-bounded blocks (64 MB per block); above that an evenly-spaced
   sample with an INFO note saying so.
 - leakage: any of the above spanning two splits declared in info.json -
-  eval would be measured on training data (WARN).
+  eval would be measured on training data (WARN). Split specs are
+  "start:end" ranges, comma-joined for multi-range layouts
+  ("14:29,50:115"); a spec that cannot be parsed is dropped whole and
+  named in an INFO - its episodes go unlabelled, so leakage cannot be
+  checked for them.
 
 Limit (score weight): a WARN costs 2, tier C, measured - 20% duplicate
 episodes moved held-out action MSE by -3.6% in harm table v1.1 (diffusion
@@ -362,8 +368,10 @@ No knobs.
 Blur (variance of Laplacian, frames decimated with an integer stride to ~VGA
 first, so one threshold works at any resolution), underexposure (95th-
 percentile brightness) and overexposure (pixels clipped at the codec's
-brightest level). Per camera, sampled inside each episode's segment; v2.1
-per-episode and v3 shared MP4s both work.
+brightest level). Dark frames shrink the Laplacian's variance, so an episode
+that is both dark and blurry is attributed to the lighting and counted once,
+never double-reported. Per camera, sampled inside each episode's segment;
+v2.1 per-episode and v3 shared MP4s both work.
 
 Needs `--video` and the `video` extra (`pip install -e .[video]`); the
 nightly board skips it because the MP4s run to hundreds of MB per camera.

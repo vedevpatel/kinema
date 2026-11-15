@@ -403,7 +403,23 @@ def test_dropped_frame_gap_is_reported(base):
         return t
     _set_timestamps(base, gap)
     res = run("timestamp-grid", load_dataset(str(base)))
-    assert any(f.episode_index == 4 and f.details.get("gaps") == 1 for f in res.findings)
+    grid = [f for f in res.findings if "frame spacing deviates" in f.message]
+    assert len(grid) == 1 and grid[0].details["episodes"] == [4] and grid[0].details["gaps"] == 1
+
+
+def test_grid_jitter_aggregates_into_one_finding(base):
+    def jitter(t, ep):
+        t = t.copy()
+        for e in (4, 5, 6):
+            rows = np.flatnonzero(ep == e)
+            t[rows[30:]] += 0.1
+        return t
+    _set_timestamps(base, jitter)
+    res = run("timestamp-grid", load_dataset(str(base)))
+    grid = [f for f in res.findings if "frame spacing deviates" in f.message]
+    assert len(grid) == 1  # one aggregated finding, not one per episode
+    assert grid[0].details["episodes"] == [4, 5, 6]
+    assert "episodes 4, 5, 6" in grid[0].message
 
 
 def test_duplicate_catalogued_episode_ids_fail_once(base):
@@ -557,6 +573,30 @@ def test_copy_across_declared_splits_is_leakage(base):
     res = run("duplicate-and-leakage", load_dataset(str(base)))
     leak = [f for f in res.findings if f.details.get("kind") == "leakage"]
     assert leak and leak[0].details["pairs"] == [[2, 20]]
+
+
+def test_multi_range_split_specs_parse(base):
+    _rewrite_data(base, lambda s, a, ep: (s, _paste(a, ep, 2, 20, 0, 60)))
+    p = base / "meta" / "info.json"
+    info = json.loads(p.read_text())
+    info["splits"] = {"train": "0:5,10:18", "val": "5:10,18:24"}  # comma-joined ranges
+    p.write_text(json.dumps(info))
+    res = run("duplicate-and-leakage", load_dataset(str(base)))
+    leak = [f for f in res.findings if f.details.get("kind") == "leakage"]
+    assert leak and leak[0].details["pairs"] == [[2, 20]]
+
+
+def test_unparseable_split_spec_is_named_not_dropped(base):
+    _rewrite_data(base, lambda s, a, ep: (s, _paste(a, ep, 2, 20, 0, 60)))
+    p = base / "meta" / "info.json"
+    info = json.loads(p.read_text())
+    info["splits"] = {"train": "0:18", "val": "eval-only"}
+    p.write_text(json.dumps(info))
+    res = run("duplicate-and-leakage", load_dataset(str(base)))
+    spec = [f for f in res.findings if f.details.get("kind") == "split-spec"]
+    assert len(spec) == 1 and spec[0].details["split"] == "val"
+    # the unparseable split's episodes are unlabelled: no leakage pair can name them
+    assert not any(f.details.get("kind") == "leakage" for f in res.findings)
 
 
 def test_velocity_command_steps_are_not_outliers(base):

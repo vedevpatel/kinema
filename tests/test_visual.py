@@ -42,9 +42,7 @@ def _frame(ep: int) -> np.ndarray:
     return img.astype(np.uint8)
 
 
-@pytest.fixture()
-def v3_video_dataset(tmp_path):
-    root = make_dataset(tmp_path / "ds", episodes=EPISODES)
+def _write_videos(root, frame_fn):
     cam = "observation.images.top"
     vid = root / "videos" / cam / "chunk-000" / "file-000.mp4"
     vid.parent.mkdir(parents=True)
@@ -54,7 +52,7 @@ def v3_video_dataset(tmp_path):
         st.pix_fmt = "yuv420p"
         st.bit_rate = 4_000_000
         for ep in range(EPISODES):
-            g = _frame(ep)
+            g = frame_fn(ep)
             for _ in range(LEN):
                 rgb = np.repeat(g[:, :, None], 3, axis=2)
                 for pkt in st.encode(av.VideoFrame.from_ndarray(rgb, format="rgb24")):
@@ -72,6 +70,23 @@ def v3_video_dataset(tmp_path):
     info["video_path"] = "videos/{video_key}/chunk-{chunk_index:03d}/file-{file_index:03d}.mp4"
     info["features"][cam] = {"dtype": "video", "shape": [SIZE, SIZE, 3]}
     (root / "meta" / "info.json").write_text(json.dumps(info))
+
+
+@pytest.fixture()
+def v3_video_dataset(tmp_path):
+    root = make_dataset(tmp_path / "ds", episodes=EPISODES)
+    _write_videos(root, _frame)
+    return root
+
+
+@pytest.fixture()
+def dim_video_dataset(tmp_path):
+    # every episode genuinely underexposed (a "very dim" render): dark frames
+    # shrink the blur metric, and the two must not double-report
+    def dim(_ep):
+        return (_frame(0) * 0.04).astype(np.uint8)
+    root = make_dataset(tmp_path / "dim", episodes=EPISODES)
+    _write_videos(root, dim)
     return root
 
 
@@ -90,3 +105,14 @@ def test_sampled_load_only_reads_its_episodes(v3_video_dataset):
     flagged = {e for f in res.findings for e in f.details.get("episodes", [])}
     loaded = set(load_dataset(str(v3_video_dataset), max_episodes=4).episode_ids())
     assert flagged <= loaded
+
+
+def test_dark_frames_are_not_double_reported_as_blurry(dim_video_dataset):
+    res = CHECK.run(load_dataset(str(dim_video_dataset)), CheckConfig(video=True))
+    assert not res.skipped, res.skip_reason
+    kinds = [f.details.get("kind") for f in res.findings]
+    assert "blurry" not in kinds
+    dark = [f for f in res.findings if f.details.get("kind") == "underexposed"]
+    assert dark, "the dim dataset must still be called underexposed"
+    assert dark[0].details.get("confounded_blur")
+    assert "also read as blurry" in dark[0].message

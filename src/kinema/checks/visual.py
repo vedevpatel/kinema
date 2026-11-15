@@ -5,7 +5,10 @@ loss on Open X-Embodiment.
 Optional: needs the `av` extra and --video (videos are big).
 
 Blur is variance-of-Laplacian (no cv2 dependency: a 4-neighbor
-convolution done with numpy slicing). The Laplacian's absolute scale
+convolution done with numpy slicing). Dark frames shrink the Laplacian's
+variance, so an episode that is both dark and blurry is attributed to the
+lighting (one cause, one report), never double-reported. The Laplacian's
+absolute scale
 grows with resolution (more pixels inside the same edge), so frames are
 decimated with an integer stride down to ~VGA first - striding, not
 smoothing, so genuinely sharp edges stay sharp - which keeps one
@@ -194,9 +197,15 @@ class VisualQualityCheck(Check):
             return self.skip("no frames could be decoded")
         n_eps = len({ep for cam in scores.values() for ep in cam})
         for cam, eps in sorted(scores.items()):
-            blur = {ep: b for ep, (b, _, _) in eps.items() if b < BLUR_WARN}
             dark = {ep: g for ep, (_, g, _) in eps.items() if g < DARK_WARN}
             over = {ep: f for ep, (_, _, f) in eps.items() if f > OVER_WARN}
+            # darkness shrinks the Laplacian's variance, so a dark episode
+            # reads as blurry with no defocus involved: episodes that are both
+            # are attributed to the lighting, not to blur - one cause, one
+            # report (fix the exposure, then re-measure the focus)
+            raw_blur = {ep: b for ep, (b, _, _) in eps.items() if b < BLUR_WARN}
+            blur = {ep: b for ep, b in raw_blur.items() if ep not in dark}
+            n_confounded = len(raw_blur) - len(blur)
             for kind, bad, thresh, unit, worst_high in (
                 ("blurry", blur, BLUR_WARN, "blur score", False),
                 ("underexposed", dark, DARK_WARN, "95th-percentile brightness", False),
@@ -208,13 +217,15 @@ class VisualQualityCheck(Check):
                 worst = sorted(bad, key=lambda ep: bad[ep], reverse=worst_high)[:8]
                 op = ">" if worst_high else "<"
                 sev = Severity.WARN if share >= CAMERA_WARN_SHARE else Severity.INFO
-                res.findings.append(Finding(
-                    self.id, sev,
-                    f"camera {cam}: {kind} in {len(bad)}/{len(eps)} episodes "
-                    f"({unit} {op} {thresh:g}; worst {worst})",
-                    details={"camera": cam, "kind": kind, "episodes": sorted(bad),
-                             "values": {str(e): v for e, v in bad.items()}},
-                ))
+                msg = (f"camera {cam}: {kind} in {len(bad)}/{len(eps)} episodes "
+                       f"({unit} {op} {thresh:g}; worst {worst})")
+                details: dict = {"camera": cam, "kind": kind, "episodes": sorted(bad),
+                                 "values": {str(e): v for e, v in bad.items()}}
+                if kind == "underexposed" and n_confounded:
+                    msg += (f"; {n_confounded} dark episode(s) also read as blurry - "
+                            "counted once, here: dark frames shrink the blur metric")
+                    details["confounded_blur"] = n_confounded
+                res.findings.append(Finding(self.id, sev, msg, details=details))
         med = {cam: float(np.median([b for b, _, _ in eps.values()])) for cam, eps in scores.items()}
         res.details = {"median_blur_per_camera": med,
                        "median_p95_brightness_per_camera": {

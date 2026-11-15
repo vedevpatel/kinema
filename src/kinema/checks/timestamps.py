@@ -37,6 +37,7 @@ class TimestampGridCheck(Check):
         worst_jit, worst_ep = 0.0, None
         flagged = 0
         offset_eps: list[tuple[int, float]] = []
+        jitter_eps: list[tuple[int, float, int]] = []  # (episode, jitter, gaps)
         for ep in ctx.episode_ids():
             rows = ctx.rows_for(ep)
             if len(rows) < 3:
@@ -64,19 +65,28 @@ class TimestampGridCheck(Check):
                 worst_jit, worst_ep = jit, ep
             if jit > cfg.grid_warn_frac:
                 flagged += 1
-                res.findings.append(
-                    Finding(
-                        self.id,
-                        Severity.WARN,
-                        f"episode {ep}: frame spacing deviates up to {jit:.0%} of the "
-                        f"{fps:g} fps period"
-                        + (f", {gaps} dropped-frame gap(s)" if gaps else "")
-                        + f"; LeRobot's default tolerance_s (1e-4 s) rejects this - "
-                        f"needs tolerance_s >= {jit * period:.4f}",
-                        episode_index=ep,
-                        details={"jitter_fraction": jit, "gaps": gaps},
-                    )
+                jitter_eps.append((ep, jit, gaps))
+        if jitter_eps:
+            # one finding for the whole grid problem, not one per episode:
+            # the fix is a re-stamped timeline for the dataset, and a long
+            # run of per-episode WARNs buries every other finding
+            worst_j = max(j for _, j, _ in jitter_eps)
+            gaps_total = sum(g for _, _, g in jitter_eps)
+            ex = ", ".join(str(e) for e, _, _ in jitter_eps[:8])
+            res.findings.append(
+                Finding(
+                    self.id,
+                    Severity.WARN,
+                    f"{len(jitter_eps)} episode(s) off the {fps:g} fps grid "
+                    f"(episodes {ex}{', ...' if len(jitter_eps) > 8 else ''}): "
+                    f"frame spacing deviates up to {worst_j:.0%} of a period"
+                    + (f", {gaps_total} dropped-frame gap(s) in total" if gaps_total else "")
+                    + "; LeRobot's default tolerance_s (1e-4 s) rejects these - "
+                    f"needs tolerance_s >= {worst_j * period:.4f}",
+                    details={"episodes": [e for e, _, _ in jitter_eps],
+                             "jitter_fraction": worst_j, "gaps": gaps_total},
                 )
+            )
         if offset_eps:
             ex = ", ".join(f"{e} ({t0:.4g}s)" for e, t0 in offset_eps[:5])
             res.findings.append(

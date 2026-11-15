@@ -31,17 +31,27 @@ _NEAR_BLOCK_BYTES = 64 << 20  # distance-matrix budget per block
 _COMMON_WINDOW_EPISODES = 4  # a window in more episodes than this is a shared motion, not a copy
 
 
-def _splits(info: dict) -> dict[int, str]:
-    """episode -> split name, from info.json "splits" ("start:end" ranges)."""
+def _splits(info: dict) -> tuple[dict[int, str], list[str]]:
+    """(episode -> split name, names of unparseable specs), from info.json
+    "splits": "start:end" ranges, comma-joined for multi-range specs
+    ("14:29,50:115"). A spec with ANY unparseable part is dropped whole -
+    partial coverage would quietly under-report leakage - and named in the
+    second return value so the check can say those episodes went unlabelled."""
     out: dict[int, str] = {}
+    bad: list[str] = []
     for name, spec in (info.get("splits") or {}).items():
         try:
-            lo, hi = (int(x) for x in str(spec).split(":"))
+            ranges = [tuple(int(x) for x in part.split(":"))
+                      for part in str(spec).split(",")]
+            if any(len(r) != 2 for r in ranges):
+                raise ValueError(f"not start:end ranges: {spec!r}")
         except ValueError:
+            bad.append(name)
             continue
-        for e in range(lo, hi):
-            out.setdefault(e, name)
-    return out
+        for lo, hi in ranges:
+            for e in range(lo, hi):
+                out.setdefault(e, name)
+    return out, bad
 
 
 def _windows(a: np.ndarray, eps: np.ndarray) -> dict[bytes, int]:
@@ -76,8 +86,18 @@ class DuplicateCheck(Check):
         action = ctx.action
         if action is None:
             return self.skip("action column missing")
-        split_of = _splits(ctx.info)
+        split_of, bad_specs = _splits(ctx.info)
         multi_split = len(set(split_of.values())) > 1
+        for name in bad_specs:
+            res.findings.append(Finding(
+                self.id, Severity.INFO,
+                f"split {name!r}: cannot parse its range spec "
+                f"({(ctx.info.get('splits') or {}).get(name)!r}) - its episodes are "
+                "unlabelled, so leakage across the declared splits cannot be "
+                "checked for them; expected 'start:end', comma-joined for "
+                "multiple ranges",
+                details={"kind": "split-spec", "split": name},
+            ))
 
         trajectories: dict[int, np.ndarray] = {}
         for ep in ctx.episode_ids():
