@@ -1,0 +1,416 @@
+{
+  "source": "VLA-Arena/VLA_Arena_L1_L_lerobot_openpi",
+  "format_version": "v2.1",
+  "episodes": 13,
+  "frames": 1967,
+  "fps": 10.0,
+  "truncated": true,
+  "score": 100,
+  "score_model": "tiered-v1.1",
+  "verdict": "INFO",
+  "checks": [
+    {
+      "id": "stats-drift",
+      "title": "Stats drift (stored normalization stats vs actual data)",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "data matches per-episode stats of the loaded episodes (worst 0% of the FAIL threshold)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 10
+    },
+    {
+      "id": "timestamp-grid",
+      "title": "Timestamp grid (spacing, monotonic, start at 0)",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "evenly spaced at 10 fps and monotonic",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 10
+    },
+    {
+      "id": "dropped-frames",
+      "title": "Dropped / duplicated frames",
+      "verdict": "INFO",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "frame_index contiguous; episode lengths match the data",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "no per-episode video segments in the metadata (v2.x or no videos): video frame counts not cross-checked",
+          "episode_index": null,
+          "details": {}
+        }
+      ],
+      "charge": 8
+    },
+    {
+      "id": "calibration-drift",
+      "title": "Calibration drift (action vs state on still frames)",
+      "verdict": "SKIP",
+      "weight": 10,
+      "weight_basis": "measured",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "state dim 8 != action dim 7 and no names to pair them by",
+      "details": {},
+      "findings": [],
+      "charge": 10
+    },
+    {
+      "id": "idle-segments",
+      "title": "Idle segments (policy learns to do nothing)",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "measured",
+      "summary": "no episode starts idle or idles >= 30%",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 10
+    },
+    {
+      "id": "stuck-actuator",
+      "title": "Stuck actuators (joints that never move)",
+      "verdict": "INFO",
+      "weight": 6,
+      "weight_basis": "placeholder",
+      "summary": "every joint moves wherever the dataset uses it",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "joint 3 does not move in 12/13 episodes [0, 70, 141, 211, 282, 352, 423, 493]... - an unused degree of freedom for this task?",
+          "episode_index": null,
+          "details": {
+            "joint": 3,
+            "episodes": [
+              0,
+              70,
+              141,
+              211,
+              282,
+              352,
+              423,
+              493,
+              564,
+              634,
+              705,
+              846
+            ],
+            "share": 0.9230769230769231
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "joint 4 does not move in 12/13 episodes [0, 70, 141, 211, 282, 352, 423, 493]... - an unused degree of freedom for this task?",
+          "episode_index": null,
+          "details": {
+            "joint": 4,
+            "episodes": [
+              0,
+              70,
+              141,
+              211,
+              282,
+              352,
+              423,
+              493,
+              564,
+              634,
+              705,
+              846
+            ],
+            "share": 0.9230769230769231
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "joint 5 does not move in 12/13 episodes [0, 70, 141, 211, 282, 423, 493, 564]... - an unused degree of freedom for this task?",
+          "episode_index": null,
+          "details": {
+            "joint": 5,
+            "episodes": [
+              0,
+              70,
+              141,
+              211,
+              282,
+              423,
+              493,
+              564,
+              634,
+              705,
+              775,
+              846
+            ],
+            "share": 0.9230769230769231
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "joint 6 does not move in 1/13 episodes [775] - it moves in the others - dead or disabled motor during those recordings? [dim looks like an unnamed gripper]",
+          "episode_index": null,
+          "details": {
+            "joint": 6,
+            "episodes": [
+              775
+            ],
+            "share": 0.07692307692307693
+          }
+        }
+      ],
+      "charge": 6
+    },
+    {
+      "id": "action-saturation",
+      "title": "Action saturation (commands clipped at the limits)",
+      "verdict": "PASS",
+      "weight": 6,
+      "weight_basis": "placeholder",
+      "summary": "no continuous action dim pinned at a limit above 5% (0 dims checked)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 6
+    },
+    {
+      "id": "nan-and-normalization",
+      "title": "NaN / Inf and normalization hazards",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "no NaN/Inf; all dims have usable variance",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 10
+    },
+    {
+      "id": "duplicate-and-leakage",
+      "title": "Duplicate episodes / train-eval leakage",
+      "verdict": "PASS",
+      "weight": 2,
+      "weight_basis": "measured",
+      "summary": "no exact, partial or near duplicates",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 2
+    },
+    {
+      "id": "outlier-episodes",
+      "title": "Outlier episodes (duration, jerk, velocity, static, end-pose)",
+      "verdict": "PASS",
+      "weight": 3,
+      "weight_basis": "placeholder",
+      "summary": "no IQR outliers across 13 episodes; duration/end pose skipped for 13 episodes whose task has < 5 episodes",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "metrics": {
+          "duration_s": {
+            "0": null,
+            "70": null,
+            "141": null,
+            "211": null,
+            "282": null,
+            "352": null,
+            "423": null,
+            "493": null,
+            "564": null,
+            "634": null,
+            "705": null,
+            "775": null,
+            "846": null
+          },
+          "p95_jerk": {
+            "0": null,
+            "70": null,
+            "141": null,
+            "211": null,
+            "282": null,
+            "352": null,
+            "423": null,
+            "493": null,
+            "564": null,
+            "634": null,
+            "705": null,
+            "775": null,
+            "846": null
+          },
+          "peak_velocity": {
+            "0": null,
+            "70": null,
+            "141": null,
+            "211": null,
+            "282": null,
+            "352": null,
+            "423": null,
+            "493": null,
+            "564": null,
+            "634": null,
+            "705": null,
+            "775": null,
+            "846": null
+          },
+          "velocity_spike": {
+            "0": null,
+            "70": null,
+            "141": null,
+            "211": null,
+            "282": null,
+            "352": null,
+            "423": null,
+            "493": null,
+            "564": null,
+            "634": null,
+            "705": null,
+            "775": null,
+            "846": null
+          },
+          "static_fraction": {
+            "0": 0.91875,
+            "70": 0.925,
+            "141": 0.9047619047619048,
+            "211": 0.8978102189781022,
+            "282": 0.8924050632911392,
+            "352": 0.9005524861878453,
+            "423": 0.873015873015873,
+            "493": 0.9216867469879518,
+            "564": 0.937984496124031,
+            "634": 0.8939393939393939,
+            "705": 0.9447852760736196,
+            "775": 0.9130434782608695,
+            "846": 0.9076923076923077
+          },
+          "end_pose_deviation": {
+            "0": null,
+            "70": null,
+            "141": null,
+            "211": null,
+            "282": null,
+            "352": null,
+            "423": null,
+            "493": null,
+            "564": null,
+            "634": null,
+            "705": null,
+            "775": null,
+            "846": null
+          }
+        },
+        "flagged": {}
+      },
+      "findings": [],
+      "charge": 3
+    },
+    {
+      "id": "embedded-images",
+      "title": "Embedded images in the parquet shards",
+      "verdict": "INFO",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "2 embedded image feature(s)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "2 image feature(s) embedded in the parquet shards (image, wrist_image): shards are big and every frame decodes on read - the video layout (dtype \"video\", MP4 chunks) streams far better for training",
+          "episode_index": null,
+          "details": {
+            "features": [
+              "image",
+              "wrist_image"
+            ]
+          }
+        }
+      ],
+      "charge": 8
+    },
+    {
+      "id": "camera-coverage",
+      "title": "Per-episode camera coverage",
+      "verdict": "SKIP",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "no video cameras declared",
+      "details": {},
+      "findings": [],
+      "charge": 8
+    },
+    {
+      "id": "task-strings",
+      "title": "Task strings",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "13 episodes, 0 tasks in meta/tasks; 0 finding(s)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 8
+    },
+    {
+      "id": "reward-done",
+      "title": "Reward / done fields",
+      "verdict": "SKIP",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "no reward/done fields (position-control datasets rarely have them)",
+      "details": {},
+      "findings": [],
+      "charge": 8
+    },
+    {
+      "id": "visual-quality",
+      "title": "Visual quality (blur, lighting)",
+      "verdict": "SKIP",
+      "weight": 6,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "pass --video to run (downloads MP4s; needs the video extra)",
+      "details": {},
+      "findings": [],
+      "charge": 6
+    },
+    {
+      "id": "deployment-readiness",
+      "title": "Deployment readiness (would this dataset serve a policy?)",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "no deployment blockers found",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 10
+    }
+  ]
+}
