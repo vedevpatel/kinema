@@ -2,7 +2,8 @@
 
 Score model `tiered-v2` replaces `tiered-v1.1`. Only WARN-weight
 memberships change. The band edges (100/10/0), FAIL cost (25), per-check
-billing and the correlated-check waiver all stay as they were.
+billing and the correlated-check waiver edge all stay as they were; the
+waiver now charges the heavier of the pair (see Resolved, below).
 
 ## (a) Source numbers: harm table v1.1
 
@@ -39,50 +40,48 @@ duplicate-and-leakage keep their weights; only their evidence changes.
 (194 audited datasets, all stored under `tiered-v1.1`) and was then
 reverted. Nothing from the simulation is committed.
 
-- **43 of 194 scores change.** 32 go down and 11 go up, and every one moves by
-  exactly 4 points. The board mean goes from 89.31 to 88.88.
+- **40 of 194 scores change.** 32 go down and 8 go up, and every one moves by
+  exactly 4 points. The board mean goes from 89.31 to 88.82.
 - Down (-4, 32 datasets): a stuck-actuator WARN and no idle-segments WARN.
   26 of these have stuck-actuator as their only WARN among the four
   re-weighted checks.
-- Up (+4, 11 datasets): an idle-segments WARN and no charged
-  stuck-actuator. 8 have idle-segments alone, and 3 have stuck-actuator
-  waived under idle-segments (see the open item below).
-- Unchanged (13 datasets): both checks WARN and both are charged, so
-  +4 - 4 = 0.
+- Up (+4, 8 datasets): an idle-segments WARN and no stuck-actuator WARN.
+  6 have idle-segments as their only WARN among the four re-weighted
+  checks; 2 also carry calibration-drift.
+- Unchanged (16 datasets): both checks WARN. In 13 both are charged, so
+  +4 - 4 = 0. In 3 the waiver fires and the pair pays max(6, 10) = 10,
+  the same as tiered-v1.1's 10 + 0: IPEC-COMMUNITY/berkeley_mvp_lerobot
+  (90), lerobot/droid_1.0.1 (79) and lerobot/svla_so100_sorting (87).
 - The board has no score bands, so "crossing a threshold" here means moving
-  across a 10-point decade. 12 datasets do that:
+  across a 10-point decade. 10 datasets do that:
   - Down: FedorX8/bridge_v2_lerobot,
     enactic/openarm-2-cell-pick_up_cube_mujoco-lerobot-past,
     lerobot/abc_130k_v3_val, lerobot/berkeley_rpt and
     rpwang/bimanual_assembly_insert_force_lerobot_mix854 (91 -> 87);
     sunLry/robotwin-23task-lerobot (92 -> 88);
     lerobot/taco_play (81 -> 77); jesbu1/bridge_v2_lerobot (73 -> 69).
-  - Up: dadm022/lerobot_rgb_vla and lerobot/svla_so100_sorting (87 -> 91);
-    lerobot/droid_1.0.1 (79 -> 83); IPEC-COMMUNITY/droid_lerobot (59 -> 63).
+  - Up: dadm022/lerobot_rgb_vla (87 -> 91); IPEC-COMMUNITY/droid_lerobot
+    (59 -> 63).
   - No dataset reaches or leaves the 0 floor.
 
-**Open item (not changed here): the waiver now discounts the heavier
-check.** The edge is (idle-segments -> stuck-actuator). Under v1.1 it waived
-a 6 under a 10. Under v2 it waives a 10 under a 6. As a result, a dataset
-whose dead episodes trip both checks scores 94, while a dataset with
-stuck-actuator alone scores 90. Examples: IPEC-COMMUNITY/berkeley_mvp_lerobot
-goes 90 -> 94 and lerobot/svla_so100_sorting goes 87 -> 91. Possible fixes
-(each one is a separate decision): reverse the edge, or charge
-max(upstream, downstream) when the waiver fires.
+**Resolved: a waived pair pays the heavier weight.** The edge is
+(idle-segments -> stuck-actuator). When the waiver fires, the downstream
+charges 0 and the upstream carries max(upstream, downstream), so the pair
+pays the heavier weight once. Under tiered-v1.1 weights this changes
+nothing (idle 10 > stuck 6). Under v2 the dead-episode pair pays 10, not 6,
+so a dataset tripping both checks can no longer outscore one with
+stuck-actuator alone.
 
-All 43 changed datasets:
+All 40 changed datasets:
 
 | dataset | v1.1 | v2 | delta | WARNs on re-weighted checks |
 | --- | --- | --- | --- | --- |
-| IPEC-COMMUNITY/berkeley_mvp_lerobot | 90 | 94 | +4 | idle-segments, stuck-actuator (waived) |
 | IPEC-COMMUNITY/droid_lerobot | 59 | 63 | +4 | calibration-drift, idle-segments |
 | Project-IRA/TPSoSe2026_Dataset_Full_Merged_Final_LeRobot_SO101_V1 | 90 | 94 | +4 | idle-segments |
 | dadm022/lerobot_rgb_vla | 87 | 91 | +4 | idle-segments |
 | lerobot/FineART | 90 | 94 | +4 | idle-segments |
-| lerobot/droid_1.0.1 | 79 | 83 | +4 | idle-segments, stuck-actuator (waived) |
 | lerobot/robomme | 72 | 76 | +4 | idle-segments |
 | lerobot/svla_so100_pickplace | 81 | 85 | +4 | idle-segments |
-| lerobot/svla_so100_sorting | 87 | 91 | +4 | idle-segments, stuck-actuator (waived) |
 | saaduddinM/rbo_oxe_base_droid_lerobot | 70 | 74 | +4 | calibration-drift, idle-segments |
 | yinchenghust/robomme_lerobot | 90 | 94 | +4 | idle-segments |
 | BitRobot/HIW-500-LeRobot | 85 | 81 | -4 | stuck-actuator |

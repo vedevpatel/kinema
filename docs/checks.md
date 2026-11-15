@@ -25,7 +25,9 @@ re-anchored on harm table v1.1. Results with no `score_model` field were scored 
 `legacy-v0` (hand-tuned weights); scores are not comparable across models.
 
 Correlated checks: one defect can trip two checks. A declared waiver edge
-(upstream -> downstream) waives the downstream check's WARN weight when the
+(upstream -> downstream) waives the downstream check's WARN weight - the
+upstream check then carries the LARGER of the two weights, so the pair
+never pays less than the heavier defect alone - when the
 upstream check is charged (WARN or FAIL), the downstream check is WARN, both
 checks expose non-empty flagged episode sets in the report, and the Jaccard
 overlap of those sets is >= 0.5 (inclusive): half or more of all flagged
@@ -38,8 +40,9 @@ pay. One edge ships:
 
 FAILs are never waived (an upstream FAIL still counts as charged). Both
 verdicts and all findings still show; only the charge changes. Report JSON
-carries, per check, `charge` (the WARN weight after any waiver: equal to
-`weight` unless waived, then 0) and, when waived, `waived_by` (the upstream
+carries, per check, `charge` (the WARN weight after any waiver: a waived
+downstream pays 0 and the upstream pays the larger of the two weights)
+and, when waived, `waived_by` (the upstream
 check id) and `waiver_evidence` (`shared_episodes`, `overlap`); leaderboard
 dataset pages annotate the waived row. Each check's flagged episode set is
 the union of its findings' `episode_index` and `details.episodes`. Limit:
@@ -254,7 +257,7 @@ Limit (score weight): a WARN costs 10, tier A, measured - one joint frozen
 in 30% of episodes raised held-out action MSE by 697.8% in harm table v1.1
 (diffusion policy, 20k steps). It is waived when idle-segments is also
 charged and the two checks' flagged episode sets overlap at the gate (Jaccard >= 0.5) - the same dead episodes counted
-twice; see Health score.
+once, at the larger weight; see Health score.
 
 Knobs: `stuck_range_frac` (0.005), `stuck_warn_share` (0.25),
 `stuck_unused_share` (0.90), `follow_min_command` (0.10),

@@ -275,8 +275,8 @@ def test_waiver_gate(idle_eps, stuck_eps, overlap, waived):
     rep = _pair_report(_result(IDLE, Severity.WARN, per_episode=idle_eps),
                        _result(STUCK, Severity.WARN, grouped=stuck_eps))
     ch = rep.charges()[STUCK]
-    assert rep.score == (94 if waived else 84)
-    assert rep.charges()[IDLE] == {"charge": 6}
+    assert rep.score == (90 if waived else 84)
+    assert rep.charges()[IDLE] == ({"charge": 10} if waived else {"charge": 6})  # waiver raises the upstream charge
     if waived:
         shared = len(set(idle_eps) & set(stuck_eps))
         assert ch == {"charge": 0, "waived_by": IDLE,
@@ -309,7 +309,7 @@ def test_uncharged_upstream_never_waives(upstream):
 def test_reverse_direction_is_not_an_edge():
     rep = _pair_report(_result(IDLE, Severity.WARN, per_episode=[1, 2]),
                        _result(STUCK, Severity.WARN, grouped=[1, 2]))
-    assert rep.charges()[IDLE] == {"charge": 6}  # stuck-actuator never waives idle-segments
+    assert rep.charges()[IDLE] == {"charge": 10}  # idle is not waived; it carries the larger weight
 
 
 @pytest.mark.parametrize("empty_side", [IDLE, STUCK])
@@ -324,11 +324,21 @@ def test_missing_episode_evidence_never_waives(empty_side):
     assert rep.charges()[STUCK] == {"charge": 10}
 
 
+def test_waiver_charges_the_larger_weight():
+    """A waived pair pays the heavier weight once, on the upstream check."""
+    rep = _pair_report(_result(IDLE, Severity.WARN, per_episode=[8]),
+                       _result(STUCK, Severity.WARN, grouped=[8, 23]))
+    assert rep.score == 90  # max(6, 10) charged once, not 16 and not 6
+    assert rep.charges()[IDLE] == {"charge": 10}
+    assert rep.charges()[STUCK]["charge"] == 0
+    assert rep.charges()[STUCK]["waived_by"] == IDLE
+
+
 def test_verdict_only_scoring_is_tiered_v1():
     # no episode sets available: the waiver cannot fire
     assert score_from_verdicts([(IDLE, "WARN"), (STUCK, "WARN")]) == 84
     assert score_from_verdicts([(IDLE, "WARN"), (STUCK, "WARN")],
-                               {IDLE: {1}, STUCK: {1}}) == 94
+                               {IDLE: {1}, STUCK: {1}}) == 90
 
 
 def test_check_order_invariance():
@@ -345,7 +355,7 @@ def test_check_order_invariance():
         shuffled = results[:]
         rng.shuffle(shuffled)
         rep = _pair_report(*shuffled)
-        assert rep.score == base.score == 100 - 6 - 25 - 3
+        assert rep.score == base.score == 100 - 10 - 25 - 3
         assert rep.charges() == base.charges()
         d = report_to_dict(rep)
         assert {c["id"]: c["charge"] for c in d["checks"]} == {
@@ -367,19 +377,19 @@ def _stored_pair(idle_eps, stuck_eps) -> dict:
 def test_rescore_sets_charge_fields_and_is_idempotent():
     d = _stored_pair([8], [8, 23])
     rescore_report_dict(d)
-    assert d["score"] == 94 and d["score_model"] == "tiered-v2"
+    assert d["score"] == 90 and d["score_model"] == "tiered-v2"
     by_id = {c["id"]: c for c in d["checks"]}
     assert by_id[STUCK]["weight"] == 10
     assert by_id[STUCK]["charge"] == 0
     assert by_id[STUCK]["waived_by"] == IDLE
     assert by_id[STUCK]["waiver_evidence"] == {"shared_episodes": 1, "overlap": 0.5}
-    assert by_id[IDLE]["charge"] == 6 and "waived_by" not in by_id[IDLE]
+    assert by_id[IDLE]["charge"] == 10 and "waived_by" not in by_id[IDLE]
     assert by_id["stats-drift"]["charge"] == 10 and "waived_by" not in by_id["stats-drift"]
     again = rescore_report_dict(copy.deepcopy(d))
     assert again == d
     # round trip (what dataset pages render) and the JSON writer agree with it
     rep = report_from_dict(d)
-    assert rep.score == 94
+    assert rep.score == 90
     assert {c["id"]: c for c in report_to_dict(rep)["checks"]}[STUCK]["waived_by"] == IDLE
 
 
@@ -396,7 +406,7 @@ def test_rescore_drops_a_stale_waiver():
 def test_dataset_page_annotates_the_waived_row():
     lb = _load_leaderboard()
     waived = lb.render_dataset_page(report_from_dict(_stored_pair([8], [8, 23])), audited="x")
-    assert "Health score: 94/100" in waived
+    assert "Health score: 90/100" in waived
     assert "charge waived - same episodes as idle-segments" in waived
     charged = lb.render_dataset_page(report_from_dict(_stored_pair([8], [30, 31])), audited="x")
     assert "Health score: 84/100" in charged and "charge waived" not in charged

@@ -119,7 +119,9 @@ def check_charges(
     episodes: Mapping[str, set[int]] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Per check id: {"charge": int} - the WARN weight after any waiver
-    (== warn_weight unless waived, then 0) - plus "waived_by" and
+    (a waived downstream pays 0 and the upstream carries the LARGER of the
+    two weights, so a re-anchor can never make the pair pay less than the
+    heavier defect alone) - plus "waived_by" and
     "waiver_evidence" ({"shared_episodes", "overlap"}) when waived.
 
     `episodes` maps check id -> flagged episode set
@@ -136,6 +138,9 @@ def check_charges(
             continue  # no episode evidence on one side: never waive
         shared, union = len(a & b), len(a | b)
         if Fraction(shared, union) >= WAIVER_MIN_OVERLAP:
+            # the pair pays the heavier weight once, on the upstream check:
+            # waiving must never make one defect cheaper than either reading
+            out[up]["charge"] = max(out[up]["charge"], out[down]["charge"])
             out[down] = {
                 "charge": 0,
                 "waived_by": up,
