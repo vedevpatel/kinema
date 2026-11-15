@@ -1,0 +1,488 @@
+{
+ "schema": "kinema.harm-table/v1",
+ "generated": "2026-11-15",
+ "dataset": {
+  "repo_id": "lerobot/pusht",
+  "revision": "7628202a2180972f291ba1bc6723834921e72c19",
+  "episode_sample": "kinema load_dataset(max_episodes=144): ids spread evenly over the dataset; first 120 train, last 24 held out (harm_study.py split)",
+  "train_episodes": [
+   0,
+   1,
+   3,
+   4,
+   6,
+   7,
+   9,
+   10,
+   11,
+   13,
+   14,
+   16,
+   17,
+   19,
+   20,
+   22,
+   23,
+   24,
+   26,
+   27,
+   29,
+   30,
+   32,
+   33,
+   34,
+   36,
+   37,
+   39,
+   40,
+   42,
+   43,
+   44,
+   46,
+   47,
+   49,
+   50,
+   52,
+   53,
+   54,
+   56,
+   57,
+   59,
+   60,
+   62,
+   63,
+   65,
+   66,
+   67,
+   69,
+   70,
+   72,
+   73,
+   75,
+   76,
+   77,
+   79,
+   80,
+   82,
+   83,
+   85,
+   86,
+   87,
+   89,
+   90,
+   92,
+   93,
+   95,
+   96,
+   97,
+   99,
+   100,
+   102,
+   103,
+   105,
+   106,
+   108,
+   109,
+   110,
+   112,
+   113,
+   115,
+   116,
+   118,
+   119,
+   120,
+   122,
+   123,
+   125,
+   126,
+   128,
+   129,
+   130,
+   132,
+   133,
+   135,
+   136,
+   138,
+   139,
+   140,
+   142,
+   143,
+   145,
+   146,
+   148,
+   149,
+   151,
+   152,
+   153,
+   155,
+   156,
+   158,
+   159,
+   161,
+   162,
+   163,
+   165,
+   166,
+   168,
+   169,
+   171
+  ],
+  "heldout_episodes": [
+   172,
+   173,
+   175,
+   176,
+   178,
+   179,
+   181,
+   182,
+   183,
+   185,
+   186,
+   188,
+   189,
+   191,
+   192,
+   194,
+   195,
+   196,
+   198,
+   199,
+   201,
+   202,
+   204,
+   205
+  ]
+ },
+ "policy": {
+  "name": "diffusion",
+  "source": "lerobot==0.5.1 examples/training/train_policy.py (diffusion, pusht)",
+  "rollouts": true,
+  "batch_size": 32,
+  "optimizer": "Adam lr=1e-4 (example)",
+  "num_inference_steps": "config default (= num_train_timesteps, 100)",
+  "normalization_stats": "per arm, from the arm's own training frames"
+ },
+ "steps": 5000,
+ "eval_episodes": 20,
+ "seeds": [
+  0,
+  1,
+  2
+ ],
+ "confidence": "indicative (3 seeds)",
+ "outcomes": {
+  "mse_delta_pct": "held-out action MSE, defect arm vs clean arm, same seed, % of clean",
+  "success_delta_pts": "rollout success rate, defect arm minus clean arm, same seed, percentage points"
+ },
+ "rows": [
+  {
+   "defect": "duplicates_20pct",
+   "check": "duplicate-and-leakage",
+   "recipe": {
+    "description": "copy 20% of training episodes (appended)",
+    "params": {
+     "duplicate_fraction": 0.2
+    }
+   },
+   "policy": "diffusion",
+   "dataset_revision": "7628202a2180972f291ba1bc6723834921e72c19",
+   "steps": 5000,
+   "seeds": [
+    0,
+    1,
+    2
+   ],
+   "mse_delta_pct": {
+    "per_seed": [
+     13.609,
+     -1.577,
+     -0.436
+    ],
+    "mean": 3.865
+   },
+   "success_delta_pts": {
+    "per_seed": [
+     -5.0,
+     0.0,
+     0.0
+    ],
+    "mean": -1.667
+   },
+   "date": "2026-11-15",
+   "confidence": "indicative (3 seeds)"
+  },
+  {
+   "defect": "idle_start_30f",
+   "check": "idle-segments",
+   "recipe": {
+    "description": "prepend 30 still frames to every episode (first observation repeated, zero action)",
+    "params": {
+     "pad_frames": 30,
+     "pad_action": 0.0
+    }
+   },
+   "policy": "diffusion",
+   "dataset_revision": "7628202a2180972f291ba1bc6723834921e72c19",
+   "steps": 5000,
+   "seeds": [
+    0,
+    1,
+    2
+   ],
+   "mse_delta_pct": {
+    "per_seed": [
+     722.531,
+     110.974,
+     161.731
+    ],
+    "mean": 331.745
+   },
+   "success_delta_pts": {
+    "per_seed": [
+     -5.0,
+     0.0,
+     0.0
+    ],
+    "mean": -1.667
+   },
+   "date": "2026-11-15",
+   "confidence": "indicative (3 seeds)"
+  },
+  {
+   "defect": "scale_mismatch_0.5x_25pct",
+   "check": "calibration-drift",
+   "recipe": {
+    "description": "actions x0.5 in ~25% of episodes (Bernoulli per episode), states untouched",
+    "params": {
+     "action_scale": 0.5,
+     "episode_probability": 0.25
+    }
+   },
+   "policy": "diffusion",
+   "dataset_revision": "7628202a2180972f291ba1bc6723834921e72c19",
+   "steps": 5000,
+   "seeds": [
+    0,
+    1,
+    2
+   ],
+   "mse_delta_pct": {
+    "per_seed": [
+     271.269,
+     772.595,
+     951.452
+    ],
+    "mean": 665.105
+   },
+   "success_delta_pts": {
+    "per_seed": [
+     -5.0,
+     0.0,
+     0.0
+    ],
+    "mean": -1.667
+   },
+   "date": "2026-11-15",
+   "confidence": "indicative (3 seeds)"
+  },
+  {
+   "defect": "stuck_joint_30pct",
+   "check": "stuck-actuator",
+   "recipe": {
+    "description": "one action dim frozen to its episode-start value in 30% of episodes",
+    "params": {
+     "frozen_dims": 1,
+     "episode_fraction": 0.3,
+     "frozen_value": "episode start"
+    }
+   },
+   "policy": "diffusion",
+   "dataset_revision": "7628202a2180972f291ba1bc6723834921e72c19",
+   "steps": 5000,
+   "seeds": [
+    0,
+    1,
+    2
+   ],
+   "mse_delta_pct": {
+    "per_seed": [
+     520.077,
+     525.807,
+     588.054
+    ],
+    "mean": 544.646
+   },
+   "success_delta_pts": {
+    "per_seed": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "mean": 0.0
+   },
+   "date": "2026-11-15",
+   "confidence": "indicative (3 seeds)"
+  }
+ ],
+ "runs": [
+  {
+   "arm": "clean",
+   "seed": 0,
+   "gpu_seconds": 362.819104657,
+   "heldout_mse": 506.3932775952342,
+   "success_pct": 5.0,
+   "avg_max_reward": 0.319661241427327,
+   "it_per_s": 19.114262183754306,
+   "gpu": "NVIDIA A100-SXM4-40GB"
+  },
+  {
+   "arm": "clean",
+   "seed": 1,
+   "gpu_seconds": 328.017511283,
+   "heldout_mse": 593.5172183655782,
+   "success_pct": 0.0,
+   "avg_max_reward": 0.37549744566733123,
+   "it_per_s": 19.242338904473968,
+   "gpu": "NVIDIA A100-SXM4-40GB"
+  },
+  {
+   "arm": "clean",
+   "seed": 2,
+   "gpu_seconds": 327.33682007699986,
+   "heldout_mse": 602.7333942964552,
+   "success_pct": 0.0,
+   "avg_max_reward": 0.30725321557783797,
+   "it_per_s": 19.27355046290351,
+   "gpu": "NVIDIA A100-SXM4-40GB"
+  },
+  {
+   "arm": "duplicates_20pct",
+   "seed": 0,
+   "gpu_seconds": 326.1981503050001,
+   "heldout_mse": 575.3107089932437,
+   "success_pct": 0.0,
+   "avg_max_reward": 0.3406789916453908,
+   "it_per_s": 19.36677931963253,
+   "gpu": "NVIDIA A100-SXM4-40GB"
+  },
+  {
+   "arm": "duplicates_20pct",
+   "seed": 1,
+   "gpu_seconds": 326.70714589800014,
+   "heldout_mse": 584.1551861649583,
+   "success_pct": 0.0,
+   "avg_max_reward": 0.4011450780952944,
+   "it_per_s": 19.34386495585454,
+   "gpu": "NVIDIA A100-SXM4-40GB"
+  },
+  {
+   "arm": "duplicates_20pct",
+   "seed": 2,
+   "gpu_seconds": 338.9570339400002,
+   "heldout_mse": 600.1042747495541,
+   "success_pct": 0.0,
+   "avg_max_reward": 0.30222719372323886,
+   "it_per_s": 18.70373773510395,
+   "gpu": "NVIDIA A100-SXM4-40GB"
+  },
+  {
+   "arm": "idle_start_30f",
+   "seed": 0,
+   "gpu_seconds": 348.8657924129998,
+   "heldout_mse": 4165.2406994320645,
+   "success_pct": 0.0,
+   "avg_max_reward": 0.3975517597988042,
+   "it_per_s": 18.07572854342427,
+   "gpu": "NVIDIA A100-SXM4-40GB"
+  },
+  {
+   "arm": "idle_start_30f",
+   "seed": 1,
+   "gpu_seconds": 348.73417105,
+   "heldout_mse": 1252.1682058430408,
+   "success_pct": 0.0,
+   "avg_max_reward": 0.3309158438011589,
+   "it_per_s": 18.08031550654203,
+   "gpu": "NVIDIA A100-SXM4-40GB"
+  },
+  {
+   "arm": "idle_start_30f",
+   "seed": 2,
+   "gpu_seconds": 349.18223002900004,
+   "heldout_mse": 1577.5419683794144,
+   "success_pct": 0.0,
+   "avg_max_reward": 0.30339343331168117,
+   "it_per_s": 18.10015179764017,
+   "gpu": "NVIDIA A100-SXM4-40GB"
+  },
+  {
+   "arm": "scale_mismatch_0.5x_25pct",
+   "seed": 0,
+   "gpu_seconds": 343.1171249840004,
+   "heldout_mse": 1880.0788195485657,
+   "success_pct": 0.0,
+   "avg_max_reward": 0.32424630898041856,
+   "it_per_s": 18.170674572074162,
+   "gpu": "NVIDIA A100-SXM4-40GB"
+  },
+  {
+   "arm": "scale_mismatch_0.5x_25pct",
+   "seed": 1,
+   "gpu_seconds": 345.4685855429998,
+   "heldout_mse": 5178.999892668876,
+   "success_pct": 0.0,
+   "avg_max_reward": 0.28657222121494635,
+   "it_per_s": 18.29350018390812,
+   "gpu": "NVIDIA A100-SXM4-40GB"
+  },
+  {
+   "arm": "scale_mismatch_0.5x_25pct",
+   "seed": 2,
+   "gpu_seconds": 349.4549627920005,
+   "heldout_mse": 6337.453632884206,
+   "success_pct": 0.0,
+   "avg_max_reward": 0.20464099402202646,
+   "it_per_s": 18.049047289115958,
+   "gpu": "NVIDIA A100-SXM4-40GB"
+  },
+  {
+   "arm": "stuck_joint_30pct",
+   "seed": 0,
+   "gpu_seconds": 334.6372568229999,
+   "heldout_mse": 3140.03062658043,
+   "success_pct": 5.0,
+   "avg_max_reward": 0.2736958956028656,
+   "it_per_s": 18.807172006226274,
+   "gpu": "NVIDIA A100-SXM4-40GB"
+  },
+  {
+   "arm": "stuck_joint_30pct",
+   "seed": 1,
+   "gpu_seconds": 327.66643812799975,
+   "heldout_mse": 3714.2709976260594,
+   "success_pct": 0.0,
+   "avg_max_reward": 0.22350978856854478,
+   "it_per_s": 19.29400315858865,
+   "gpu": "NVIDIA A100-SXM4-40GB"
+  },
+  {
+   "arm": "stuck_joint_30pct",
+   "seed": 2,
+   "gpu_seconds": 327.631668901,
+   "heldout_mse": 4147.1309905793905,
+   "success_pct": 0.0,
+   "avg_max_reward": 0.1983319472196074,
+   "it_per_s": 19.26177601502403,
+   "gpu": "NVIDIA A100-SXM4-40GB"
+  }
+ ],
+ "compute": {
+  "gpu": [
+   "NVIDIA A100-SXM4-40GB"
+  ],
+  "table_runs_gpu_hours": 1.412,
+  "ledger_gpu_hours": 2.88,
+  "ceiling_gpu_hours": 15.0
+ }
+}
