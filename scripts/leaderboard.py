@@ -80,32 +80,65 @@ def badge(v: str) -> str:
     return f'<span class="badge b-{v}">{v}</span>'
 
 
-def find_lerobot_datasets(limit: int) -> list[dict]:
+def _probe_dataset(api, repo_id: str, downloads: int, likes: int) -> dict | None:
+    """The board entry for one Hub dataset, or None when it has no LeRobot
+    metadata (meta/info.json) - the same gate both listing lanes apply."""
+    try:
+        info = api.dataset_info(repo_id, files_metadata=True)
+    except Exception:
+        return None
+    sib = [(s.rfilename, s.size or 0) for s in (info.siblings or [])]
+    if "meta/info.json" not in [n for n, _ in sib]:
+        return None
+    return {
+        "id": repo_id,
+        "downloads": downloads,
+        "likes": likes,
+        "data_bytes": sum(sz for n, sz in sib if n.startswith("data/")),
+    }
+
+
+def _merge_lanes(top: list[dict], recent: list[dict], limit: int, new_lane: int) -> list[dict]:
+    """Top-downloaded board (lane "top") plus a probation lane of the newest
+    uploads (lane "new"): fresh datasets get audited before they are popular,
+    which is exactly when a QA flag is cheapest to act on. No duplicates;
+    the lane tag rides the entry into data.json."""
+    out: list[dict] = []
+    seen: set[str] = set()
+    for d in top[:limit]:
+        out.append({**d, "lane": "top"})
+        seen.add(d["id"])
+    for d in recent:
+        if len(out) >= limit + new_lane:
+            break
+        if d["id"] in seen:
+            continue
+        out.append({**d, "lane": "new"})
+        seen.add(d["id"])
+    return out
+
+
+def find_lerobot_datasets(limit: int, new_lane: int = 0) -> list[dict]:
     from huggingface_hub import HfApi
 
     api = HfApi()
-    out = []
+    top: list[dict] = []
     for d in api.list_datasets(search="lerobot", sort="downloads", limit=limit * 3):
-        try:
-            info = api.dataset_info(d.id, files_metadata=True)
-        except Exception:
-            continue
-        sib = [(s.rfilename, s.size or 0) for s in (info.siblings or [])]
-        files = [n for n, _ in sib]
-        if "meta/info.json" not in files:
-            continue
-        data_bytes = sum(sz for n, sz in sib if n.startswith("data/"))
-        out.append(
-            {
-                "id": d.id,
-                "downloads": d.downloads or 0,
-                "likes": getattr(d, "likes", 0) or 0,
-                "data_bytes": data_bytes,
-            }
-        )
-        if len(out) >= limit:
+        e = _probe_dataset(api, d.id, d.downloads or 0, getattr(d, "likes", 0) or 0)
+        if e:
+            top.append(e)
+        if len(top) >= limit:
             break
-    return out
+    recent: list[dict] = []
+    if new_lane:
+        for d in api.list_datasets(search="lerobot", sort="createdAt", direction=-1,
+                                   limit=new_lane * 3):
+            e = _probe_dataset(api, d.id, d.downloads or 0, getattr(d, "likes", 0) or 0)
+            if e:
+                recent.append(e)
+            if len(recent) >= new_lane:
+                break
+    return _merge_lanes(top, recent, limit, new_lane)
 
 
 def _classic_resolve_download(repo_id: str, name: str, dest: Path) -> None:
@@ -433,6 +466,9 @@ def render_index(entries: list[dict], generated: str, harm_table: bool = False, 
         if e.get("report"):
             r = e["report"]
             link = f"<a href='dataset/{esc(e['slug'])}.html'>{esc(e['id'])}</a>"
+            if e.get("lane") == "new":
+                link += ' <span class=dim title="newest-uploads probation lane">(new)</span>'
+
             score = f"<span class=score>{r['score']}</span>"
             model = r.get("score_model", "legacy-v0")
             if model != SCORE_MODEL:
@@ -643,6 +679,8 @@ def main() -> int:
     socket.setdefaulttimeout(150)  # no download op may hang the whole run
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=50)
+    ap.add_argument("--new-lane", type=int, default=25,
+                    help="also audit this many of the newest LeRobot uploads (probation lane)")
     ap.add_argument("--out", default="docs")
     ap.add_argument("--max-episodes", type=int, default=50)
     ap.add_argument("--size-cap-mb", type=int, default=SIZE_CAP_MB_DEFAULT)
@@ -663,8 +701,9 @@ def main() -> int:
         datasets = json.loads(worklist_path.read_text())
         print(f"loaded {len(datasets)} datasets from worklist cache")
     else:
-        print(f"listing top {args.limit} lerobot datasets on the Hub...")
-        datasets = find_lerobot_datasets(args.limit)
+        print(f"listing top {args.limit} lerobot datasets on the Hub"
+              + (f" + {args.new_lane} newest..." if args.new_lane else "..."))
+        datasets = find_lerobot_datasets(args.limit, args.new_lane)
         print(f"found {len(datasets)} LeRobot-format datasets")
         if worklist_path:
             worklist_path.write_text(json.dumps(datasets))
