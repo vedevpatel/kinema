@@ -365,3 +365,14 @@ def test_renderer_notes_pin(tmp_path):
     ht.write_table(out / "harm-table.json", doc)
     lb._write(out, [], "2026-11-15 00:00 UTC")
     assert "notes-probe: success deltas unmeasurable" in (out / "harm-table.html").read_text()
+
+def test_harm_table_page_names_the_weight_source(tmp_path):
+    """tiered-v2: the harm-table page says weights derive from it where measured."""
+    lb = _load("leaderboard")
+    out = tmp_path / "docs"
+    out.mkdir()
+    ht.write_table(out / "harm-table.json", _doc())
+    assert lb.write_harm_table(out)
+    page = (out / "harm-table.html").read_text()
+    assert "derived from this table where measured" in page
+    assert "not derived from this table yet" not in page

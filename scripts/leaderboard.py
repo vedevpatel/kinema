@@ -446,7 +446,7 @@ def render_index(entries: list[dict], generated: str, harm_table: bool = False) 
         + (f"; {n_stale} result(s) from older check logic are being re-audited" if n_stale else "")
         + f". Scores use model <code>{esc(SCORE_MODEL)}</code>: 100 minus 25 per failing "
         "check and a per-check weight for each warning check (10 / 6 / 2 by measured "
-        "training harm where the harm study has measured it, hand-tuned otherwise; "
+        "training harm where the harm table has measured it, hand-tuned otherwise; "
         "<a href='https://github.com/vedevpatel/kinema/blob/main/docs/checks.md#health-score'>"
         "details</a>"
         + ("; <a href='harm-table.html'>harm table</a>" if harm_table else "")
@@ -511,7 +511,7 @@ def render_harm_table(doc: dict) -> str:
         "<h1>Harm table</h1>"
         f"<p><b>{esc(scope)} - indicative ordering evidence, not claim-grade.</b> "
         "Each injected defect is trained against a clean arm under the same seed; deltas are "
-        "defect minus clean. Health-score weights are not derived from this table yet "
+        "defect minus clean. Health-score weights are derived from this table where measured "
         f"(<a href='{_CHECKS_MD}#harm-table'>protocol</a>, "
         f"<a href='{_CHECKS_MD}#health-score'>weights</a>, <a href='index.html'>leaderboard</a>).</p>"
         f"<p class=dim>Policy: {esc(pol.get('name', ''))} ({esc(pol.get('source', ''))}), "
