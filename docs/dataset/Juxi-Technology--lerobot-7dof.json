@@ -1,0 +1,625 @@
+{
+  "source": "Juxi-Technology/lerobot-7dof",
+  "format_version": "v3.0",
+  "episodes": 20,
+  "frames": 13828,
+  "fps": 30.0,
+  "truncated": false,
+  "score": 94,
+  "score_model": "tiered-v2",
+  "verdict": "WARN",
+  "checks": [
+    {
+      "id": "stats-drift",
+      "title": "Stats drift (stored normalization stats vs actual data)",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "data matches meta/stats.json (worst 0% of the FAIL threshold)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 10
+    },
+    {
+      "id": "timestamp-grid",
+      "title": "Timestamp grid (spacing, monotonic, start at 0)",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "evenly spaced at 30 fps and monotonic",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 10
+    },
+    {
+      "id": "dropped-frames",
+      "title": "Dropped / duplicated frames",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "frame_index contiguous; episode lengths and video segments match the data",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 8
+    },
+    {
+      "id": "calibration-drift",
+      "title": "Calibration drift (action vs state on still frames)",
+      "verdict": "INFO",
+      "weight": 10,
+      "weight_basis": "measured",
+      "summary": "6 joint(s) + 1 gripper(s) agree; worst offset +0.7% of range (joint 6)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "per_joint": {
+          "0": {
+            "joint": 0,
+            "offset_fraction": -0.00020931266527274888,
+            "scale_error": 0.017812380543373998,
+            "r2": 0.07450649873883086,
+            "line_vs_step": 0.9597157372491448,
+            "still_frames": 10462
+          },
+          "1": {
+            "joint": 1,
+            "offset_fraction": -0.005489578804854664,
+            "scale_error": -0.006399027969170687,
+            "r2": 0.13972428882513221,
+            "line_vs_step": 0.9741488351232,
+            "still_frames": 9624
+          },
+          "2": {
+            "joint": 2,
+            "offset_fraction": -0.00016254177265982202,
+            "scale_error": 0.05180295941497788,
+            "r2": 0.5202929803755127,
+            "line_vs_step": 0.7285222255708261,
+            "still_frames": 9292
+          },
+          "3": {
+            "joint": 3,
+            "offset_fraction": 0.00580016134963989,
+            "scale_error": 0.02610711742222459,
+            "r2": 0.347030251398312,
+            "line_vs_step": 0.9369795540736469,
+            "still_frames": 9679
+          },
+          "4": {
+            "joint": 4,
+            "offset_fraction": -2.3781048529766595e-05,
+            "scale_error": 0.016320120165811098,
+            "r2": 0.02050977637605944,
+            "line_vs_step": 0.9457519390516002,
+            "still_frames": 10629
+          },
+          "5": {
+            "joint": 5,
+            "offset_fraction": 1.4156776955161259e-05,
+            "scale_error": -0.009837287909151086,
+            "r2": 0.01939469525102855,
+            "line_vs_step": 0.971073420767678,
+            "still_frames": 11820
+          },
+          "6": {
+            "joint": 6,
+            "free_end": "high",
+            "offset_fraction": 0.0065905957314939525,
+            "still_frames": 265,
+            "kind": "gripper"
+          }
+        },
+        "compared_joints": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "compared_grippers": [
+          6
+        ],
+        "compared_deltas": [],
+        "excluded_joints": {}
+      },
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "joint 2 (elbow_flex.pos): still-frame offset -0.0% of range varies with position but not along a line (a step fits 1.4x as well) - backlash, load, contact or a joint limit rather than calibration",
+          "episode_index": null,
+          "details": {
+            "joint": 2,
+            "offset_fraction": -0.00016254177265982202,
+            "scale_error": 0.05180295941497788,
+            "r2": 0.5202929803755127,
+            "line_vs_step": 0.7285222255708261,
+            "still_frames": 9292,
+            "kind": "irregular"
+          }
+        }
+      ],
+      "charge": 10
+    },
+    {
+      "id": "idle-segments",
+      "title": "Idle segments (policy learns to do nothing)",
+      "verdict": "WARN",
+      "weight": 6,
+      "weight_basis": "measured",
+      "summary": "11/20 episodes flagged; worst 45% idle",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "episode 0: ends with 6.1s idle - trim if you want shorter episodes",
+          "episode_index": 0,
+          "details": {
+            "idle_fraction": 0.20467185761957732,
+            "idle_runs": 1,
+            "leading_idle_s": 0.0,
+            "trailing_idle_s": 6.133333333333334
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 1: ends with 2.1s idle - trim if you want shorter episodes",
+          "episode_index": 1,
+          "details": {
+            "idle_fraction": 0.28198074277854196,
+            "idle_runs": 3,
+            "leading_idle_s": 0.0,
+            "trailing_idle_s": 2.1333333333333333
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 3: starts idle for 7.2s (teaches waiting at the start)",
+          "episode_index": 3,
+          "details": {
+            "idle_fraction": 0.2987551867219917,
+            "idle_runs": 1,
+            "leading_idle_s": 7.2,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 5: starts idle for 6.1s (teaches waiting at the start)",
+          "episode_index": 5,
+          "details": {
+            "idle_fraction": 0.2893081761006289,
+            "idle_runs": 1,
+            "leading_idle_s": 6.133333333333334,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 6: 33% of frames idle in runs >= 2s; starts idle for 7.6s (teaches waiting at the start)",
+          "episode_index": 6,
+          "details": {
+            "idle_fraction": 0.3262108262108262,
+            "idle_runs": 1,
+            "leading_idle_s": 7.633333333333334,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 8: 33% of frames idle in runs >= 2s; starts idle for 7.2s (teaches waiting at the start)",
+          "episode_index": 8,
+          "details": {
+            "idle_fraction": 0.3317901234567901,
+            "idle_runs": 1,
+            "leading_idle_s": 7.166666666666667,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 9: 32% of frames idle in runs >= 2s",
+          "episode_index": 9,
+          "details": {
+            "idle_fraction": 0.3176638176638177,
+            "idle_runs": 1,
+            "leading_idle_s": 0.0,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 10: 39% of frames idle in runs >= 2s; starts idle for 9.4s (teaches waiting at the start)",
+          "episode_index": 10,
+          "details": {
+            "idle_fraction": 0.39058171745152354,
+            "idle_runs": 1,
+            "leading_idle_s": 9.4,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 11: 41% of frames idle in runs >= 2s; starts idle for 10.6s (teaches waiting at the start)",
+          "episode_index": 11,
+          "details": {
+            "idle_fraction": 0.4103225806451613,
+            "idle_runs": 1,
+            "leading_idle_s": 10.6,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 13: ends with 3.4s idle - trim if you want shorter episodes",
+          "episode_index": 13,
+          "details": {
+            "idle_fraction": 0.12779156327543426,
+            "idle_runs": 1,
+            "leading_idle_s": 0.0,
+            "trailing_idle_s": 3.433333333333333
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 14: ends with 2.5s idle - trim if you want shorter episodes",
+          "episode_index": 14,
+          "details": {
+            "idle_fraction": 0.10795454545454546,
+            "idle_runs": 1,
+            "leading_idle_s": 0.0,
+            "trailing_idle_s": 2.533333333333333
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 15: 45% of frames idle in runs >= 2s; starts idle for 8.3s (teaches waiting at the start); ends with 2.0s idle",
+          "episode_index": 15,
+          "details": {
+            "idle_fraction": 0.4463768115942029,
+            "idle_runs": 2,
+            "leading_idle_s": 8.266666666666667,
+            "trailing_idle_s": 2.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 16: 35% of frames idle in runs >= 2s; starts idle for 6.8s (teaches waiting at the start)",
+          "episode_index": 16,
+          "details": {
+            "idle_fraction": 0.35233160621761656,
+            "idle_runs": 1,
+            "leading_idle_s": 6.8,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 17: 38% of frames idle in runs >= 2s; starts idle for 7.3s (teaches waiting at the start)",
+          "episode_index": 17,
+          "details": {
+            "idle_fraction": 0.3767123287671233,
+            "idle_runs": 1,
+            "leading_idle_s": 7.333333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 19: 37% of frames idle in runs >= 2s; starts idle for 7.9s (teaches waiting at the start)",
+          "episode_index": 19,
+          "details": {
+            "idle_fraction": 0.36817472698907955,
+            "idle_runs": 1,
+            "leading_idle_s": 7.866666666666666,
+            "trailing_idle_s": 0.0
+          }
+        }
+      ],
+      "charge": 6
+    },
+    {
+      "id": "stuck-actuator",
+      "title": "Stuck actuators (joints that never move)",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "measured",
+      "summary": "every joint moves wherever the dataset uses it",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 10
+    },
+    {
+      "id": "action-saturation",
+      "title": "Action saturation (commands clipped at the limits)",
+      "verdict": "PASS",
+      "weight": 6,
+      "weight_basis": "placeholder",
+      "summary": "no continuous action dim pinned at a limit above 5% (6 dims checked)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 6
+    },
+    {
+      "id": "nan-and-normalization",
+      "title": "NaN / Inf and normalization hazards",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "no NaN/Inf; all dims have usable variance",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 10
+    },
+    {
+      "id": "duplicate-and-leakage",
+      "title": "Duplicate episodes / train-eval leakage",
+      "verdict": "PASS",
+      "weight": 2,
+      "weight_basis": "measured",
+      "summary": "no exact, partial or near duplicates",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 2
+    },
+    {
+      "id": "outlier-episodes",
+      "title": "Outlier episodes (duration, jerk, velocity, static, end-pose)",
+      "verdict": "INFO",
+      "weight": 3,
+      "weight_basis": "placeholder",
+      "summary": "0 episode(s) to review, 1 mild, of 20; worst: [2]",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "metrics": {
+          "duration_s": {
+            "0": 1.2916666666666667,
+            "1": 1.0445402298850575,
+            "2": 0.9238505747126438,
+            "3": 1.038793103448276,
+            "4": 1.0402298850574714,
+            "5": 0.9137931034482759,
+            "6": 1.0086206896551724,
+            "7": 0.9755747126436781,
+            "8": 0.9310344827586208,
+            "9": 1.0086206896551724,
+            "10": 1.0373563218390804,
+            "11": 1.1135057471264367,
+            "12": 0.9022988505747127,
+            "13": 1.1580459770114944,
+            "14": 1.011494252873563,
+            "15": 0.9913793103448276,
+            "16": 0.831896551724138,
+            "17": 0.8390804597701149,
+            "18": 0.885057471264368,
+            "19": 0.9209770114942529
+          },
+          "p95_jerk": {
+            "0": 0.056371829815714446,
+            "1": 0.04697665394658948,
+            "2": 0.0563721457713711,
+            "3": 0.06931265952954958,
+            "4": 0.05769002081483165,
+            "5": 0.065767566251327,
+            "6": 0.05776043264487101,
+            "7": 0.05637211519501723,
+            "8": 0.046976694715061315,
+            "9": 0.04697669471506131,
+            "10": 0.05776043264487101,
+            "11": 0.05692707003001174,
+            "12": 0.05776138505857935,
+            "13": 0.06931165698880398,
+            "14": 0.046976694715061315,
+            "15": 0.05727386584129354,
+            "16": 0.05664963338098623,
+            "17": 0.05637219673196088,
+            "18": 0.05776038251783372,
+            "19": 0.056372217116196784
+          },
+          "peak_velocity": {
+            "0": 0.1963846990361873,
+            "1": 0.21609297914740525,
+            "2": 0.4227908639626292,
+            "3": 0.31190646661260035,
+            "4": 0.27724963557745275,
+            "5": 0.21949025560036464,
+            "6": 0.300651172324167,
+            "7": 0.24259380708305076,
+            "8": 0.20793697604790315,
+            "9": 0.17328114755350116,
+            "10": 0.2656983611064825,
+            "11": 0.19638570157693291,
+            "12": 0.21949025560036464,
+            "13": 0.27724963557745275,
+            "14": 0.2656973585657369,
+            "15": 0.3003551921416301,
+            "16": 0.1879069827026044,
+            "17": 0.17328114755350116,
+            "18": 0.17851148068570483,
+            "19": 0.2656983611064825
+          },
+          "velocity_spike": {
+            "0": null,
+            "1": null,
+            "2": null,
+            "3": null,
+            "4": null,
+            "5": null,
+            "6": null,
+            "7": null,
+            "8": null,
+            "9": null,
+            "10": null,
+            "11": null,
+            "12": null,
+            "13": null,
+            "14": null,
+            "15": null,
+            "16": null,
+            "17": null,
+            "18": null,
+            "19": null
+          },
+          "static_fraction": {
+            "0": 0.6202672605790646,
+            "1": 0.47520661157024796,
+            "2": 0.4236760124610592,
+            "3": 0.44598337950138506,
+            "4": 0.43568464730290457,
+            "5": 0.46771653543307085,
+            "6": 0.4793152639087018,
+            "7": 0.5648967551622419,
+            "8": 0.5162287480680062,
+            "9": 0.5178316690442225,
+            "10": 0.4868238557558946,
+            "11": 0.5555555555555556,
+            "12": 0.5135566188197768,
+            "13": 0.5577639751552795,
+            "14": 0.5590327169274538,
+            "15": 0.5442670537010159,
+            "16": 0.5294117647058824,
+            "17": 0.5042881646655232,
+            "18": 0.46991869918699186,
+            "19": 0.534375
+          },
+          "end_pose_deviation": {
+            "0": 0.75,
+            "1": 0.5625001825392355,
+            "2": 0.5444444383340485,
+            "3": 0.4625004746020123,
+            "4": 0.5000000076180097,
+            "5": 0.42134836913114815,
+            "6": 0.75,
+            "7": 0.37797604442118715,
+            "8": 0.3958334732386523,
+            "9": 0.4000002906799294,
+            "10": 0.3999999864399432,
+            "11": 0.5999997093200706,
+            "12": 0.308988759337185,
+            "13": 0.5208334086669666,
+            "14": 0.432584263072059,
+            "15": 0.3875003390014374,
+            "16": 0.40000054240229976,
+            "17": 0.48511906760552176,
+            "18": 0.5624999321997125,
+            "19": 0.5875003390014374
+          }
+        },
+        "flagged": {
+          "2": [
+            "peak_velocity"
+          ]
+        }
+      },
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "episode 2: IQR outlier on peak_velocity",
+          "episode_index": 2,
+          "details": {
+            "metrics": [
+              "peak_velocity"
+            ],
+            "far_out": false
+          }
+        }
+      ],
+      "charge": 3
+    },
+    {
+      "id": "embedded-images",
+      "title": "Embedded images in the parquet shards",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "no image features declared",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 8
+    },
+    {
+      "id": "camera-coverage",
+      "title": "Per-episode camera coverage",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "2 camera(s) over 20 episodes; 0 missing segments",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 8
+    },
+    {
+      "id": "task-strings",
+      "title": "Task strings",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "20 episodes, 0 tasks in meta/tasks; 0 finding(s)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 8
+    },
+    {
+      "id": "reward-done",
+      "title": "Reward / done fields",
+      "verdict": "SKIP",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "no reward/done fields (position-control datasets rarely have them)",
+      "details": {},
+      "findings": [],
+      "charge": 8
+    },
+    {
+      "id": "visual-quality",
+      "title": "Visual quality (blur, lighting)",
+      "verdict": "SKIP",
+      "weight": 6,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "pass --video to run (downloads MP4s; needs the video extra)",
+      "details": {},
+      "findings": [],
+      "charge": 6
+    },
+    {
+      "id": "deployment-readiness",
+      "title": "Deployment readiness (would this dataset serve a policy?)",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "no deployment blockers found",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 10
+    }
+  ]
+}

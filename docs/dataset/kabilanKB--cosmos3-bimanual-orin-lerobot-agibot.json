@@ -1,0 +1,636 @@
+{
+  "source": "kabilanKB/cosmos3-bimanual-orin-lerobot-agibot",
+  "format_version": "v3.0",
+  "episodes": 2,
+  "frames": 962,
+  "fps": 30.0,
+  "truncated": false,
+  "score": 82,
+  "score_model": "tiered-v2",
+  "verdict": "WARN",
+  "checks": [
+    {
+      "id": "stats-drift",
+      "title": "Stats drift (stored normalization stats vs actual data)",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "data matches meta/stats.json (worst 1% of the FAIL threshold)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 10
+    },
+    {
+      "id": "timestamp-grid",
+      "title": "Timestamp grid (spacing, monotonic, start at 0)",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "evenly spaced at 30 fps and monotonic",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 10
+    },
+    {
+      "id": "dropped-frames",
+      "title": "Dropped / duplicated frames",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "frame_index contiguous; episode lengths and video segments match the data",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 8
+    },
+    {
+      "id": "calibration-drift",
+      "title": "Calibration drift (action vs state on still frames)",
+      "verdict": "SKIP",
+      "weight": 10,
+      "weight_basis": "measured",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "observation.state or action column missing",
+      "details": {},
+      "findings": [],
+      "charge": 10
+    },
+    {
+      "id": "idle-segments",
+      "title": "Idle segments (policy learns to do nothing)",
+      "verdict": "PASS",
+      "weight": 6,
+      "weight_basis": "measured",
+      "summary": "no episode starts idle or idles >= 30% (no state recorded: judged from commands alone)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 6
+    },
+    {
+      "id": "stuck-actuator",
+      "title": "Stuck actuators (joints that never move)",
+      "verdict": "INFO",
+      "weight": 10,
+      "weight_basis": "measured",
+      "summary": "every joint moves wherever the dataset uses it",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "joint 0 (ego.tx) does not move in 1/2 episodes [0] - the task may not need it in every episode",
+          "episode_index": null,
+          "details": {
+            "joint": 0,
+            "episodes": [
+              0
+            ],
+            "share": 0.5
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "joint 1 (ego.ty) does not move in 1/2 episodes [0] - the task may not need it in every episode",
+          "episode_index": null,
+          "details": {
+            "joint": 1,
+            "episodes": [
+              0
+            ],
+            "share": 0.5
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "joint 2 (ego.tz) does not move in 1/2 episodes [0] - the task may not need it in every episode",
+          "episode_index": null,
+          "details": {
+            "joint": 2,
+            "episodes": [
+              0
+            ],
+            "share": 0.5
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "joint 3 (ego.r6d_0) does not move in 1/2 episodes [0] - the task may not need it in every episode",
+          "episode_index": null,
+          "details": {
+            "joint": 3,
+            "episodes": [
+              0
+            ],
+            "share": 0.5
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "joint 5 (ego.r6d_2) does not move in 1/2 episodes [0] - the task may not need it in every episode",
+          "episode_index": null,
+          "details": {
+            "joint": 5,
+            "episodes": [
+              0
+            ],
+            "share": 0.5
+          }
+        }
+      ],
+      "charge": 10
+    },
+    {
+      "id": "action-saturation",
+      "title": "Action saturation (commands clipped at the limits)",
+      "verdict": "WARN",
+      "weight": 6,
+      "weight_basis": "placeholder",
+      "summary": "5 dim(s) saturated",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "WARN",
+          "message": "action dim 11 (right_wrist.tz): 38.6% of commands during motion are pinned at exactly its min (0) - clipped commands the policy will imitate",
+          "episode_index": null,
+          "details": {
+            "dim": 11,
+            "saturated_fraction": 0.3858632676709154,
+            "side": "min"
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 12 (right_wrist.r6d_0): 38.6% of commands during motion are pinned at exactly its min (0) - clipped commands the policy will imitate [two-level on/off command, so not gated]",
+          "episode_index": null,
+          "details": {
+            "dim": 12,
+            "saturated_fraction": 0.3858632676709154,
+            "side": "min"
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 16 (right_wrist.r6d_4): 38.6% of commands during motion are pinned at exactly its min (0) - clipped commands the policy will imitate [two-level on/off command, so not gated]",
+          "episode_index": null,
+          "details": {
+            "dim": 16,
+            "saturated_fraction": 0.3858632676709154,
+            "side": "min"
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 37 (left_wrist.r6d_0): 38.6% of commands during motion are pinned at exactly its min (0) - clipped commands the policy will imitate [two-level on/off command, so not gated]",
+          "episode_index": null,
+          "details": {
+            "dim": 37,
+            "saturated_fraction": 0.3858632676709154,
+            "side": "min"
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 41 (left_wrist.r6d_4): 38.6% of commands during motion are pinned at exactly its min (0) - clipped commands the policy will imitate [two-level on/off command, so not gated]",
+          "episode_index": null,
+          "details": {
+            "dim": 41,
+            "saturated_fraction": 0.3858632676709154,
+            "side": "min"
+          }
+        }
+      ],
+      "charge": 6
+    },
+    {
+      "id": "nan-and-normalization",
+      "title": "NaN / Inf and normalization hazards",
+      "verdict": "WARN",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "action dim 18: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 18
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 19: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 19
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 20: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 20
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 21: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 21
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 22: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 22
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 23: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 23
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 24: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 24
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 25: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 25
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 26: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 26
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 27: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 27
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 28: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 28
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 29: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 29
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 30: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 30
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 31: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 31
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 32: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 32
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 43: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 43
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 44: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 44
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 45: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 45
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 46: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 46
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 47: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 47
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 48: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 48
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 49: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 49
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 50: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 50
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 51: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 51
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 52: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 52
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 53: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 53
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 54: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 54
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 55: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 55
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 56: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 56
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 57: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 57
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "action dim 7: std 1.81e-07 - near-zero variance amplifies noise after normalization",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 7,
+            "std": 1.8129060389793896e-07
+          }
+        }
+      ],
+      "charge": 10
+    },
+    {
+      "id": "duplicate-and-leakage",
+      "title": "Duplicate episodes / train-eval leakage",
+      "verdict": "WARN",
+      "weight": 2,
+      "weight_basis": "measured",
+      "summary": "0 exact group(s), 1 pair(s) sharing motion, 0 near-duplicate pair(s)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "WARN",
+          "message": "episodes 0 and 1: share 30 identical 8-frame stretches of motion (97% of the shorter) - a near-complete copy; those segments add no diversity",
+          "episode_index": null,
+          "details": {
+            "episodes": [
+              0,
+              1
+            ],
+            "kind": "partial",
+            "shared_windows": 30,
+            "aligned_opening": false
+          }
+        }
+      ],
+      "charge": 2
+    },
+    {
+      "id": "outlier-episodes",
+      "title": "Outlier episodes (duration, jerk, velocity, static, end-pose)",
+      "verdict": "SKIP",
+      "weight": 3,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "fewer than 8 episodes - IQR flagging needs a population",
+      "details": {},
+      "findings": [],
+      "charge": 3
+    },
+    {
+      "id": "embedded-images",
+      "title": "Embedded images in the parquet shards",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "no image features declared",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 8
+    },
+    {
+      "id": "camera-coverage",
+      "title": "Per-episode camera coverage",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "1 camera(s) over 2 episodes; 0 missing segments",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 8
+    },
+    {
+      "id": "task-strings",
+      "title": "Task strings",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "2 episodes, 0 tasks in meta/tasks; 0 finding(s)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 8
+    },
+    {
+      "id": "reward-done",
+      "title": "Reward / done fields",
+      "verdict": "SKIP",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "no reward/done fields (position-control datasets rarely have them)",
+      "details": {},
+      "findings": [],
+      "charge": 8
+    },
+    {
+      "id": "visual-quality",
+      "title": "Visual quality (blur, lighting)",
+      "verdict": "SKIP",
+      "weight": 6,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "pass --video to run (downloads MP4s; needs the video extra)",
+      "details": {},
+      "findings": [],
+      "charge": 6
+    },
+    {
+      "id": "deployment-readiness",
+      "title": "Deployment readiness (would this dataset serve a policy?)",
+      "verdict": "INFO",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "0 blocker(s), 0 warning(s)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "no observation.state column found (checked the usual aliases) - state/action checks could not run",
+          "episode_index": null,
+          "details": {}
+        }
+      ],
+      "charge": 10
+    }
+  ]
+}

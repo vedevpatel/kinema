@@ -1,0 +1,340 @@
+{
+  "source": "Sanjaya-LeRobot/pick_red_lego_bowl_20261115_151626",
+  "format_version": "v3.0",
+  "episodes": 2,
+  "frames": 597,
+  "fps": 30.0,
+  "truncated": false,
+  "score": 84,
+  "score_model": "tiered-v2",
+  "verdict": "WARN",
+  "checks": [
+    {
+      "id": "stats-drift",
+      "title": "Stats drift (stored normalization stats vs actual data)",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "data matches meta/stats.json (worst 0% of the FAIL threshold)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 10
+    },
+    {
+      "id": "timestamp-grid",
+      "title": "Timestamp grid (spacing, monotonic, start at 0)",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "evenly spaced at 30 fps and monotonic",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 10
+    },
+    {
+      "id": "dropped-frames",
+      "title": "Dropped / duplicated frames",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "frame_index contiguous; episode lengths and video segments match the data",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 8
+    },
+    {
+      "id": "calibration-drift",
+      "title": "Calibration drift (action vs state on still frames)",
+      "verdict": "INFO",
+      "weight": 10,
+      "weight_basis": "measured",
+      "summary": "4 joint(s) + 1 gripper(s) agree; worst offset +4.7% of range (joint 3); not compared: 1 different space",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "per_joint": {
+          "0": {
+            "joint": 0,
+            "offset_fraction": -0.01533290801022226,
+            "scale_error": 0.01171390285928411,
+            "r2": 0.01157642029211059,
+            "line_vs_step": 0.8197909923877768,
+            "still_frames": 520
+          },
+          "1": {
+            "joint": 1,
+            "offset_fraction": 9.30515099106511e-05,
+            "scale_error": -0.027356427815169133,
+            "r2": 0.5764254427226817,
+            "line_vs_step": 0.7223768058042884,
+            "still_frames": 455
+          },
+          "2": {
+            "joint": 2,
+            "offset_fraction": 0.00020578574261935286,
+            "scale_error": 0.013528287811290386,
+            "r2": 0.4548507750779073,
+            "line_vs_step": 0.8812359690983379,
+            "still_frames": 443
+          },
+          "3": {
+            "joint": 3,
+            "offset_fraction": 0.046691845262732255,
+            "scale_error": 0.11395018911752892,
+            "r2": 0.8534299517285837,
+            "line_vs_step": 0.8728832002253302,
+            "still_frames": 552
+          },
+          "5": {
+            "joint": 5,
+            "free_end": "low",
+            "offset_fraction": 0.0015267705778700658,
+            "still_frames": 497,
+            "kind": "gripper"
+          }
+        },
+        "compared_joints": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "compared_grippers": [
+          5
+        ],
+        "compared_deltas": [],
+        "excluded_joints": {
+          "4": "different space"
+        }
+      },
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "joint 3 (wrist_flex.pos): still-frame offset +4.7% of range varies with position but not along a line (a step fits 1.1x as well) - backlash, load, contact or a joint limit rather than calibration",
+          "episode_index": null,
+          "details": {
+            "joint": 3,
+            "offset_fraction": 0.046691845262732255,
+            "scale_error": 0.11395018911752892,
+            "r2": 0.8534299517285837,
+            "line_vs_step": 0.8728832002253302,
+            "still_frames": 552,
+            "kind": "irregular"
+          }
+        }
+      ],
+      "charge": 10
+    },
+    {
+      "id": "idle-segments",
+      "title": "Idle segments (policy learns to do nothing)",
+      "verdict": "WARN",
+      "weight": 6,
+      "weight_basis": "measured",
+      "summary": "1/2 episodes flagged; worst 100% idle",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "WARN",
+          "message": "episode 1: 100% of frames idle in runs >= 2s; ends with 10.0s idle",
+          "episode_index": 1,
+          "details": {
+            "idle_fraction": 1.0,
+            "idle_runs": 1,
+            "leading_idle_s": 9.966666666666667,
+            "trailing_idle_s": 9.966666666666667
+          }
+        }
+      ],
+      "charge": 10
+    },
+    {
+      "id": "stuck-actuator",
+      "title": "Stuck actuators (joints that never move)",
+      "verdict": "WARN",
+      "weight": 10,
+      "weight_basis": "measured",
+      "summary": "1/2 episodes with stuck joints",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "WARN",
+          "message": "1/2 episodes where no joint moves at all: [1] - aborted or empty recordings that teach the policy to do nothing",
+          "episode_index": null,
+          "details": {
+            "episodes": [
+              1
+            ]
+          }
+        }
+      ],
+      "charge": 0,
+      "waived_by": "idle-segments",
+      "waiver_evidence": {
+        "shared_episodes": 1,
+        "overlap": 1.0
+      }
+    },
+    {
+      "id": "action-saturation",
+      "title": "Action saturation (commands clipped at the limits)",
+      "verdict": "WARN",
+      "weight": 6,
+      "weight_basis": "placeholder",
+      "summary": "2 dim(s) saturated",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "WARN",
+          "message": "action dim 3 (wrist_flex.pos): 15.5% of commands during motion are pinned at exactly its min (65.4945) - clipped commands the policy will imitate",
+          "episode_index": null,
+          "details": {
+            "dim": 3,
+            "saturated_fraction": 0.15544041450777202,
+            "side": "min"
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "action dim 4 (wrist_roll.pos): 7.8% of commands during motion are pinned at exactly its min (174.901) - clipped commands the policy will imitate",
+          "episode_index": null,
+          "details": {
+            "dim": 4,
+            "saturated_fraction": 0.07772020725388601,
+            "side": "min"
+          }
+        }
+      ],
+      "charge": 6
+    },
+    {
+      "id": "nan-and-normalization",
+      "title": "NaN / Inf and normalization hazards",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "no NaN/Inf; all dims have usable variance",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 10
+    },
+    {
+      "id": "duplicate-and-leakage",
+      "title": "Duplicate episodes / train-eval leakage",
+      "verdict": "PASS",
+      "weight": 2,
+      "weight_basis": "measured",
+      "summary": "no exact, partial or near duplicates",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 2
+    },
+    {
+      "id": "outlier-episodes",
+      "title": "Outlier episodes (duration, jerk, velocity, static, end-pose)",
+      "verdict": "SKIP",
+      "weight": 3,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "fewer than 8 episodes - IQR flagging needs a population",
+      "details": {},
+      "findings": [],
+      "charge": 3
+    },
+    {
+      "id": "embedded-images",
+      "title": "Embedded images in the parquet shards",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "no image features declared",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 8
+    },
+    {
+      "id": "camera-coverage",
+      "title": "Per-episode camera coverage",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "1 camera(s) over 2 episodes; 0 missing segments",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 8
+    },
+    {
+      "id": "task-strings",
+      "title": "Task strings",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "2 episodes, 0 tasks in meta/tasks; 0 finding(s)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 8
+    },
+    {
+      "id": "reward-done",
+      "title": "Reward / done fields",
+      "verdict": "SKIP",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "no reward/done fields (position-control datasets rarely have them)",
+      "details": {},
+      "findings": [],
+      "charge": 8
+    },
+    {
+      "id": "visual-quality",
+      "title": "Visual quality (blur, lighting)",
+      "verdict": "SKIP",
+      "weight": 6,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "pass --video to run (downloads MP4s; needs the video extra)",
+      "details": {},
+      "findings": [],
+      "charge": 6
+    },
+    {
+      "id": "deployment-readiness",
+      "title": "Deployment readiness (would this dataset serve a policy?)",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "no deployment blockers found",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 10
+    }
+  ]
+}
