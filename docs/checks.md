@@ -111,8 +111,7 @@ harm table (v1) re-measures defects on a real policy, with rollouts:
   `action_saturation_30pct` (action-saturation): actions clipped to the
   central 30% of each dim's range in every episode, so commands pile up at
   exactly the dataset min/max; `dropped_frames_10pct_25pct` (dropped-frames):
-  10% of interior frames deleted in 25% of episodes. The last two arms are
-  added before their runs start; their rows land when the runs complete.
+  10% of interior frames deleted in 25% of episodes.
 - Policy: LeRobot's diffusion-policy pusht example
   (`examples/training/train_policy.py`, `lerobot==0.5.1`): `DiffusionConfig`
   defaults (`num_inference_steps` at its default), Adam lr 1e-4, 20000
@@ -132,13 +131,17 @@ harm table (v1) re-measures defects on a real policy, with rollouts:
   print indicative numbers.
 
 Limit: 3 seeds, 50 eval episodes and 20k steps make the table indicative
-ordering evidence, not claim-grade. This table is v1.1; it supersedes the
-5k-step v1 table of 2026-11-14. Rollout success stayed at the floor for
-every arm at both budgets (clean 2%/4%/2% at 20k steps), so success deltas
-cannot separate defects in this protocol - held-out MSE is the outcome
-metric. `stuck_joint_30pct` freezes a joint in more
-than `stuck_warn_share` (25%) of episodes, so stuck-actuator reports that
-joint as INFO, not WARN - its row measures harm the score does not charge.
+ordering evidence, not claim-grade. This table is v1.2; it supersedes the
+v1.1 four-arm table of 2026-11-15 (which superseded the 5k-step v1 table
+of 2026-11-14). Rollout success stayed at the floor for every arm at both
+budgets (clean 2%/4%/2% at 20k steps), so success deltas cannot separate
+defects in this protocol - held-out MSE is the outcome metric.
+`stuck_joint_30pct` freezes a joint in more than `stuck_warn_share` (25%)
+of episodes, so stuck-actuator reports that joint as INFO, not WARN - its
+row measures harm the score does not charge. `dropped_frames_10pct_25pct`
+is measured benign on pusht/diffusion at 20k steps (+3.3% mean held-out
+MSE, seeds -8.9% to +16.2%); the dropped-frames check stays WARN because
+frame gaps still signal a broken recording pipeline.
 
 ## stats-drift
 
