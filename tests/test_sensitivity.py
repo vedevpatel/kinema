@@ -55,6 +55,9 @@ CEILINGS = {
     "stats-drift": 0, "timestamp-grid": 0, "dropped-frames": 0, "calibration-drift": 1,
     "nan-and-normalization": 0, "duplicate-and-leakage": 0, "deployment-readiness": 0,
     "idle-segments": 2, "stuck-actuator": 3, "action-saturation": 2, "outlier-episodes": 4,
+    # episode-file-pointers: 0 - every eval-half dataset's shard pointers match
+    # their files (measured 2026-11-15); the lerobot#2401 rollover bug is a WARN
+    "episode-file-pointers": 0,
 }
 
 

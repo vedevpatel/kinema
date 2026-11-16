@@ -157,6 +157,7 @@ def _registry() -> list[Check]:
     from kinema.checks.metadata import (
         CameraCoverageCheck,
         EmbeddedImagesCheck,
+        EpisodeFilePointersCheck,
         RewardDoneCheck,
         TaskStringsCheck,
     )
@@ -178,6 +179,7 @@ def _registry() -> list[Check]:
         OutlierEpisodesCheck(),
         EmbeddedImagesCheck(),
         CameraCoverageCheck(),
+        EpisodeFilePointersCheck(),
         TaskStringsCheck(),
         RewardDoneCheck(),
         VisualQualityCheck(),

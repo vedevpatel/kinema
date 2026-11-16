@@ -45,6 +45,7 @@ format v3.0 | 206 episodes | 25650 frames | fps 10.0
  outlier-episodes      WARN     2 episode(s) to review, 23 mild, of 206; worst: [107, 159, 15, 97, ...]
  embedded-images       PASS     no image features declared
  camera-coverage       PASS     1 camera(s) over 206 episodes; 0 missing segments
+ episode-file-pointers PASS     every shard pointer matches its file's contents (206 episodes, 1 shard(s))
  task-strings          PASS     206 episodes, 1 tasks in meta/tasks; 0 finding(s)
  reward-done           WARN     done is True before the last frame in 206 episodes - the trajectory continues after termination
  visual-quality        SKIP     pass --video to run (downloads MP4s; needs the video extra)
@@ -75,6 +76,7 @@ lives in [docs/checks.md](docs/checks.md).
 | `outlier-episodes` | IQR outliers on the harmful side only: duration and end pose within a task, jerk/velocity per dim in std units without grippers or velocity commands (recognised by name or by tracking the state's delta, not its level - a spike beyond a velocity dim's own step scale still counts). WARN when two independent signals agree or one is far out (Tukey k=3, >=3x median, and for end pose >= half the end-pose range) | a handful of broken episodes dominate the gradient |
 | `embedded-images` | image features stored inside the parquet shards instead of MP4 video chunks | bloated shards; every frame decodes on read |
 | `camera-coverage` | episodes with no video for a declared camera (v3 segment metadata, or the v2.1 files with `--video`) | a modality silently drops out for those episodes |
+| `episode-file-pointers` | v3 episode metadata naming a shard that does not hold the episode's rows (the [lerobot#2401](https://github.com/huggingface/lerobot/issues/2401) converter rollover bug) | LeRobot loads only the metadata-named file - the episode silently vanishes from training |
 | `task-strings` | empty task strings, frames pointing at a `task_index` the task table does not define, episode tasks with no table entry | language conditioning trains on `""` or an unrecoverable task |
 | `reward-done` | constant or NaN reward, `done` never True, `done` True mid-episode with frames after it | RL / reward-conditioned training gets labels with no signal |
 | `visual-quality` | blur (variance of Laplacian, frames decimated to ~VGA first so one threshold works at any resolution), underexposure (95th-percentile brightness) and overexposure (pixels clipped at the codec's brightest level), per camera, sampled inside each episode's segment (v2.1 per-episode and v3 shared MP4s) | bad visuals cost ~30% of training loss ([HF GIGO](https://huggingface.co/blog/robotdata/gigo)). Needs `--video` and the `video` extra |

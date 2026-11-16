@@ -27,6 +27,7 @@ KNOWN_DEFECTS = [
     "duplicates",
     "outlier-episodes",
     "deployment",
+    "stale-file-pointer",
 ]
 
 _FPS = 10
@@ -63,11 +64,17 @@ def make_dataset(
     velocity_dim: bool = False,
     action_mode: str = "position",
     delta_scale: float = 1.0,
+    shards: int = 1,
 ) -> Path:
     defects = defects or []
     unknown = set(defects) - set(KNOWN_DEFECTS)
     if unknown:
         raise ValueError(f"unknown defects: {sorted(unknown)} (known: {KNOWN_DEFECTS})")
+    if "stale-file-pointer" in defects and shards < 2:
+        raise ValueError(
+            "stale-file-pointer needs shards >= 2 (the converter bug lives at the "
+            "file-rollover boundary)"
+        )
     if action_mode not in ("position", "delta"):
         raise ValueError(f"unknown action_mode: {action_mode!r}")
     rng = np.random.default_rng(seed)
@@ -169,7 +176,27 @@ def make_dataset(
     if with_state:
         cols["observation.state"] = pa.array(rows_state, type=pa.list_(pa.float64()))
     table = pa.table(cols)
-    pq.write_table(table, root / "data" / "chunk-000" / "file-000.parquet")
+    # episodes fill shard files contiguously, as the v2.1->v3.0 converter
+    # packs them (file-000 until its size cap, then file-001, ...)
+    ep_shard = {ep: min(ep * shards // episodes, shards - 1) for ep in range(episodes)}
+    ep_col = np.asarray(rows_ep)
+    for shard in range(shards):
+        eps_in_shard = {e for e, s in ep_shard.items() if s == shard}
+        if not eps_in_shard:
+            continue
+        sel = np.isin(ep_col, list(eps_in_shard))
+        pq.write_table(table.filter(sel), root / "data" / "chunk-000" / f"file-{shard:03d}.parquet")
+    # the converter rollover bug (huggingface/lerobot#2401): the first episode
+    # of each new file is written there but its metadata keeps the previous
+    # file's pointer
+    stale = "stale-file-pointer" in defects
+    file_idx = []
+    # ep_meta is appended in episode order, so the position IS the episode index
+    for ep, m in enumerate(ep_meta):
+        s = ep_shard[ep]
+        if stale and s > 0 and ep == min(e for e, sh in ep_shard.items() if sh == s):
+            s -= 1
+        file_idx.append(s)
 
     # per-episode stats, as LeRobot v3 writes them (stats/<feature>/<stat>)
     ep_arr = np.asarray(rows_ep)
@@ -187,6 +214,9 @@ def make_dataset(
                 "episode_index": pa.array([m["episode_index"] for m in ep_meta], type=pa.int64()),
                 "length": pa.array([m["length"] for m in ep_meta], type=pa.int64()),
                 "tasks": pa.array([m["tasks"] for m in ep_meta], type=pa.list_(pa.string())),
+                # every real v3 export records the shard each episode lives in
+                "data/chunk_index": pa.array([0] * len(ep_meta), type=pa.int64()),
+                "data/file_index": pa.array(file_idx, type=pa.int64()),
                 **{
                     c: pa.array(v, type=pa.list_(pa.int64() if c.endswith("/count") else pa.float64()))
                     for c, v in ep_cols.items()

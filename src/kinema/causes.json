@@ -8,6 +8,10 @@
     "idle": {
       "keywords": ["doesn't move", "does not move", "not moving", "stays still", "stands still", "no movement", "frozen", "freezes", "freeze", "won't move", "wont move", "barely moves", "stays static", "remains static", "idle", "does nothing"],
       "checks": ["idle-segments", "stuck-actuator"]
+    },
+    "metadata-integrity": {
+      "keywords": ["missing episodes", "fewer episodes", "episodes not loading", "episodes vanish", "episodes disappear", "episode not found", "dataset loads fewer", "empty episode batch"],
+      "checks": ["episode-file-pointers"]
     }
   },
   "causes": [
@@ -100,6 +104,16 @@
       "explanation": "A joint that never moves teaches {policy} to ignore that degree of freedom; a gripper that never actuates in pick/place episodes means the demonstrations never show the grasp the task needs.",
       "docs_section": "stuck-actuator",
       "next_step": "Check whether the joint/gripper is an unused DOF (fine - consider dropping the dim) or a recording/hardware failure (re-record); a commanded joint whose follower never moves points at a dead or blocked motor."
+    },
+    {
+      "id": "stale-episode-file-pointers",
+      "cluster": "metadata-integrity",
+      "title": "v3 episode metadata points at the wrong parquet shard (converter rollover bug)",
+      "indicates": {"check_id": "episode-file-pointers", "min_severity": "WARN", "message_contains": "silently drops out of training"},
+      "confidence": {"WARN": "medium"},
+      "explanation": "The v2.1-to-v3.0 converter wrote the file-rollover boundary episode into the new shard but left its meta/episodes pointer aimed at the previous one (huggingface/lerobot#2401). LeRobot loads only the metadata-named file, so those episodes silently vanish from training while the dataset looks complete on disk - the run just sees less data.",
+      "docs_section": "episode-file-pointers",
+      "next_step": "Re-convert from the v2.1 source with a lerobot build that carries the #2401 fix (or re-export the dataset), then re-run kinema check; until then the flagged episodes never reach training."
     }
   ],
   "blind_spots": [

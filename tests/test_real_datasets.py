@@ -51,6 +51,43 @@ def test_known_healthy_dataset_has_no_fail(source, max_episodes):
     assert not fails, f"{source} ({HEALTHY[source]}) FAILs: {fails}"
 
 
+# the lerobot#2401 converter rollover bug, live in the wild: metadata points
+# the boundary episode at the previous shard. Revisions pinned; if a dataset
+# is re-exported and fixed upstream, re-pin and expect the WARN to go away.
+STALE_POINTERS = {
+    # 3 of 87212 episodes (23108, 46006, 68950) point one shard back
+    "allenai/MolmoAct2-RT-1-Dataset@56f8834c03a6d92820a6d0a0731cf2f85b5689a7":
+        {23108, 46006, 68950},
+    # 1 of 418 episodes (396)
+    "unitreerobotics/G1_Dex3_ToastedBread_Dataset@02cb29161f5adb2981a072aa35b408d82a556d07":
+        {396},
+}
+
+
+@pytest.mark.parametrize("source", sorted(STALE_POINTERS))
+def test_stale_file_pointers_caught_on_known_affected_datasets(source):
+    # a 50-episode sample still judges every episode declared in the
+    # downloaded shards, so the boundary episodes are covered
+    ctx = load_dataset(source, max_episodes=50)
+    res = _run_all(ctx)["episode-file-pointers"]
+    broken = set(res.details.get("broken", []))
+    assert STALE_POINTERS[source] <= broken, (
+        f"{source}: expected {sorted(STALE_POINTERS[source])} in {sorted(broken)}"
+    )
+
+
+def test_stale_file_pointers_quiet_on_clean_v3():
+    # the BlockStacking sibling of the affected ToastedBread export: same
+    # converter, no rollover boundary, must stay clean
+    ctx = load_dataset(
+        "unitreerobotics/G1_Dex3_BlockStacking_Dataset@57faa2cf516e008f96d91fe3b67ad53a74f012e6",
+        max_episodes=50,
+    )
+    res = _run_all(ctx)["episode-file-pointers"]
+    assert res.verdict != Severity.WARN, res.summary
+    assert not res.skipped, res.skip_reason
+
+
 def test_known_defect_still_caught():
     # svla_so100_sorting episodes 8 and 23: nothing moves at all
     ctx = load_dataset("lerobot/svla_so100_sorting@13870ca969084d8ce4d8a0391b06cead78e804ba")

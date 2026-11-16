@@ -50,6 +50,7 @@ def test_clean_dataset_all_clear(clean, cfg):
         "nan-and-normalization",
         "duplicate-and-leakage",
         "outlier-episodes",
+        "episode-file-pointers",
         "deployment-readiness",
     ):
         res = run(check_id, clean, cfg)

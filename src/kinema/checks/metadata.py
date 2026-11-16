@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 
 import numpy as np
+import pyarrow.parquet as pq
 
 from kinema.checks.base import Check, CheckConfig, CheckResult, Finding, Severity
 
@@ -100,6 +101,111 @@ class CameraCoverageCheck(Check):
             ))
         res.summary = (f"{len(cams)} camera(s) over {len(wanted)} episodes; "
                        f"{sum(len(f.details['episodes']) for f in res.findings)} missing segments")
+        return res
+
+
+_POINTER_LIST_CAP = 10  # findings at most; the summary always carries the full count
+
+
+def _shard_pointers(ctx) -> dict[int, tuple[int, int]] | None:
+    """episode -> (chunk_index, file_index) from meta/episodes, or None when
+    the metadata records no shard locations (early v3 exports)."""
+    ep_dir = ctx.root / "meta" / "episodes"
+    if not ep_dir.is_dir():
+        return None
+    need = ("episode_index", "data/chunk_index", "data/file_index")
+    out: dict[int, tuple[int, int]] = {}
+    for f in sorted(ep_dir.glob("**/*.parquet")):
+        if any(c not in pq.read_schema(f).names for c in need):
+            return None
+        t = pq.read_table(f, columns=list(need))
+        for ep, c, fi in zip(
+            t.column("episode_index").to_pylist(),
+            t.column("data/chunk_index").to_pylist(),
+            t.column("data/file_index").to_pylist(),
+        ):
+            out[int(ep)] = (int(c), int(fi))
+    return out
+
+
+def _data_rel(template: str, chunk: int, file_: int) -> str:
+    try:
+        return template.format(chunk_index=chunk, file_index=file_)
+    except (KeyError, IndexError, ValueError):
+        return f"data/chunk-{chunk:03d}/file-{file_:03d}.parquet"
+
+
+class EpisodeFilePointersCheck(Check):
+    id = "episode-file-pointers"
+    title = "Episode file pointers (v3 shard metadata)"
+
+    def run(self, ctx, cfg: CheckConfig) -> CheckResult:
+        res = CheckResult(self.id, self.title)
+        if not str(ctx.format_version).startswith("v3"):
+            return self.skip("v2.x layout: one parquet per episode, no shard pointers to check")
+        decl = _shard_pointers(ctx)
+        if decl is None:
+            return self.skip("meta/episodes records no shard locations "
+                             "(data/chunk_index, data/file_index)")
+        template = (ctx.info or {}).get("data_path") or \
+            "data/chunk-{chunk_index:03d}/file-{file_index:03d}.parquet"
+
+        # the episode roster of every declared shard that exists locally; a
+        # shard not downloaded (sampled audit) or unreadable is outside
+        # coverage - the loader reports unreadable files itself
+        local: dict[str, set[int]] = {}
+        for c, fi in set(decl.values()):
+            rel = _data_rel(template, c, fi)
+            p = ctx.root / rel
+            if not p.exists():
+                continue
+            try:
+                local[rel] = {int(e) for e in
+                              pq.read_table(p, columns=["episode_index"])
+                              .column("episode_index").to_pylist()}
+            except Exception:  # noqa: BLE001
+                continue
+        if not local:
+            return self.skip("no declared data shards available locally to check against")
+        actual = {e: rel for rel, eps in local.items() for e in eps}
+
+        broken: list[tuple[int, str, str | None]] = []
+        judged = 0
+        for ep, (c, fi) in sorted(decl.items()):
+            rel = _data_rel(template, c, fi)
+            if rel not in local:
+                continue  # shard not local: outside this run's coverage
+            judged += 1
+            if ep not in local[rel]:
+                broken.append((ep, rel, actual.get(ep)))
+
+        for ep, want, got in broken[:_POINTER_LIST_CAP]:
+            res.findings.append(Finding(
+                self.id, Severity.WARN,
+                f"episode {ep}: metadata points at {want} but its rows are not there"
+                + (f" - they live in {got}" if got else "")
+                + "; LeRobot loads only the metadata-named file, so the episode "
+                "silently drops out of training",
+                episode_index=ep,
+                details={"declared": want, "actual": got},
+            ))
+        if judged == len(decl):
+            coverage = f"{judged} episodes, {len(local)} shard(s)"
+        else:
+            coverage = (f"checked {judged} of {len(decl)} catalogued episodes "
+                        f"against {len(local)} local shard(s)")
+        if broken:
+            res.summary = (
+                f"{len(broken)} episode(s) point at a shard that does not contain their "
+                "rows - the v2.1->v3.0 converter rollover bug "
+                "(https://github.com/huggingface/lerobot/issues/2401): those episodes "
+                "silently vanish from LeRobot training loads. Re-convert or re-export "
+                f"with a fixed lerobot to repair the metadata ({coverage})"
+            )
+        else:
+            res.summary = f"every shard pointer matches its file's contents ({coverage})"
+        res.details = {"broken": [ep for ep, _, _ in broken], "judged": judged,
+                       "catalogued": len(decl), "local_shards": len(local)}
         return res
 
 

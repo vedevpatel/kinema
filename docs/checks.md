@@ -357,6 +357,33 @@ out for those episodes. Uses v3 segment metadata, or the v2.1 files with
 
 No knobs.
 
+## episode-file-pointers
+
+v3 episode metadata pointing at a parquet shard that does not contain the
+episode's rows - the v2.1-to-v3.0 converter's file-rollover bug
+([huggingface/lerobot#2401](https://github.com/huggingface/lerobot/issues/2401)):
+the boundary episode is written into the new shard but its
+`data/chunk_index` / `data/file_index` still name the previous one. LeRobot
+loads only the metadata-named file, so the episode silently drops out of
+training while the dataset looks complete on disk. kinema's own loader reads
+the shards directly, so no other check sees it: this check compares each
+catalogued episode's declared shard against the shard's actual episode
+roster (one column read per shard).
+
+Every catalogued episode whose declared shard is available locally is
+checked. One WARN per broken episode (the first 10 are listed, with the
+shard its rows actually live in when that shard is local). A single broken
+pointer is a converter defect: re-convert or re-export with a fixed lerobot.
+Found live in official exports (allenai/MolmoAct2-RT-1-Dataset,
+unitreerobotics/G1_Dex3_ToastedBread_Dataset, LightwheelAI/Lightwheel-Tasks-X7S).
+
+Known limits: v2.x layouts skip (one parquet per episode, nothing to point
+wrong); a sampled audit judges only episodes whose declared shard was
+downloaded - the summary reports the coverage; a shard the loader could not
+read is outside coverage and reported by the loader itself.
+
+No knobs.
+
 ## task-strings
 
 Empty task strings, frames pointing at a `task_index` the task table does
