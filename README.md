@@ -1,5 +1,8 @@
 # kinema
 
+[![PyPI](https://img.shields.io/pypi/v/kinema)](https://pypi.org/project/kinema/)
+[![CI](https://github.com/vedevpatel/kinema/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/vedevpatel/kinema/actions/workflows/ci.yml?query=branch%3Amain)
+
 Quality checks for [LeRobot](https://github.com/huggingface/lerobot) robot-learning datasets.
 
 Your fine-tune failed and the loss looked fine. The problem is almost always in the data:
@@ -8,8 +11,7 @@ leader and follower arm, episodes that are mostly the robot sitting still, times
 the sampling grid. kinema finds those before you burn the GPU hours.
 
 ```bash
-# not on PyPI yet - install from the repo
-pip install "git+https://github.com/vedevpatel/kinema"
+pip install kinema
 # or from source: git clone https://github.com/vedevpatel/kinema && pip install -e kinema
 
 kinema check lerobot/pusht                 # straight off the Hugging Face Hub
