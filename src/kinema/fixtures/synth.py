@@ -91,7 +91,7 @@ def make_dataset(
     for ep in range(episodes):
         n = _LEN
         if "outlier-episodes" in defects and ep == episodes - 1:
-            n = _LEN * 5
+            n = _LEN * 8  # far-out duration must clear the 6x-median bar
         t = np.arange(n) / _FPS
         state = _smooth(rng, n, _STATE_DIM)
         # action tracks state (a well-calibrated leader/follower pair)

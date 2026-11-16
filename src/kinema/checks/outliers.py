@@ -12,13 +12,15 @@ commands, so a dim with large units, an open/shut toggle or a base that
 starts and stops does not dominate. Duration and
 end pose are compared within a task: a multi-task dataset legitimately
 ends in different places. An episode is a WARN when independent kinds of
-evidence agree, or when one metric is far out (Tukey k=3, 3x the median).
+evidence agree (static stillness excluded - that is idle-segments' job),
+or when one metric is far out (Tukey k=3, 6x the median).
 
 Two metrics cannot earn a single-metric WARN on their own:
 - static_fraction: a partly-still episode is idle-segments' job, and on a
   dataset whose median stillness is ~5%, "4x the median" is a pause, not a
   glitch (that one path produced most of this check's noise on real data).
-  It still counts toward multi-metric agreement.
+  It no longer counts toward multi-metric agreement either: on real teleop,
+  spike+static pairs were a paused operator, not a glitch.
 - end_pose_deviation: only when the deviation is also >= half the task's
   end-pose range - on tight-range tasks 3x the median is centimetres.
 """
@@ -75,26 +77,34 @@ def _iqr_flags(values: np.ndarray, k: float, side: str = "both",
 
 
 def _far_out(values: np.ndarray, side: str, floor: float, abs_min: float = 0.0) -> np.ndarray:
-    """Beyond Tukey's k=3 fence AND at least 3x (or, two-sided, under 1/3 of)
-    the median AND past abs_min in absolute terms: one metric alone only
-    earns a WARN when it is extreme."""
+    """Beyond Tukey's k=3 fence AND at least _FAR_OUT_REL times (or, two-sided,
+    under 1/_FAR_OUT_REL of) the median AND past abs_min in absolute terms:
+    one metric alone only earns a WARN when it is extreme."""
     fenced = _iqr_flags(values, 3.0, side, rel=0.0, floor=floor)
     ok = np.isfinite(values)
     if not fenced.any() or ok.sum() == 0:
         return fenced
     med = np.median(values[ok])
     v = np.where(ok, values, med)
-    extreme = v > 3 * med if med > 0 else v > med + floor
+    extreme = v > _FAR_OUT_REL * med if med > 0 else v > med + floor
     if side == "both":
-        extreme |= v < med / 3
+        extreme |= v < med / _FAR_OUT_REL
     return fenced & extreme & (np.abs(v) >= abs_min)
 
 
 # metrics that can earn a WARN on their own when far out, and the absolute
 # bar they must also clear. static_fraction is absent on purpose (docstring).
+# one metric alone only earns a WARN when it is extreme: past Tukey k=3 AND
+# at least _FAR_OUT_REL times the median. 6x, not 3x: measured on the calibration
+# halves 2026-11-15 - known-good datasets' far-out episodes cluster at 3.3-4.1x
+# the median (wide-outcome tasks), while an injected one-frame 30-std spike lands
+# at 10-198x. 3x WARNed on 8 of 14 untouched quick datasets; 6x keeps full teeth
+# on the spike floor and clears the known-good noise.
+_FAR_OUT_REL = 6.0
+
 _FAR_OUT_ABS_MIN = {"end_pose_deviation": 0.5}
-# a partly-still episode is idle-segments' job, not a far-out WARN here;
-# static_fraction still counts toward multi-metric agreement
+# a partly-still episode is idle-segments' job: static_fraction earns no WARN
+# here, neither alone nor by counting toward multi-metric agreement
 _FAR_OUT_ELIGIBLE = frozenset(_METRICS) - {"static_fraction"}
 
 
@@ -234,7 +244,11 @@ class OutlierEpisodesCheck(Check):
         )
         n_warn = 0
         for ep, names in worst:
-            families = {_METRICS[n][1] for n in names}
+            # static_fraction counts toward nothing on its own: a partly-still episode is
+            # idle-segments' job (a pause on a low-stillness dataset reads as "4x
+            # the median"), so it no longer earns agreement either - measured on
+            # real teleop (berkeley_mvp), where spike+static pairs were noise
+            families = {_METRICS[n][1] for n in names if n != "static_fraction"}
             warn = len(families) >= 2 or far[ep]
             n_warn += warn
             res.findings.append(

@@ -335,9 +335,20 @@ velocity commands (recognised by name, or structurally: a command that
 tracks some state dim's per-frame delta); a one-frame spike in a velocity
 command still counts, against the dim's own step scale. Duration and end
 pose are compared within a task. An episode is a WARN when independent kinds
-of evidence agree, or one metric is far out (Tukey k=3, >= 3x the median;
+of evidence agree, or one metric is far out (Tukey k=3, >= 6x the median;
 end pose must also clear half the task's end-pose range). static_fraction
-never earns a single-metric WARN on its own - that is idle-segments' job.
+never earns a single-metric WARN and does not count toward agreement either -
+a partly-still episode is idle-segments' job (on a dataset whose median
+stillness is ~5%, "4x the median" is a pause, not a glitch; on real teleop,
+spike+static pairs were a paused operator).
+
+The far-out bar is 6x the median, not 3x: measured on the calibration halves
+(2026-11-15), known-good datasets' far-out episodes cluster at 3.3-4.1x
+(wide-outcome tasks end where the object lands), so 3x WARNed on 8 of 14
+untouched quick datasets; an injected one-frame 30-std spike lands at
+10-198x, so 6x keeps the spike floor with >2x of headroom. What remains
+flagged on known-good data is real (a dead episode, two sim physics
+glitches).
 
 Knobs: `outlier_iqr_k` (1.5).
 
