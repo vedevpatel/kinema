@@ -131,7 +131,7 @@ def find_lerobot_datasets(limit: int, new_lane: int = 0) -> list[dict]:
             break
     recent: list[dict] = []
     if new_lane:
-        for d in api.list_datasets(search="lerobot", sort="createdAt", direction=-1,
+        for d in api.list_datasets(search="lerobot", sort="created_at",
                                    limit=new_lane * 3):
             e = _probe_dataset(api, d.id, d.downloads or 0, getattr(d, "likes", 0) or 0)
             if e:

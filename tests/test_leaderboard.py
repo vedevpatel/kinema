@@ -48,3 +48,33 @@ def test_index_marks_new_lane_rows():
     assert "(new)" in html
     entries[0]["lane"] = "top"
     assert "(new)" not in lb.render_index(entries, "now")
+
+
+def test_hub_listing_kwargs_match_installed_api(monkeypatch):
+    """Listing calls must only use kwargs the installed huggingface_hub accepts.
+
+    hub 2.x removed `direction`; the nightly then died inside
+    find_lerobot_datasets before auditing anything and `|| true` kept the
+    run green. Capture every kwarg both lanes pass and validate against the
+    real signature of the installed HfApi.list_datasets.
+    """
+    import inspect
+
+    from huggingface_hub import HfApi
+
+    lb = _load_leaderboard()
+    calls = []
+
+    class _FakeApi:
+        def list_datasets(self, **kwargs):
+            calls.append(kwargs)
+            return iter([])
+
+    monkeypatch.setattr("huggingface_hub.HfApi", lambda: _FakeApi())
+    lb.find_lerobot_datasets(2, 2)
+
+    assert len(calls) == 2  # top lane + newest lane
+    params = inspect.signature(HfApi.list_datasets).parameters
+    for kwargs in calls:
+        unknown = set(kwargs) - set(params)
+        assert not unknown, f"list_datasets kwargs not in installed hub API: {unknown}"
