@@ -470,11 +470,15 @@ def confidence_label(n_seeds: int) -> str:
 
 
 def build_table(results: dict[tuple[str, int], dict], *, policy: dict, steps: int, eval_episodes: int | None,
-                split: tuple[list[int], list[int]], compute: dict | None = None, date: str | None = None) -> dict:
+                split: tuple[list[int], list[int]], compute: dict | None = None, date: str | None = None,
+                dates: dict[str, str] | None = None) -> dict:
     """The schema-v1 document from per-(arm, seed) results ({"heldout_mse",
     "success_pct" or None}). A defect row uses the seeds where both it and
-    clean finished; a defect with none has no row yet."""
+    clean finished; a defect with none has no row yet. `dates` overrides a
+    defect row's measured date (table_from_manifest passes the arm's finish
+    day); `date` remains the document's generation day and the row fallback."""
     date = date or dt.date.today().isoformat()
+    dates = dates or {}
     rows = []
     for defect, spec in DEFECTS.items():
         seeds = sorted(s for (a, s) in results if a == defect and ("clean", s) in results)
@@ -496,7 +500,7 @@ def build_table(results: dict[tuple[str, int], dict], *, policy: dict, steps: in
             "mse_delta_pct": {"per_seed": [round(x, 3) for x in mse], "mean": round(_mean(mse), 3)},
             "success_delta_pts": ({"per_seed": [round(x, 3) for x in succ], "mean": round(_mean(succ), 3)}
                                   if succ is not None else {"per_seed": [None] * len(seeds), "mean": None}),
-            "date": date,
+            "date": dates.get(defect, date),
             "confidence": confidence_label(len(seeds)),
         })
     runs = [{"arm": a, "seed": s, **{k: v for k, v in r.items() if k in _RUN_FIELDS}}
@@ -614,13 +618,22 @@ def table_from_manifest(manifest: Manifest, cfg: RunConfig, split: tuple[list[in
     results = {(r["arm"], r["seed"]): r for r in manifest.data["runs"].values()
                if r.get("status") == "done" and r.get("config") == cfg.key}
     gpus = sorted({r.get("gpu", "?") for r in results.values()})
+    # each row's date is the day the arm's measurement COMPLETED (its latest
+    # finished run), not the day the table happened to be regenerated - a
+    # regen must not re-stamp old measurements
+    dates = {}
+    for (arm, _seed), r in results.items():
+        if r.get("finished"):
+            d = r["finished"][:10]
+            if arm not in dates or d > dates[arm]:
+                dates[arm] = d
     return build_table(
         results,
         policy={"name": "diffusion", "source": POLICY_SOURCE, "rollouts": True,
                 "batch_size": cfg.batch_size, "optimizer": "Adam lr=1e-4 (example)",
                 "num_inference_steps": "config default (= num_train_timesteps, 100)",
                 "normalization_stats": "per arm, from the arm's own training frames"},
-        steps=cfg.steps, eval_episodes=cfg.eval_episodes, split=split,
+        steps=cfg.steps, eval_episodes=cfg.eval_episodes, split=split, dates=dates,
         compute={"gpu": gpus, "table_runs_gpu_hours": round(sum(r["gpu_seconds"] for r in results.values()) / 3600, 3),
                  "ledger_gpu_hours": round(manifest.spent_seconds() / 3600, 3),
                  "ceiling_gpu_hours": manifest.data["ceiling_gpu_hours"]},

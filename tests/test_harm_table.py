@@ -433,3 +433,23 @@ def test_new_injectors_deterministic_per_seed():
         b = fn(eps, np.random.default_rng(3))
         assert all(np.array_equal(x[0], y[0]) and np.array_equal(x[1], y[1])
                    for x, y in zip(a, b, strict=True))
+
+
+def test_table_from_manifest_keeps_each_arms_measured_date(tmp_path, monkeypatch):
+    """A regen must not re-stamp old measurements: each row's date is the day
+    the arm's runs finished (from the manifest), not the table's build day."""
+    m = ht.Manifest(tmp_path / "m.json")
+    m.save()
+    cfg = ht.RunConfig(steps=20000, eval_episodes=50)
+    days = iter(["2026-11-15T01:00:00Z"] * 12 + ["2026-11-16T02:00:00Z"] * 6)
+    monkeypatch.setattr(ht, "_utcnow", lambda: next(days))
+    for arm, v in (("clean", 100.0), ("duplicates_20pct", 110.0), ("idle_start_30f", 175.0)):
+        for s in (0, 1, 2):
+            key = ht.run_key(cfg, arm, s)
+            m.start(key, cfg, arm, s)
+            m.finish(key, {"heldout_mse": v, "success_pct": 50.0}, gpu_seconds=1.0)
+    doc = ht.table_from_manifest(m, cfg, (list(range(120)), list(range(120, 144))))
+    rows = {r["defect"]: r for r in doc["rows"]}
+    assert rows["duplicates_20pct"]["date"] == "2026-11-15"
+    assert rows["idle_start_30f"]["date"] == "2026-11-16"
+    assert ht.validate_table(doc) == []
