@@ -170,6 +170,73 @@ def dropped_frames_self_check(eps, seed: int, drop: float = 0.10, fraction: floa
     return []
 
 
+def inject_outlier_burst(eps, rng, fraction: float = 0.05, burst: int = 6, sigma: float = 8.0):
+    """A burst of far-out action frames in ~5% of episodes - the
+    outlier-episodes check's target (an episode whose velocity jumps far
+    past the rest of the dataset). `burst` consecutive interior frames get
+    +sigma x the train split's per-dim action std on every dim; states are
+    untouched and so are the first and last frames."""
+    scale = np.std(np.concatenate([a for _, a in eps], axis=0), axis=0)
+    k = int(round(fraction * len(eps)))
+    pick = set(rng.choice(len(eps), size=min(k, len(eps)), replace=False).tolist())
+    out = []
+    for i, (s, a) in enumerate(eps):
+        if i in pick and len(a) > burst + 2:
+            a = a.copy()
+            start = int(rng.integers(1, len(a) - burst - 1))
+            a[start:start + burst] = a[start:start + burst] + sigma * scale
+        out.append((s, a))
+    return out
+
+
+def outlier_burst_self_check(eps, seed: int, fraction: float = 0.05, burst: int = 6,
+                             sigma: float = 8.0) -> list[str]:
+    """Problems with the outlier_burst recipe on these episodes ([] = pass):
+    round(5%) of episodes gain exactly one contiguous burst of `burst`
+    interior frames offset by +sigma x the per-dim action std, states and
+    boundary frames untouched, the same seed gives the same output."""
+    problems = []
+    out = inject_outlier_burst(eps, np.random.default_rng(seed), fraction, burst, sigma)
+    again = inject_outlier_burst(eps, np.random.default_rng(seed), fraction, burst, sigma)
+    if len(out) != len(eps):
+        return [f"episode count changed: {len(eps)} -> {len(out)}"]
+    if any(not (np.array_equal(s, s2) and np.array_equal(a, a2))
+           for (s, a), (s2, a2) in zip(out, again)):
+        problems.append("not seed-deterministic")
+    for (s, _), (s0, _) in zip(out, eps):
+        if not np.array_equal(s, s0):
+            problems.append("a state was modified")
+            break
+    scale = np.std(np.concatenate([a for _, a in eps], axis=0), axis=0)
+    changed = 0
+    for (_, a), (_, a0) in zip(out, eps):
+        if a.shape != a0.shape:
+            problems.append("an episode changed length")
+            continue
+        diff = [i for i in range(len(a)) if not np.array_equal(a[i], a0[i])]
+        if not diff:
+            continue
+        changed += 1
+        if diff[0] < 1 or diff[-1] > len(a) - 2:
+            problems.append("a boundary frame was modified")
+        if len(diff) != burst or any(d2 - d1 != 1 for d1, d2 in zip(diff, diff[1:])):
+            problems.append(f"changed frames are not one contiguous burst of {burst}: {len(diff)}")
+        if not np.allclose(a[diff] - a0[diff], sigma * scale, rtol=1e-6, atol=1e-9):
+            problems.append("burst offset != +sigma x per-dim action std")
+    k = int(round(fraction * len(eps)))
+    if changed != min(k, len(eps)):
+        problems.append(f"burst in {changed}/{len(eps)} episodes, expected {k} (~{fraction:.0%})")
+    return problems
+
+
+def shifted_stats_arrays(state, action, sigma: float):
+    """The stale-stats trick: copies whose per-dim means sit +sigma stds off
+    the real rows (std unchanged). Normalization stats computed from THESE
+    no longer describe the training data - exactly a stale meta/stats.json,
+    the stats-drift check's target. The training rows themselves stay clean."""
+    return state + sigma * state.std(0), action + sigma * action.std(0)
+
+
 def stuck_joint_self_check(eps, seed: int, fraction: float = 0.30) -> list[str]:
     """Problems with the stuck_joint recipe on these episodes ([] = pass):
     exactly one dim frozen to its start value, round(30%) of episodes,
@@ -215,6 +282,9 @@ class Defect:
     recipe: str
     params: dict[str, Any]
     inject: Callable
+    # stats-drift arms: normalization stats are computed from rows shifted
+    # this many stds off the real training rows (the rows stay clean)
+    stats_shift_sigma: float = 0.0
 
 
 DEFECTS: dict[str, Defect] = {
@@ -236,6 +306,14 @@ DEFECTS: dict[str, Defect] = {
     "dropped_frames_10pct_25pct": Defect(
         "dropped-frames", "10% of interior frames deleted in 25% of episodes (first/last kept)",
         {"drop_fraction": 0.10, "episode_fraction": 0.25}, inject_dropped_frames),
+    # harm v2 arms (2026-11-15)
+    "outlier_burst_5pct": Defect(
+        "outlier-episodes", "6-frame burst of +8-std actions in 5% of episodes (states untouched)",
+        {"burst_frames": 6, "action_offset_sigma": 8.0, "episode_fraction": 0.05}, inject_outlier_burst),
+    "stale_stats_offset_0.5sigma": Defect(
+        "stats-drift",
+        "normalization stats computed from training rows shifted +0.5 std; the rows are untouched (a stale stats.json)",
+        {"stats_shift_sigma": 0.5}, hs.inject_clean, stats_shift_sigma=0.5),
 }
 ARMS = ("clean", *DEFECTS)
 
@@ -935,6 +1013,11 @@ class GpuRunner:
         train_eps = inject(arm, fr.episodes(0, TRAIN_EPISODES), seed)
         state, action, img_ids, lengths = arm_arrays(train_eps)
         stats = arm_stats(state, action, img_ids, self._moments)
+        shift = DEFECTS[arm].stats_shift_sigma if arm in DEFECTS else 0.0
+        if shift:
+            # stats-drift arm: normalize with stats describing a shifted copy
+            # of the rows, not the rows themselves (a stale stats.json)
+            stats = arm_stats(*shifted_stats_arrays(state, action, shift), img_ids, self._moments)
 
         # the example, verbatim where it can be: features from the dataset
         # metadata, DiffusionConfig defaults, Adam lr 1e-4

@@ -59,12 +59,14 @@ def test_schema_pin():
     assert doc["schema"] == "kinema.harm-table/v1"
     assert [r["defect"] for r in doc["rows"]] == [
         "duplicates_20pct", "idle_start_30f", "scale_mismatch_0.5x_25pct", "stuck_joint_30pct",
-        "action_saturation_30pct", "dropped_frames_10pct_25pct"]
+        "action_saturation_30pct", "dropped_frames_10pct_25pct",
+        "outlier_burst_5pct", "stale_stats_offset_0.5sigma"]
     assert {r["defect"]: r["check"] for r in doc["rows"]} == {
         "duplicates_20pct": "duplicate-and-leakage", "idle_start_30f": "idle-segments",
         "scale_mismatch_0.5x_25pct": "calibration-drift", "stuck_joint_30pct": "stuck-actuator",
         "action_saturation_30pct": "action-saturation",
-        "dropped_frames_10pct_25pct": "dropped-frames"}
+        "dropped_frames_10pct_25pct": "dropped-frames",
+        "outlier_burst_5pct": "outlier-episodes", "stale_stats_offset_0.5sigma": "stats-drift"}
     row = doc["rows"][0]
     assert set(row) == {"defect", "check", "recipe", "policy", "dataset_revision", "steps", "seeds",
                         "mse_delta_pct", "success_delta_pts", "date", "confidence"}
@@ -73,7 +75,7 @@ def test_schema_pin():
     # duplicates arm: mse 110+s vs clean 100+s; success 45 vs 50
     assert row["mse_delta_pct"]["per_seed"] == [10.0, round(1000 / 101, 3), round(1000 / 102, 3)]
     assert row["success_delta_pts"] == {"per_seed": [-5.0, -5.0, -5.0], "mean": -5.0}
-    assert len(doc["runs"]) == 21
+    assert len(doc["runs"]) == 27
     assert len(json.dumps(doc)) < 100_000
 
 
@@ -453,3 +455,30 @@ def test_table_from_manifest_keeps_each_arms_measured_date(tmp_path, monkeypatch
     assert rows["duplicates_20pct"]["date"] == "2026-11-15"
     assert rows["idle_start_30f"]["date"] == "2026-11-16"
     assert ht.validate_table(doc) == []
+
+
+def test_outlier_burst_self_check_pin():
+    assert ht.outlier_burst_self_check(_eps(), seed=7) == []
+
+
+def test_outlier_burst_self_check_catches_a_broken_recipe(monkeypatch):
+    orig = ht.inject_outlier_burst
+
+    def broken(eps, rng, fraction=0.05, burst=6, sigma=8.0):
+        return orig(eps, rng, fraction, burst, sigma * 0.5)
+
+    monkeypatch.setattr(ht, "inject_outlier_burst", broken)
+    problems = ht.outlier_burst_self_check(_eps(), seed=7)
+    assert any("offset" in p for p in problems)
+
+
+def test_shifted_stats_arrays_moves_mean_only():
+    rng = np.random.default_rng(0)
+    state = rng.standard_normal((500, 3)).cumsum(0)
+    action = rng.standard_normal((500, 2))
+    s2, a2 = ht.shifted_stats_arrays(state, action, 0.5)
+    assert np.allclose(s2.mean(0), state.mean(0) + 0.5 * state.std(0))
+    assert np.allclose(a2.mean(0), action.mean(0) + 0.5 * action.std(0))
+    assert np.allclose(s2.std(0), state.std(0)) and np.allclose(a2.std(0), action.std(0))
+    assert ht.DEFECTS["stale_stats_offset_0.5sigma"].stats_shift_sigma == 0.5
+    assert ht.DEFECTS["outlier_burst_5pct"].check == "outlier-episodes"
