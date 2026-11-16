@@ -1,0 +1,805 @@
+{
+  "source": "Sanjaya-LeRobot/pick_red_lego_bowl_20261115_152432",
+  "format_version": "v3.0",
+  "episodes": 42,
+  "frames": 18222,
+  "fps": 30.0,
+  "truncated": true,
+  "score": 71,
+  "score_model": "tiered-v2",
+  "verdict": "WARN",
+  "checks": [
+    {
+      "id": "stats-drift",
+      "title": "Stats drift (stored normalization stats vs actual data)",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "data matches per-episode stats of the loaded episodes (worst 0% of the FAIL threshold)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 10
+    },
+    {
+      "id": "timestamp-grid",
+      "title": "Timestamp grid (spacing, monotonic, start at 0)",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "evenly spaced at 30 fps and monotonic",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 10
+    },
+    {
+      "id": "dropped-frames",
+      "title": "Dropped / duplicated frames",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "frame_index contiguous; episode lengths and video segments match the data",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 8
+    },
+    {
+      "id": "calibration-drift",
+      "title": "Calibration drift (action vs state on still frames)",
+      "verdict": "WARN",
+      "weight": 10,
+      "weight_basis": "measured",
+      "summary": "1 joint(s) miscalibrated",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "per_joint": {
+          "0": {
+            "joint": 0,
+            "offset_fraction": 0.00043304366112682655,
+            "scale_error": -0.00494209819820115,
+            "r2": 0.07552330140120922,
+            "line_vs_step": 1.0032665816028858,
+            "still_frames": 9752
+          },
+          "1": {
+            "joint": 1,
+            "offset_fraction": -0.016664831873800207,
+            "scale_error": -0.04713629336532083,
+            "r2": 0.6675854790114473,
+            "line_vs_step": 0.9513839802701473,
+            "still_frames": 9990
+          },
+          "2": {
+            "joint": 2,
+            "offset_fraction": -0.015887503489454342,
+            "scale_error": 0.003944953752488372,
+            "r2": 0.014698861996579882,
+            "line_vs_step": 0.9860059262931224,
+            "still_frames": 9399
+          },
+          "3": {
+            "joint": 3,
+            "offset_fraction": -0.004617223185493642,
+            "scale_error": 0.04901439383121326,
+            "r2": 0.12744569331019995,
+            "line_vs_step": 0.9323010152733364,
+            "still_frames": 13053
+          },
+          "4": {
+            "joint": 4,
+            "offset_fraction": 0.0013835548962961724,
+            "scale_error": 0.06820298013169077,
+            "r2": 0.7849333558894387,
+            "line_vs_step": 2.863467685170085,
+            "still_frames": 12126
+          },
+          "5": {
+            "joint": 5,
+            "free_end": "high",
+            "offset_fraction": 0.0013444787881399915,
+            "still_frames": 347,
+            "kind": "gripper"
+          }
+        },
+        "compared_joints": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "compared_grippers": [
+          5
+        ],
+        "compared_deltas": [],
+        "excluded_joints": {}
+      },
+      "findings": [
+        {
+          "severity": "WARN",
+          "message": "joint 4 (wrist_roll.pos): command and measurement drift apart across the range (+6.8% per full range, R^2 0.78) - a scale calibration error (gear ratio or units), not a fixed offset",
+          "episode_index": null,
+          "details": {
+            "joint": 4,
+            "offset_fraction": 0.0013835548962961724,
+            "scale_error": 0.06820298013169077,
+            "r2": 0.7849333558894387,
+            "line_vs_step": 2.863467685170085,
+            "still_frames": 12126,
+            "kind": "scale"
+          }
+        }
+      ],
+      "charge": 10
+    },
+    {
+      "id": "idle-segments",
+      "title": "Idle segments (policy learns to do nothing)",
+      "verdict": "WARN",
+      "weight": 6,
+      "weight_basis": "measured",
+      "summary": "3/42 episodes flagged; worst 100% idle",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "WARN",
+          "message": "episode 4: 100% of frames idle in runs >= 2s; ends with 10.0s idle",
+          "episode_index": 4,
+          "details": {
+            "idle_fraction": 1.0,
+            "idle_runs": 1,
+            "leading_idle_s": 9.966666666666667,
+            "trailing_idle_s": 9.966666666666667
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 5: starts idle for 2.8s (teaches waiting at the start)",
+          "episode_index": 5,
+          "details": {
+            "idle_fraction": 0.2809364548494983,
+            "idle_runs": 1,
+            "leading_idle_s": 2.8,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 41: starts idle for 2.5s (teaches waiting at the start)",
+          "episode_index": 41,
+          "details": {
+            "idle_fraction": 0.16517857142857142,
+            "idle_runs": 1,
+            "leading_idle_s": 2.466666666666667,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 54: ends with 2.7s idle - trim if you want shorter episodes",
+          "episode_index": 54,
+          "details": {
+            "idle_fraction": 0.17857142857142858,
+            "idle_runs": 1,
+            "leading_idle_s": 0.0,
+            "trailing_idle_s": 2.6666666666666665
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 69: ends with 3.2s idle - trim if you want shorter episodes",
+          "episode_index": 69,
+          "details": {
+            "idle_fraction": 0.21651785714285715,
+            "idle_runs": 1,
+            "leading_idle_s": 0.0,
+            "trailing_idle_s": 3.2333333333333334
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 71: ends with 2.2s idle - trim if you want shorter episodes",
+          "episode_index": 71,
+          "details": {
+            "idle_fraction": 0.14955357142857142,
+            "idle_runs": 1,
+            "leading_idle_s": 0.0,
+            "trailing_idle_s": 2.2333333333333334
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 77: ends with 2.3s idle - trim if you want shorter episodes",
+          "episode_index": 77,
+          "details": {
+            "idle_fraction": 0.15178571428571427,
+            "idle_runs": 1,
+            "leading_idle_s": 0.0,
+            "trailing_idle_s": 2.2666666666666666
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 80: ends with 2.4s idle - trim if you want shorter episodes",
+          "episode_index": 80,
+          "details": {
+            "idle_fraction": 0.16071428571428573,
+            "idle_runs": 1,
+            "leading_idle_s": 0.0,
+            "trailing_idle_s": 2.4
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 82: ends with 2.8s idle - trim if you want shorter episodes",
+          "episode_index": 82,
+          "details": {
+            "idle_fraction": 0.1875,
+            "idle_runs": 1,
+            "leading_idle_s": 0.0,
+            "trailing_idle_s": 2.8
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 86: ends with 2.2s idle - trim if you want shorter episodes",
+          "episode_index": 86,
+          "details": {
+            "idle_fraction": 0.14508928571428573,
+            "idle_runs": 1,
+            "leading_idle_s": 0.0,
+            "trailing_idle_s": 2.1666666666666665
+          }
+        }
+      ],
+      "charge": 6
+    },
+    {
+      "id": "stuck-actuator",
+      "title": "Stuck actuators (joints that never move)",
+      "verdict": "WARN",
+      "weight": 10,
+      "weight_basis": "measured",
+      "summary": "1/42 episodes with stuck joints",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "WARN",
+          "message": "1/42 episodes where no joint moves at all: [4] - aborted or empty recordings that teach the policy to do nothing",
+          "episode_index": null,
+          "details": {
+            "episodes": [
+              4
+            ]
+          }
+        }
+      ],
+      "charge": 10
+    },
+    {
+      "id": "action-saturation",
+      "title": "Action saturation (commands clipped at the limits)",
+      "verdict": "PASS",
+      "weight": 6,
+      "weight_basis": "placeholder",
+      "summary": "no continuous action dim pinned at a limit above 5% (5 dims checked)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 6
+    },
+    {
+      "id": "nan-and-normalization",
+      "title": "NaN / Inf and normalization hazards",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "no NaN/Inf; all dims have usable variance",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 10
+    },
+    {
+      "id": "duplicate-and-leakage",
+      "title": "Duplicate episodes / train-eval leakage",
+      "verdict": "PASS",
+      "weight": 2,
+      "weight_basis": "measured",
+      "summary": "no exact, partial or near duplicates",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 2
+    },
+    {
+      "id": "outlier-episodes",
+      "title": "Outlier episodes (duration, jerk, velocity, static, end-pose)",
+      "verdict": "WARN",
+      "weight": 3,
+      "weight_basis": "placeholder",
+      "summary": "6 episode(s) to review, 1 mild, of 42; worst: [0, 3, 5, 12, 43, 60, 4]",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "metrics": {
+          "duration_s": {
+            "0": 0.6674107142857143,
+            "3": 0.6674107142857143,
+            "4": 0.6674107142857143,
+            "5": 0.6674107142857143,
+            "7": 1.0022321428571428,
+            "9": 1.0,
+            "12": 1.0,
+            "14": 1.0,
+            "16": 1.0,
+            "18": 1.0,
+            "20": 1.0,
+            "22": 1.0,
+            "24": 1.0,
+            "26": 1.0,
+            "29": 1.0,
+            "31": 1.0,
+            "33": 1.0,
+            "35": 1.0,
+            "37": 1.0,
+            "39": 1.0,
+            "41": 1.0,
+            "43": 1.0,
+            "46": 1.0,
+            "48": 1.0,
+            "50": 1.0,
+            "52": 1.0,
+            "54": 1.0,
+            "56": 1.0,
+            "58": 1.0022321428571428,
+            "60": 1.0,
+            "63": 1.0,
+            "65": 1.0,
+            "67": 1.0,
+            "69": 1.0,
+            "71": 1.0,
+            "73": 1.0,
+            "75": 1.0,
+            "77": 1.0,
+            "80": 1.0,
+            "82": 1.0,
+            "84": 1.0,
+            "86": 1.0
+          },
+          "p95_jerk": {
+            "0": 0.02768545238806819,
+            "3": 0.02904480922377701,
+            "4": 0.0,
+            "5": 0.04152790828146778,
+            "7": 0.029044766392690713,
+            "9": 0.032675399576669185,
+            "12": 0.027685392321260525,
+            "14": 0.027685392321260525,
+            "16": 0.02768479165318387,
+            "18": 0.02904479408520341,
+            "20": 0.03460689056859481,
+            "22": 0.03460689056859481,
+            "24": 0.028705243516714142,
+            "26": 0.027685392321260525,
+            "29": 0.03460689056859482,
+            "31": 0.034607115819123555,
+            "33": 0.029044796700607382,
+            "35": 0.027685917905827605,
+            "37": 0.02768599298933718,
+            "39": 0.032675408192117575,
+            "41": 0.027685392321260525,
+            "43": 0.03412356558877387,
+            "46": 0.029044788546700867,
+            "48": 0.03460674040157565,
+            "50": 0.034607190902633145,
+            "52": 0.027685392321260525,
+            "54": 0.027685992989337178,
+            "56": 0.03412955010841391,
+            "58": 0.029044795192903913,
+            "60": 0.034607341069652305,
+            "63": 0.03460628990051817,
+            "65": 0.03460711581912356,
+            "67": 0.03460681548508523,
+            "69": 0.03588129518055868,
+            "71": 0.03460689056859482,
+            "73": 0.03267540926904862,
+            "75": 0.02904482300849444,
+            "77": 0.03176774408838766,
+            "80": 0.034606740401575645,
+            "82": 0.0254142102862059,
+            "84": 0.03630599183726779,
+            "86": 0.029044793469814232
+          },
+          "peak_velocity": {
+            "0": 0.22148433990623748,
+            "3": 0.20694413377997292,
+            "4": 0.0,
+            "5": 0.27685572521683516,
+            "7": 0.22872776826724053,
+            "9": 0.24224883464824037,
+            "12": 0.16611355526371643,
+            "14": 0.12344037963138053,
+            "16": 0.13842786260841758,
+            "18": 0.13796278867407108,
+            "20": 0.15919205701638214,
+            "22": 0.15227055876904785,
+            "24": 0.18687744933764266,
+            "26": 0.18687744933764266,
+            "29": 0.24917003256153633,
+            "31": 0.18687744933764266,
+            "33": 0.15919205701638214,
+            "35": 0.13842756227437927,
+            "37": 0.17995595109030837,
+            "39": 0.21456314199294152,
+            "41": 0.16611355526371643,
+            "43": 0.17995595109030837,
+            "46": 0.14534906052171356,
+            "48": 0.18687744933764266,
+            "50": 0.28377662279609284,
+            "52": 0.23532733640090608,
+            "54": 0.15227055876904785,
+            "56": 0.1661129545956398,
+            "58": 0.16611355526371643,
+            "60": 0.19379894758497695,
+            "63": 0.22840583815357177,
+            "65": 0.2145628416589032,
+            "67": 0.22148494057431414,
+            "69": 0.20072014549827294,
+            "71": 0.17995595109030837,
+            "73": 0.17303475317701242,
+            "75": 0.14534906052171356,
+            "77": 0.17303445284297408,
+            "80": 0.22509715431417365,
+            "82": 0.14534906052171356,
+            "84": 0.1799562514243467,
+            "86": 0.15919205701638214
+          },
+          "velocity_spike": {
+            "0": null,
+            "3": null,
+            "4": null,
+            "5": null,
+            "7": null,
+            "9": null,
+            "12": null,
+            "14": null,
+            "16": null,
+            "18": null,
+            "20": null,
+            "22": null,
+            "24": null,
+            "26": null,
+            "29": null,
+            "31": null,
+            "33": null,
+            "35": null,
+            "37": null,
+            "39": null,
+            "41": null,
+            "43": null,
+            "46": null,
+            "48": null,
+            "50": null,
+            "52": null,
+            "54": null,
+            "56": null,
+            "58": null,
+            "60": null,
+            "63": null,
+            "65": null,
+            "67": null,
+            "69": null,
+            "71": null,
+            "73": null,
+            "75": null,
+            "77": null,
+            "80": null,
+            "82": null,
+            "84": null,
+            "86": null
+          },
+          "static_fraction": {
+            "0": 0.5,
+            "3": 0.4597315436241611,
+            "4": 1.0,
+            "5": 0.3187919463087248,
+            "7": 0.17857142857142858,
+            "9": 0.17225950782997762,
+            "12": 0.28635346756152125,
+            "14": 0.24384787472035793,
+            "16": 0.3087248322147651,
+            "18": 0.174496644295302,
+            "20": 0.2214765100671141,
+            "22": 0.21252796420581654,
+            "24": 0.2483221476510067,
+            "26": 0.21252796420581654,
+            "29": 0.18344519015659955,
+            "31": 0.3042505592841163,
+            "33": 0.29977628635346754,
+            "35": 0.25279642058165547,
+            "37": 0.32662192393736017,
+            "39": 0.27069351230425054,
+            "41": 0.2841163310961969,
+            "43": 0.2371364653243848,
+            "46": 0.24608501118568232,
+            "48": 0.2483221476510067,
+            "50": 0.20134228187919462,
+            "52": 0.28187919463087246,
+            "54": 0.3668903803131991,
+            "56": 0.15436241610738255,
+            "58": 0.25,
+            "60": 0.2348993288590604,
+            "63": 0.2639821029082774,
+            "65": 0.29082774049217003,
+            "67": 0.23937360178970918,
+            "69": 0.3333333333333333,
+            "71": 0.33109619686800895,
+            "73": 0.16778523489932887,
+            "75": 0.24384787472035793,
+            "77": 0.28187919463087246,
+            "80": 0.3221476510067114,
+            "82": 0.3243847874720358,
+            "84": 0.18568232662192394,
+            "86": 0.30648769574944074
+          },
+          "end_pose_deviation": {
+            "0": 0.9948186528814669,
+            "3": 0.9982738999420222,
+            "4": 0.11418684985743735,
+            "5": 0.9021376026060585,
+            "7": 0.2215620405465706,
+            "9": 0.06314879418155128,
+            "12": 0.6885813013486279,
+            "14": 0.15365025147944142,
+            "16": 0.12309007163983338,
+            "18": 0.04668932735704835,
+            "20": 0.03979238898212432,
+            "22": 0.043293686334033035,
+            "24": 0.031141870275692568,
+            "26": 0.10788241142147133,
+            "29": 0.37945676963383995,
+            "31": 0.041522492723410666,
+            "33": 0.03892733828449645,
+            "35": 0.06833910423239502,
+            "37": 0.034804731118377195,
+            "39": 0.24702890619353812,
+            "41": 0.05348046206119653,
+            "43": 0.695056774045551,
+            "46": 0.050173012602857725,
+            "48": 0.18421057866093193,
+            "50": 0.16044153352547205,
+            "52": 0.04487920070901527,
+            "54": 0.050173012602857725,
+            "56": 0.03820022479951006,
+            "58": 0.17232598242226077,
+            "60": 0.7551770140109787,
+            "63": 0.05517828257270419,
+            "65": 0.04844290886157138,
+            "67": 0.027681662206612213,
+            "69": 0.01952464119857317,
+            "71": 0.06228373761884686,
+            "73": 0.036502551629884854,
+            "75": 0.036502551629884854,
+            "77": 0.03806228524083797,
+            "80": 0.05348046206119653,
+            "82": 0.0297324067430826,
+            "84": 0.3149406215897261,
+            "86": 0.17062830925263556
+          }
+        },
+        "flagged": {
+          "0": [
+            "static_fraction",
+            "end_pose_deviation"
+          ],
+          "3": [
+            "static_fraction",
+            "end_pose_deviation"
+          ],
+          "4": [
+            "static_fraction"
+          ],
+          "5": [
+            "end_pose_deviation"
+          ],
+          "12": [
+            "end_pose_deviation"
+          ],
+          "43": [
+            "end_pose_deviation"
+          ],
+          "60": [
+            "end_pose_deviation"
+          ]
+        }
+      },
+      "findings": [
+        {
+          "severity": "WARN",
+          "message": "episode 0: IQR outlier on static_fraction, end_pose_deviation (far out)",
+          "episode_index": 0,
+          "details": {
+            "metrics": [
+              "static_fraction",
+              "end_pose_deviation"
+            ],
+            "far_out": true
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 3: IQR outlier on static_fraction, end_pose_deviation (far out)",
+          "episode_index": 3,
+          "details": {
+            "metrics": [
+              "static_fraction",
+              "end_pose_deviation"
+            ],
+            "far_out": true
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 5: IQR outlier on end_pose_deviation (far out)",
+          "episode_index": 5,
+          "details": {
+            "metrics": [
+              "end_pose_deviation"
+            ],
+            "far_out": true
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 12: IQR outlier on end_pose_deviation (far out)",
+          "episode_index": 12,
+          "details": {
+            "metrics": [
+              "end_pose_deviation"
+            ],
+            "far_out": true
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 43: IQR outlier on end_pose_deviation (far out)",
+          "episode_index": 43,
+          "details": {
+            "metrics": [
+              "end_pose_deviation"
+            ],
+            "far_out": true
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 60: IQR outlier on end_pose_deviation (far out)",
+          "episode_index": 60,
+          "details": {
+            "metrics": [
+              "end_pose_deviation"
+            ],
+            "far_out": true
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 4: IQR outlier on static_fraction",
+          "episode_index": 4,
+          "details": {
+            "metrics": [
+              "static_fraction"
+            ],
+            "far_out": false
+          }
+        }
+      ],
+      "charge": 3
+    },
+    {
+      "id": "embedded-images",
+      "title": "Embedded images in the parquet shards",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "no image features declared",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 8
+    },
+    {
+      "id": "camera-coverage",
+      "title": "Per-episode camera coverage",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "1 camera(s) over 42 episodes; 0 missing segments",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 8
+    },
+    {
+      "id": "episode-file-pointers",
+      "title": "Episode file pointers (v3 shard metadata)",
+      "verdict": "SKIP",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "meta/episodes records no shard locations (data/chunk_index, data/file_index)",
+      "details": {},
+      "findings": [],
+      "charge": 8
+    },
+    {
+      "id": "task-strings",
+      "title": "Task strings",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "42 episodes, 0 tasks in meta/tasks; 0 finding(s)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 8
+    },
+    {
+      "id": "reward-done",
+      "title": "Reward / done fields",
+      "verdict": "SKIP",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "no reward/done fields (position-control datasets rarely have them)",
+      "details": {},
+      "findings": [],
+      "charge": 8
+    },
+    {
+      "id": "visual-quality",
+      "title": "Visual quality (blur, lighting)",
+      "verdict": "SKIP",
+      "weight": 6,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "pass --video to run (downloads MP4s; needs the video extra)",
+      "details": {},
+      "findings": [],
+      "charge": 6
+    },
+    {
+      "id": "deployment-readiness",
+      "title": "Deployment readiness (would this dataset serve a policy?)",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "no deployment blockers found",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 10
+    }
+  ]
+}
