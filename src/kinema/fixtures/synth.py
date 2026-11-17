@@ -28,6 +28,7 @@ KNOWN_DEFECTS = [
     "outlier-episodes",
     "deployment",
     "stale-file-pointer",
+    "missing-video-file",
 ]
 
 _FPS = 10
@@ -65,6 +66,7 @@ def make_dataset(
     action_mode: str = "position",
     delta_scale: float = 1.0,
     shards: int = 1,
+    cameras: list[str] | None = None,
 ) -> Path:
     defects = defects or []
     unknown = set(defects) - set(KNOWN_DEFECTS)
@@ -75,6 +77,9 @@ def make_dataset(
             "stale-file-pointer needs shards >= 2 (the converter bug lives at the "
             "file-rollover boundary)"
         )
+    if "missing-video-file" in defects and not cameras:
+        raise ValueError("missing-video-file needs cameras= (there is no video to lose otherwise)")
+    cameras = cameras or []
     if action_mode not in ("position", "delta"):
         raise ValueError(f"unknown action_mode: {action_mode!r}")
     rng = np.random.default_rng(seed)
@@ -208,6 +213,19 @@ def make_dataset(
         for feat, arr in feats:
             for k, v in _stats(arr[sel]).items():
                 ep_cols.setdefault(f"stats/{feat}/{k}", []).append(v)
+    # video segments, as LeRobot v3 records them per camera: episodes packed
+    # 5 to a shared MP4, [from, to) seconds inside it. ep_meta is appended in
+    # episode order, so the position IS the episode index.
+    video_cols: dict[str, pa.Array] = {}
+    for cam in cameras:
+        video_cols.update({
+            f"videos/{cam}/chunk_index": pa.array([0] * len(ep_meta), type=pa.int64()),
+            f"videos/{cam}/file_index": pa.array([i // 5 for i in range(len(ep_meta))], type=pa.int64()),
+            f"videos/{cam}/from_timestamp": pa.array(
+                [(i % 5) * _LEN / _FPS for i in range(len(ep_meta))], type=pa.float64()),
+            f"videos/{cam}/to_timestamp": pa.array(
+                [(i % 5 + 1) * _LEN / _FPS for i in range(len(ep_meta))], type=pa.float64()),
+        })
     pq.write_table(
         pa.table(
             {
@@ -217,6 +235,7 @@ def make_dataset(
                 # every real v3 export records the shard each episode lives in
                 "data/chunk_index": pa.array([0] * len(ep_meta), type=pa.int64()),
                 "data/file_index": pa.array(file_idx, type=pa.int64()),
+                **video_cols,
                 **{
                     c: pa.array(v, type=pa.list_(pa.int64() if c.endswith("/count") else pa.float64()))
                     for c, v in ep_cols.items()
@@ -225,6 +244,18 @@ def make_dataset(
         ),
         root / "meta" / "episodes" / "chunk-000" / "file-000.parquet",
     )
+    # placeholder MP4s: existence checks only need the path to be there (the
+    # visual check is not part of fixture runs). The missing-video-file
+    # defect leaves the last camera's last shard on the floor: the metadata
+    # points at it, the repo does not hold it.
+    for cam in cameras:
+        n_files = (episodes + 4) // 5
+        for fi in range(n_files):
+            if "missing-video-file" in defects and cam == cameras[-1] and fi == n_files - 1:
+                continue
+            p = root / "videos" / cam / "chunk-000" / f"file-{fi:03d}.mp4"
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(b"")
     pq.write_table(
         pa.table(
             {
@@ -252,18 +283,21 @@ def make_dataset(
     if with_state:
         features["observation.state"] = {"dtype": "float64", "shape": [_STATE_DIM], "names": _NAMES}
 
+    for cam in cameras:
+        features[cam] = {"dtype": "video", "shape": [480, 640, 3],
+                         "names": ["height", "width", "channels"]}
+
     (root / "meta" / "stats.json").write_text(json.dumps(stats, indent=2))
-    (root / "meta" / "info.json").write_text(
-        json.dumps(
-            {
-                "codebase_version": "v3.0",
-                "fps": _FPS,
-                "total_episodes": episodes,
-                "total_frames": global_index,
-                "features": features,
-                "data_path": "data/chunk-{chunk_index:03d}/file-{file_index:03d}.parquet",
-            },
-            indent=2,
-        )
-    )
+    info = {
+        "codebase_version": "v3.0",
+        "fps": _FPS,
+        "total_episodes": episodes,
+        "total_frames": global_index,
+        "features": features,
+        "data_path": "data/chunk-{chunk_index:03d}/file-{file_index:03d}.parquet",
+    }
+    if cameras:
+        info["video_path"] = "videos/{video_key}/chunk-{chunk_index:03d}/file-{file_index:03d}.mp4"
+        info["chunks_size"] = 1000
+    (root / "meta" / "info.json").write_text(json.dumps(info, indent=2))
     return root

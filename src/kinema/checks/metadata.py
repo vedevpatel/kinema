@@ -16,9 +16,13 @@ import numpy as np
 import pyarrow.parquet as pq
 
 from kinema.checks.base import Check, CheckConfig, CheckResult, Finding, Severity
+from kinema.dataset import DatasetError, _load_episode_meta
 
 _EMPTY_TASK_WARN_SHARE = 0.05  # WARN when >= 5% of episodes lack a task string
 _MISSING_VIDEO_WARN_SHARE = 0.10  # WARN when a camera misses >= 10% of episodes
+# video-file-pointers: metadata naming video files the repo does not hold
+_MISSING_VIDEO_FILE_WARN_SHARE = 0.10  # WARN at >= 10% of episodes losing a camera
+_MISSING_VIDEO_FILE_FAIL_SHARE = 0.50  # FAIL at half the dataset
 
 
 def _image_features(ctx) -> dict[str, dict]:
@@ -213,6 +217,119 @@ class EpisodeFilePointersCheck(Check):
             res.summary = f"every shard pointer matches its file's contents ({coverage})"
         res.details = {"broken": [ep for ep, _, _ in broken], "judged": judged,
                        "catalogued": len(decl), "local_shards": len(local)}
+        return res
+
+
+class VideoFilePointersCheck(Check):
+    """Metadata referencing video files the repo does not contain.
+
+    The video sibling of episode-file-pointers: LeRobot fetches the
+    metadata-named MP4 for an episode's camera, so when the file was never
+    uploaded (an interrupted export, files pruned by hand) the episode's
+    rows load but its video does not decode - and the failure surfaces far
+    from the cause. The referenced paths come from the v3 segment columns or
+    the v2.x video_path template; they are checked against the repo's full
+    file listing when the caller holds one (board audits), else the files
+    on disk - a partial video download is not evidence about files it never
+    fetched."""
+
+    id = "video-file-pointers"
+    title = "Video file pointers (metadata vs repo contents)"
+
+    def run(self, ctx, cfg: CheckConfig) -> CheckResult:
+        res = CheckResult(self.id, self.title)
+        cams = _video_features(ctx)
+        if not cams:
+            return self.skip("no video cameras declared")
+        template = (ctx.info or {}).get("video_path")
+        if not template:
+            return self.skip("no video_path template in meta/info.json")
+        chunk_size = int((ctx.info or {}).get("chunks_size") or 1000)
+
+        if ctx.repo_files is not None:
+            existing = {p for p in ctx.repo_files if p.startswith("videos/")}
+            basis = "the repo file listing"
+        elif ctx.video_partial:
+            return self.skip("episode videos only partially fetched - pointer "
+                             "existence needs the full repo file listing")
+        else:
+            existing = {p.relative_to(ctx.root).as_posix()
+                        for p in ctx.root.glob("videos/**/*") if p.is_file()}
+            basis = "the files on disk"
+
+        def render(cam: str, ep: int, ch: int, fi: int) -> str | None:
+            try:
+                # both naming generations, as the loader's video targeting does
+                return template.format(video_key=cam, episode_index=ep,
+                                       episode_chunk=ep // chunk_size,
+                                       chunk_index=ch, file_index=fi)
+            except (KeyError, IndexError, ValueError):
+                return None
+
+        # (camera, referenced path) -> the episodes pointing at it
+        pointed: dict[tuple[str, str], set[int]] = {}
+        if ctx.video_segments:
+            for ep, per_cam in ctx.video_segments.items():
+                for cam, (ch, fi, _from, _to) in per_cam.items():
+                    path = render(cam, ep, ch, fi)
+                    if path is None:
+                        return self.skip("video_path template did not render")
+                    pointed.setdefault((cam, path), set()).add(ep)
+        elif "episode_index" in template:
+            try:
+                episodes = _load_episode_meta(ctx.root)
+            except DatasetError:
+                return self.skip("no episode metadata to render pointers from")
+            for e in episodes:
+                for cam in cams:
+                    path = render(cam, e.index, e.index // chunk_size, e.index)
+                    if path is None:
+                        return self.skip("video_path template did not render")
+                    pointed.setdefault((cam, path), set()).add(e.index)
+        else:
+            return self.skip("v3 layout without segment metadata: no pointers to check")
+        if not pointed:
+            return self.skip("no video pointers in the metadata")
+
+        catalogued = len({e for eps in pointed.values() for e in eps})
+        missing = sorted(k for k in pointed if k[1] not in existing)
+        if not missing:
+            res.summary = (f"all {len(pointed)} metadata-referenced video files exist "
+                           f"({basis})")
+            res.details = {"referenced": len(pointed), "missing": 0}
+            return res
+
+        missing_by_cam: dict[str, list[str]] = {}
+        for cam, path in missing:
+            missing_by_cam.setdefault(cam, []).append(path)
+        for cam in sorted(missing_by_cam)[:_POINTER_LIST_CAP]:
+            paths = missing_by_cam[cam]
+            affected = sorted({e for p in paths for e in pointed[(cam, p)]})
+            share = len(affected) / max(catalogued, 1)
+            sev = (Severity.FAIL if share >= _MISSING_VIDEO_FILE_FAIL_SHARE
+                   else Severity.WARN if share >= _MISSING_VIDEO_FILE_WARN_SHARE
+                   else Severity.INFO)
+            res.findings.append(Finding(
+                self.id, sev,
+                f"camera {cam}: the metadata references {len(paths)} video file(s) the repo "
+                f"does not contain ({len(affected)}/{catalogued} episodes affected, "
+                f"e.g. {paths[0]}) - LeRobot fetches the metadata-named path, so those "
+                "episodes have no video to decode",
+                details={"camera": cam, "missing_files": paths[:20], "episodes": affected},
+            ))
+        total_eps = sorted({e for key in missing for e in pointed[key]})
+        cam_bits = ", ".join(
+            f"{cam} {len({e for p in ps for e in pointed[(cam, p)]})}/{catalogued}"
+            for cam, ps in sorted(missing_by_cam.items())
+        )
+        res.summary = (
+            f"{len(missing)} video file(s) referenced by the metadata are missing from the "
+            f"repo - {len(total_eps)}/{catalogued} episodes lose a camera's video ({cam_bits}); "
+            "re-export or restore the files "
+            f"(checked {len(pointed)} referenced files against {basis})"
+        )
+        res.details = {"referenced": len(pointed), "missing": len(missing),
+                       "episodes_affected": total_eps, "basis": basis}
         return res
 
 

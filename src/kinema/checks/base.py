@@ -160,6 +160,7 @@ def _registry() -> list[Check]:
         EpisodeFilePointersCheck,
         RewardDoneCheck,
         TaskStringsCheck,
+        VideoFilePointersCheck,
     )
     from kinema.checks.outliers import OutlierEpisodesCheck
     from kinema.checks.stats_drift import StatsDriftCheck
@@ -180,6 +181,7 @@ def _registry() -> list[Check]:
         EmbeddedImagesCheck(),
         CameraCoverageCheck(),
         EpisodeFilePointersCheck(),
+        VideoFilePointersCheck(),
         TaskStringsCheck(),
         RewardDoneCheck(),
         VisualQualityCheck(),

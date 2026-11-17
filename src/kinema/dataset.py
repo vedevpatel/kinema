@@ -171,6 +171,11 @@ class DatasetContext:
     # dataset): what is on disk then says nothing about the episodes that
     # were not fetched, so disk-based camera coverage does not apply
     video_partial: bool = False
+    # full repo file listing (root-relative paths) when the caller holds one
+    # (the board's audit passes dataset_info's siblings): metadata checks
+    # can then verify file pointers against the repo itself instead of a
+    # partial local download
+    repo_files: list[str] | None = None
     # per-episode {feature: {stat: array}} for EVERY catalogued episode
     # (meta is always complete, even when the frame data is sampled)
     episode_stats: dict = field(default_factory=dict, repr=False)
@@ -386,11 +391,22 @@ def _resolve_source(
     revision = None
     if "@" in src:
         src, revision = src.rsplit("@", 1)
+    # owner/name//sub/path addresses a dataset nested inside a larger repo - a
+    # LeRobot root is any directory holding meta/info.json. "//" cannot appear
+    # in a Hub repo id, so the address is unambiguous.
+    subpath = ""
+    if "//" in src:
+        src, subpath = src.split("//", 1)
+        subpath = subpath.strip("/")
+        if not subpath or any(seg in ("", ".", "..") for seg in subpath.split("/")):
+            raise DatasetError(f"{source!r}: bad nested-dataset address (subpath {subpath!r})")
     patterns = ["meta/**", "*.json", "*.jsonl"]
     if video and max_episodes is None:
         patterns.append("videos/**")
     if max_episodes is None:
         patterns.append("data/**")
+    if subpath:
+        patterns = [f"{subpath}/{p}" for p in patterns]
     try:
         local = Path(
             snapshot_download(
@@ -400,12 +416,15 @@ def _resolve_source(
         if max_episodes is not None:
             # sampled audit: fetch only the shards the sampled episodes live
             # in (droid's full data/ is ~14 GB; a 50-episode sample is not)
-            targets = _target_data_files(local, max_episodes) or ["data/**"]
+            target_root = local / subpath if subpath else local
+            targets = _target_data_files(target_root, max_episodes) or ["data/**"]
             if video:
                 # sampled --video audits fetch only the video shards of the
                 # sampled episodes, not the whole videos/ tree (823 files
                 # for a 4-episode DROID sample before this)
-                targets += _target_video_files(local, max_episodes) or ["videos/**"]
+                targets += _target_video_files(target_root, max_episodes) or ["videos/**"]
+            if subpath:
+                targets = [f"{subpath}/{t}" for t in targets]
             snapshot_download(
                 repo_id=src,
                 repo_type="dataset",
@@ -414,6 +433,11 @@ def _resolve_source(
             )
     except Exception as e:  # noqa: BLE001 - surface a clean message
         raise DatasetError(f"could not download {src} from the Hugging Face Hub: {e}")
+    if subpath:
+        local = local / subpath
+        if not local.is_dir():
+            raise DatasetError(f"{src}//{subpath}: nothing under {subpath!r} in the repo")
+        return local, f"{src}//{subpath}"
     return local, src
 
 

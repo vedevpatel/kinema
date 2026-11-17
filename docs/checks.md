@@ -395,6 +395,32 @@ read is outside coverage and reported by the loader itself.
 
 No knobs.
 
+## video-file-pointers
+
+Episode metadata pointing at a video file the repo does not contain - the
+video sibling of episode-file-pointers. LeRobot fetches the metadata-named
+MP4 for an episode's camera; when that object was never uploaded (an export
+interrupted mid-upload, files pruned by hand), the episode's rows load but
+its video does not decode, and the failure surfaces far from the cause.
+
+v3 pointers come from the segment columns in meta/episodes; v2.x paths are
+rendered from `video_path` per episode and camera. The referenced paths are
+checked against the repo's full file listing on Hub audits (no video
+download needed) or against the files on disk for a local dataset - a
+partial video download is not evidence about files it never fetched, so
+that case skips. One finding per affected camera: INFO under 10% of
+catalogued episodes, WARN at 10%, FAIL at 50% - half the dataset losing a
+camera is a different defect class than a stray file. Found live in
+OpenMOSS-Team/robodojo_lerobot_v3.0 (100 of 593 referenced files missing,
+half the episodes affected; the twin export robodojo-lerobot-v3.0 is
+complete).
+
+Known limits: v3 exports without segment columns skip (no pointers to
+resolve); episodes with no segment recorded at all are camera-coverage's
+case, not this check's.
+
+No knobs.
+
 ## task-strings
 
 Empty task strings, frames pointing at a `task_index` the task table does

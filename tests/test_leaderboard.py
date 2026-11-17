@@ -417,3 +417,158 @@ def test_download_sample_skips_dual_layout_leftovers(monkeypatch, tmp_path):
     lb.download_sample("org/ds", 10**9, tmp_path)
     assert "data/chunk-000/file-000.parquet" in downloaded
     assert not any("episode_" in n for n in downloaded)
+
+
+# --- nested datasets (repo//subpath) ---------------------------------------
+
+
+def _fake_item(path, size=0):
+    from huggingface_hub.hf_api import RepoFile
+
+    return RepoFile(path=path, size=size, oid=None, lfs=None,
+                    lastCommit=None, security=None)
+
+
+def _fake_dir(path):
+    from huggingface_hub.hf_api import RepoFolder
+
+    return RepoFolder(path=path, oid=None, lastCommit=None)
+
+
+def _fake_api(paths, gated=False):
+    """paths: [(path, size)] of FILES; dirs are derived. Supports the
+    non-recursive per-directory listing + get_paths_info shape."""
+    import types
+
+    files = [(p, s) for p, s in paths]
+
+    def children(prefix):
+        out = {}
+        for p, s in files:
+            if prefix and not p.startswith(prefix + "/"):
+                continue
+            rest = p[len(prefix) + 1:] if prefix else p
+            head, _, tail = rest.partition("/")
+            if tail:
+                out.setdefault(prefix + "/" + head if prefix else head, None)
+            else:
+                out[p] = s
+        return out
+
+    class _Api:
+        def dataset_info(self, repo_id, **kw):
+            return types.SimpleNamespace(gated=gated, downloads=100, likes=5)
+
+        def list_repo_tree(self, repo_id, repo_type=None, path_in_repo=None, recursive=False):
+            if recursive:
+                prefix = path_in_repo or ""
+                return iter([_fake_item(p, s) for p, s in files
+                             if not prefix or p.startswith(prefix + "/")])
+            return iter([_fake_dir(p) if s is None else _fake_item(p, s)
+                         for p, s in children(path_in_repo or "").items()])
+
+        def get_paths_info(self, repo_id, paths, repo_type=None):
+            have = {p for p, _ in files}
+            return [_fake_item(p, 0) for p in paths if p in have]
+
+    return _Api()
+
+
+def _tree_paths(*task_specs):
+    """Build a fake repo tree: (task, data_bytes) pairs at depth 1."""
+    out = []
+    for task, data_bytes in task_specs:
+        out.append((f"{task}/meta/info.json", 10))
+        out.append((f"{task}/data/chunk-000/file-000.parquet", data_bytes))
+        out.append((f"{task}/videos/chunk-000/file-000.mp4", 999))
+    return out
+
+
+def test_probe_nested_finds_roots_and_ranks_by_data_bytes():
+    lb = _load_leaderboard()
+    api = _fake_api(
+        [("meta/info.json", 10)]  # root-level dataset: the plain probe's row
+        + _tree_paths(("task_b", 50), ("task_a", 100))
+        + [("assets/meta/info.json", 10),          # never a dataset root
+           (".hidden/meta/info.json", 10),         # dot dirs are not datasets
+           ("a/very/deep/dir/meta/info.json", 10)]  # past the depth cap
+    )
+    out = lb._probe_nested(api, "org/repo", seats=1)
+    assert [d["id"] for d in out] == ["org/repo//task_a"]
+    assert out[0]["subpath"] == "task_a"
+    assert out[0]["repo_scope"] is True
+    assert out[0]["data_bytes"] == 100  # data/ only, not the videos
+    assert out[0]["downloads"] == 100  # repo-level counts, marked repo_scope
+    # both roots are found when the seats allow them, bigger first
+    out2 = lb._probe_nested(api, "org/repo", seats=5)
+    assert [d["id"] for d in out2] == ["org/repo//task_a", "org/repo//task_b"]
+
+
+def test_probe_nested_descends_into_container_dirs():
+    lb = _load_leaderboard()
+    # Teleop-Sim's shape: a LeRobot/ container holding the task datasets
+    api = _fake_api(_tree_paths(("LeRobot/task_x", 80), ("LeRobot/task_y", 60))
+                    + [("HDF5/task_x/file-000.h5", 500)])
+    out = lb._probe_nested(api, "org/repo", seats=5)
+    assert [d["id"] for d in out] == ["org/repo//LeRobot/task_x", "org/repo//LeRobot/task_y"]
+
+
+def test_probe_nested_skips_gated_and_caps_a_root_listing(monkeypatch):
+    lb = _load_leaderboard()
+    assert lb._probe_nested(_fake_api(_tree_paths(("task_a", 1)), gated=True),
+                            "org/repo", 5) == []
+    assert lb._probe_nested(_fake_api([]), "org/repo", 5) == []
+    # an over-cap data/ listing sizes that root as 0 instead of costing
+    # the repo its rows
+    monkeypatch.setattr(lb, "_NESTED_ROOT_MAX_ITEMS", 0)
+    out = lb._probe_nested(_fake_api(_tree_paths(("task_b", 50), ("task_a", 100))),
+                           "org/repo", 5)
+    assert [d["id"] for d in out] == ["org/repo//task_a", "org/repo//task_b"]
+    assert all(d["data_bytes"] == 0 for d in out)
+
+
+def test_index_marks_nested_rows_and_footnotes_repo_level_downloads():
+    lb = _load_leaderboard()
+    entries = [{"id": "org/repo//task_a", "slug": "org--repo----task_a", "downloads": 5,
+                "lane": "flagship", "subpath": "task_a", "repo_scope": True,
+                "report": {"verdict": "PASS", "score": 100, "score_model": "tiered-v2",
+                           "episodes": 10, "truncated": False, "checks": []}}]
+    html = lb.render_index(entries, "now")
+    assert "(nested)</span>" in html
+    assert "download counts are repo-level" in html
+    entries[0].pop("subpath")
+    assert "(nested)</span>" not in lb.render_index(entries, "now")
+
+
+def test_download_sample_nested_filters_siblings_and_prefixes_fetches(monkeypatch, tmp_path):
+    import types
+
+    lb = _load_leaderboard()
+    sib = [
+        types.SimpleNamespace(rfilename="other/meta/info.json", size=10),
+        types.SimpleNamespace(rfilename="task_a/meta/info.json", size=10),
+        types.SimpleNamespace(rfilename="task_a/data/chunk-000/file-000.parquet", size=100),
+        types.SimpleNamespace(rfilename="task_a/videos/chunk-000/file-000.mp4", size=100),
+        types.SimpleNamespace(rfilename="unrelated/file.txt", size=1),
+    ]
+    monkeypatch.setattr("huggingface_hub.dataset_info",
+                        lambda *a, **k: types.SimpleNamespace(siblings=sib))
+    downloaded = []
+
+    def fake_dl(rid, name, dest):
+        downloaded.append((rid, name))
+        p = Path(dest) / name
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("x")
+
+    monkeypatch.setattr(lb, "_hub_download", fake_dl)
+    root, sizes = lb.download_sample("org/repo//task_a", 10**9, tmp_path)
+    # the nested root is returned; names are root-relative in sizes but
+    # repo-relative on the wire
+    assert root == tmp_path / "task_a"
+    assert sorted(sizes) == ["data/chunk-000/file-000.parquet", "meta/info.json",
+                             "videos/chunk-000/file-000.mp4"]
+    assert ("org/repo", "task_a/meta/info.json") in downloaded
+    assert ("org/repo", "task_a/data/chunk-000/file-000.parquet") in downloaded
+    assert not any(n.startswith("other/") or n.startswith("unrelated/")
+                   for _, n in downloaded)

@@ -80,6 +80,125 @@ def badge(v: str) -> str:
     return f'<span class="badge b-{v}">{v}</span>'
 
 
+def _probe_nested(api, repo_id: str, seats: int) -> list[dict]:
+    """Board entries for the LeRobot datasets nested inside one repo.
+
+    Any directory holding meta/info.json is a LeRobot root - the same gate
+    the root-level probe applies. Discovery is a breadth-first walk with
+    batched existence checks (a full recursive listing does not fit giant
+    repos: X-Embodiment-Sim's tree is 200k+ items); sizing reads each
+    root's data/ subtree only, and an over-cap or unreadable root sizes as
+    0 and ranks last rather than costing the repo its rows. Gated repos contribute nothing (their
+    subpath downloads 403 like the root's). Rows carry repo-level download
+    counts (HF exposes no per-directory stats) marked with repo_scope, and
+    ride the flagship lane so repo-level numbers never pollute the
+    download-ranked top lane."""
+    try:
+        from huggingface_hub.hf_api import RepoFile
+    except ImportError:  # older hub: duck-typing fallback below
+        RepoFile = None
+    try:
+        info = api.dataset_info(repo_id)
+    except Exception as e:  # noqa: BLE001 - e.g. a 429 after a heavy audit
+        print(f"{repo_id}: dataset_info failed ({type(e).__name__}) - "
+              "skipping nested seats this run", flush=True)
+        return []
+    if getattr(info, "gated", None):
+        return []
+    calls = 0
+
+    def is_file(item) -> bool:
+        if RepoFile is not None:
+            return isinstance(item, RepoFile)
+        return getattr(item, "size", None) is not None
+
+    # breadth-first root discovery: list a directory, batch-check each child
+    # for meta/info.json, descend into non-root children (containers like
+    # Teleop-Sim's LeRobot/ dir) up to the depth cap
+    roots: list[str] = []
+    frontier = [""]
+    while frontier:
+        current = frontier.pop(0)
+        try:
+            items = list(api.list_repo_tree(repo_id, repo_type="dataset",
+                                            path_in_repo=current or None,
+                                            recursive=False))
+        except Exception as e:  # noqa: BLE001 - one repo must not stall discovery
+            print(f"{repo_id}: nested listing failed at {current or '/'!r} "
+                  f"({type(e).__name__}) - skipping nested seats this run", flush=True)
+            return []
+        calls += 1
+        cand = []
+        for item in items:
+            if is_file(item):
+                continue
+            p = item.path
+            parts = p.split("/")
+            if any(seg in _NESTED_SKIP_DIRS or seg.startswith(".") for seg in parts):
+                continue
+            cand.append(p)
+        if not cand:
+            continue
+        try:
+            found = api.get_paths_info(
+                repo_id, [f"{c}/meta/info.json" for c in cand], repo_type="dataset")
+        except Exception as e:  # noqa: BLE001
+            print(f"{repo_id}: nested existence check failed ({type(e).__name__}) - "
+                  "skipping nested seats this run", flush=True)
+            return []
+        calls += 1
+        have = {o.path[: -len("/meta/info.json")] for o in found if is_file(o)}
+        for c in cand:
+            depth = len(c.split("/"))
+            if c in have:
+                if depth <= _NESTED_MAX_DEPTH:
+                    roots.append(c)
+            elif depth < _NESTED_MAX_DEPTH:
+                frontier.append(c)
+        if calls > _NESTED_MAX_CALLS:
+            print(f"{repo_id}: nested probe over {_NESTED_MAX_CALLS} API calls - "
+                  "skipping nested seats this run", flush=True)
+            return []
+    if not roots:
+        return []
+    # seat order: subpath data bytes, from each root's data/ subtree only
+    # (videos/ is where the item count explodes). Each root's listing is
+    # capped: a giant repo (X-Embodiment-Sim: 132 roots, 100k+ data files
+    # in total) must not stall discovery, so an over-cap or failed root
+    # sizes as 0 and ranks last rather than costing the repo its rows.
+    data_bytes: dict[str, int] = {}
+    for r in sorted(roots):
+        total = 0
+        count = 0
+        try:
+            for item in api.list_repo_tree(repo_id, repo_type="dataset",
+                                           path_in_repo=f"{r}/data", recursive=True):
+                count += 1
+                if count > _NESTED_ROOT_MAX_ITEMS:
+                    print(f"{repo_id}: {r!r} data listing over "
+                          f"{_NESTED_ROOT_MAX_ITEMS} items - sized as 0, "
+                          "ranking it last", flush=True)
+                    total = 0
+                    break
+                total += getattr(item, "size", None) or 0
+        except Exception as e:  # noqa: BLE001 - one root must not stall the probe
+            print(f"{repo_id}: data listing failed for {r!r} ({type(e).__name__}) - "
+                  "sized as 0, ranking it last", flush=True)
+            total = 0
+        calls += 1
+        data_bytes[r] = total
+        if calls > _NESTED_MAX_CALLS:
+            print(f"{repo_id}: nested probe over {_NESTED_MAX_CALLS} API calls - "
+                  "remaining roots sized as 0", flush=True)
+            break
+    downloads = getattr(info, "downloads", 0) or 0
+    likes = getattr(info, "likes", 0) or 0
+    ranked = sorted(roots, key=lambda r: (-data_bytes[r], r))[:seats]
+    return [{"id": f"{repo_id}//{sub}", "downloads": downloads, "likes": likes,
+             "data_bytes": data_bytes[sub], "subpath": sub, "repo_scope": True}
+            for sub in ranked]
+
+
 def _probe_dataset(api, repo_id: str, downloads: int, likes: int,
                    skip_gated: bool = False) -> dict | None:
     """The board entry for one Hub dataset, or None when it has no LeRobot
@@ -114,6 +233,36 @@ def _probe_dataset(api, repo_id: str, downloads: int, likes: int,
 FLAGSHIP_ORG_SEATS = {"RoboCOIN": 25, "unitreerobotics": 15}
 # individual flagship datasets the search misses for the same reason
 FLAGSHIP_SEEDS = ("GT-111/agibotworld_alpha_v3_eef",)
+# datasets nested inside a larger repo - a LeRobot root below the repo top,
+# addressed as repo//subpath. Curated seats per repo, riding the flagship
+# lane: verified structures only, no automatic nested discovery (spec and
+# recon: docs say agibot-world/AgiBotWorld2026 is NOT one - raw tarballs)
+NESTED_REPO_SEATS = {
+    "nvidia/PhysicalAI-Robotics-GR00T-X-Embodiment-Sim": 10,
+    "nvidia/PhysicalAI-Robotics-GR00T-Teleop-Sim": 8,
+    "Traly/AgiBotWorld-Alpha-lerobot": 8,
+    "Traly/RoboMIND-lerobot": 4,
+}
+# bounds on one repo's nested probe: a giant repo skips and logs instead of
+# stalling discovery (X-Embodiment-Sim's full tree is 200k+ items)
+_NESTED_ROOT_MAX_ITEMS = 20_000  # files in one root's data/ listing before it sizes as 0
+_NESTED_MAX_CALLS = 500  # Hub API calls per repo probe
+_NESTED_MAX_DEPTH = 3  # subpath components (X-Embodiment-Sim is 1, Teleop-Sim 2)
+# directory names that are never dataset roots
+_NESTED_SKIP_DIRS = ("assets", "simulation", "HDF5", "data", "videos", "meta")
+
+
+def _split_subpath(repo_id: str) -> tuple[str, str]:
+    """repo//subpath -> (repo, subpath); '//' cannot appear in a Hub repo id."""
+    if "//" in repo_id:
+        repo, sub = repo_id.split("//", 1)
+        return repo, sub.strip("/")
+    return repo_id, ""
+
+
+def _pref(prefix: str, name: str) -> str:
+    """A root-relative path back to its repo-relative form under a subpath."""
+    return f"{prefix}/{name}" if prefix else name
 
 
 def _merge_lanes(top: list[dict], recent: list[dict], limit: int, new_lane: int,
@@ -185,6 +334,12 @@ def find_lerobot_datasets(limit: int, new_lane: int = 0) -> list[dict]:
                            getattr(d, "likes", 0) or 0)
         if e:
             flagship.append(e)
+    for nested_repo, seats in NESTED_REPO_SEATS.items():
+        try:
+            flagship.extend(_probe_nested(api, nested_repo, seats))
+        except Exception as e:  # noqa: BLE001 - one repo must not stall discovery
+            print(f"{nested_repo}: nested probe failed ({type(e).__name__}) - skipping",
+                  flush=True)
     return _merge_lanes(top, recent, limit, new_lane, flagship)
 
 
@@ -335,27 +490,36 @@ def download_sample(repo_id: str, cap_bytes: int, dest: Path) -> tuple[Path, dic
     real sample; v2.1 keeps one parquet per episode, so the first files
     are the first episodes. Either way the audit covers actual data.
 
-    Returns the sample root and the Hub's file-size map, so the caller can
-    budget a video subsample without a second dataset_info call.
+    A repo//subpath address samples the dataset nested at subpath: the
+    sibling list is filtered to the subpath and every returned path is
+    relative to the nested root.
+
+    Returns the sample root (dest, or dest/<subpath> for a nested dataset)
+    and the Hub's file-size map keyed by root-relative paths, so the caller
+    can budget a video subsample without a second dataset_info call.
     """
     from huggingface_hub import dataset_info
 
+    base, prefix = _split_subpath(repo_id)
+    root = dest / prefix if prefix else dest
     sib = [
         (s.rfilename, s.size or 0)
-        for s in (dataset_info(repo_id, files_metadata=True).siblings or [])
+        for s in (dataset_info(base, files_metadata=True).siblings or [])
     ]
+    if prefix:
+        sib = [(n[len(prefix) + 1:], sz) for n, sz in sib if n.startswith(prefix + "/")]
     sizes = dict(sib)
     picked = [n for n, _ in sib if n.startswith("meta/")]
     # meta always comes down first: every branch needs it, both to audit and
     # to target range reads at row groups overlapping catalogued episodes
     for name in picked:
-        _hub_download(repo_id, name, dest)
+        _hub_download(base, _pref(prefix, name), dest)
     budget = cap_bytes
     data_files = sorted((n, sz) for n, sz in sib if n.startswith("data/"))
     # v3 shard pointers are authoritative: skip stale dual-layout leftovers
     # (episode_*.parquet beside the packed shards) - they would burn the byte
     # cap and hundreds of rate-limited requests for zero audit value
-    shard_map = _meta_shard_map(dest)
+    shard_map = _meta_shard_map(root)
     if shard_map:
         pointed = [(n, sz) for n, sz in data_files if n in set(shard_map.values())]
         if pointed:
@@ -381,23 +545,23 @@ def download_sample(repo_id: str, cap_bytes: int, dest: Path) -> tuple[Path, dic
             # bound range-read memory: decompressed arrow tables run several
             # times the compressed size, and workers share one process
             _range_read_parquet(
-                repo_id, smallest, dest,
-                episodes=_meta_episode_indices(dest),
+                base, _pref(prefix, smallest), dest,
+                episodes=_meta_episode_indices(root),
                 max_bytes=min(cap_bytes, 64 * 1024 * 1024),
             )
         except Exception as e:  # noqa: BLE001
             msg = f"{type(e).__name__}: {e}"
             if "reconstruction" in msg or "cas-server" in msg or "Xet" in msg:
-                _classic_resolve_download(repo_id, smallest, dest)
-                return dest, sizes
+                _classic_resolve_download(base, _pref(prefix, smallest), dest)
+                return root, sizes
             raise DatasetError(
                 f"smallest data shard is {ssize / 1e6:.0f} MB and range-read "
                 f"sampling failed: {msg}"
             )
-        return dest, sizes
+        return root, sizes
     for name in chosen:
-        _hub_download(repo_id, name, dest)
-    return dest, sizes
+        _hub_download(base, _pref(prefix, name), dest)
+    return root, sizes
 
 
 def _clean_reason(msg: str) -> str:
@@ -485,7 +649,9 @@ def audit_one(repo_id: str, max_episodes: int, cap_bytes: int) -> DatasetReport:
     import shutil
     import tempfile
 
-    dest = Path(tempfile.mkdtemp(prefix="kinema-leaderboard-"))
+    base, prefix = _split_subpath(repo_id)
+    tmp_dir = Path(tempfile.mkdtemp(prefix="kinema-leaderboard-"))
+    dest = tmp_dir
     try:
         dest, sizes = download_sample(repo_id, cap_bytes, dest)
         targets_all = _target_video_files(dest, max_episodes) or []
@@ -504,7 +670,9 @@ def audit_one(repo_id: str, max_episodes: int, cap_bytes: int) -> DatasetReport:
             got = 0
             for rel in subset:
                 try:
-                    _hub_download(repo_id, rel, dest)
+                    # dest is the nested root after download_sample; fetch
+                    # through the temp dir's top to land back at dest/rel
+                    _hub_download(base, _pref(prefix, rel), tmp_dir)
                     got += 1
                 except Exception as e:  # noqa: BLE001
                     print(f"{repo_id}: video fetch failed for {rel}: "
@@ -519,6 +687,9 @@ def audit_one(repo_id: str, max_episodes: int, cap_bytes: int) -> DatasetReport:
         # subsample or the single-shard fallback), never the full tree:
         # disk-based camera coverage must defer to the metadata
         ctx.video_partial = True
+        # the full repo file listing lets metadata checks verify file
+        # pointers against the repo itself, not the partial local download
+        ctx.repo_files = sorted(sizes)
         # the checks MUST run before the finally's rmtree: visual-quality
         # reads the downloaded MP4s off disk; every other check works from
         # the context's in-memory tables
@@ -539,7 +710,7 @@ def audit_one(repo_id: str, max_episodes: int, cap_bytes: int) -> DatasetReport:
                 rep.results.append(check.skip(f"check crashed: {type(e).__name__}: {e}"))
         return rep
     finally:
-        shutil.rmtree(dest, ignore_errors=True)
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 def _waiver_note(charge: dict) -> str:
@@ -565,12 +736,16 @@ def render_dataset_page(rep: DatasetReport, audited: str | None = None) -> str:
                 findings.append(
                     f"<li>{badge(f.severity.name)} <code>{esc(r.check_id)}</code> {esc(f.message)}</li>"
                 )
+    hub_base, hub_sub = _split_subpath(rep.source)
+    hub_url = (f"https://huggingface.co/datasets/{hub_base}/tree/main/{hub_sub}"
+               if hub_sub else f"https://huggingface.co/datasets/{hub_base}")
     body = (
         f"<p><a href='../index.html'>&larr; leaderboard</a></p>"
         f"<h1>{esc(rep.source)}</h1>"
         f"<p class=dim>format {esc(rep.format_version)} | {rep.episodes} episodes | "
         f"{rep.frames} frames | fps {esc(rep.fps or '?')}"
-        f"{' | sampled subset' if rep.truncated else ''}</p>"
+        f"{' | sampled subset' if rep.truncated else ''}"
+        f" | <a href='{esc(hub_url)}'>hub</a></p>"
         f"<h2>Health score: {rep.score}/100</h2>"
         f"<table><tr><th>check</th><th>verdict</th><th>summary</th></tr>{rows}</table>"
         f"<h2>Warnings &amp; failures</h2><ul>{''.join(findings) or '<li>none</li>'}</ul>"
@@ -626,6 +801,9 @@ def render_index(entries: list[dict], generated: str, harm_table: bool = False, 
                 link += ' <span class=dim title="newest-uploads probation lane">(new)</span>'
             if e.get("lane") == "flagship":
                 link += ' <span class=dim title="flagship publisher seats">(flagship)</span>'
+            if e.get("subpath"):
+                link += (' <span class=dim title="dataset nested inside a larger repo; '
+                         'downloads are repo-level">(nested)</span>')
 
             score = f"<span class=score>{r['score']}</span>"
             model = r.get("score_model", "legacy-v0")
@@ -663,7 +841,8 @@ def render_index(entries: list[dict], generated: str, harm_table: bool = False, 
         "<a href='https://github.com/vedevpatel/kinema/blob/main/docs/checks.md#health-score'>"
         "details</a>"
         + ("; <a href='harm-table.html'>harm table</a>" if harm_table else "")
-        + "). Ranked by health score; downloads break ties. Scores are not "
+        + "). Ranked by health score; downloads break ties. Rows marked (nested) live "
+        "inside a larger repo; their download counts are repo-level. Scores are not "
         "comparable across score models. Video checks are not run "
         "here (MP4s are hundreds of MB per camera); run <code>kinema check --video</code> "
         "locally.</p>"

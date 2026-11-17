@@ -10,8 +10,8 @@
       "checks": ["idle-segments", "stuck-actuator"]
     },
     "metadata-integrity": {
-      "keywords": ["missing episodes", "fewer episodes", "episodes not loading", "episodes vanish", "episodes disappear", "episode not found", "dataset loads fewer", "empty episode batch"],
-      "checks": ["episode-file-pointers"]
+      "keywords": ["missing episodes", "fewer episodes", "episodes not loading", "episodes vanish", "episodes disappear", "episode not found", "dataset loads fewer", "empty episode batch", "missing video", "video not found", "video fails to load", "no video for some episodes"],
+      "checks": ["episode-file-pointers", "video-file-pointers"]
     }
   },
   "causes": [
@@ -114,6 +114,16 @@
       "explanation": "The v2.1-to-v3.0 converter wrote the file-rollover boundary episode into the new shard but left its meta/episodes pointer aimed at the previous one (huggingface/lerobot#2401). LeRobot loads only the metadata-named file, so those episodes silently vanish from training while the dataset looks complete on disk - the run just sees less data.",
       "docs_section": "episode-file-pointers",
       "next_step": "Re-convert from the v2.1 source with a lerobot build that carries the #2401 fix (or re-export the dataset), then re-run kinema check; until then the flagged episodes never reach training."
+    },
+    {
+      "id": "missing-video-files",
+      "cluster": "metadata-integrity",
+      "title": "Metadata points at video files the repo does not contain",
+      "indicates": {"check_id": "video-file-pointers", "min_severity": "WARN"},
+      "confidence": {"FAIL": "high", "WARN": "medium"},
+      "explanation": "The episode metadata records video shards that are not in the repo. The episode rows all load - the dataset looks complete - but {policy} training that decodes video for those episodes fails on the missing file, or trains with the camera dropped for them.",
+      "docs_section": "video-file-pointers",
+      "next_step": "Re-export or restore the missing video files the check names; until then, exclude the affected episodes (the finding lists them) from any training that reads video."
     }
   ],
   "blind_spots": [
