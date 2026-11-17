@@ -370,12 +370,39 @@ _STATUS_LABELS = {
 }
 
 
-# visual-quality on the board: a spread subsample of episodes' video
-# shards, hard-capped so the nightly run's bandwidth stays bounded. Whole
-# subsample or nothing - a partial download would bias the check toward
-# early shards, so over-cap datasets skip gracefully (logged, not published).
-VIDEO_SAMPLE_EPISODES = 24
+# visual-quality on the board: a spread of the AUDITED episodes' video
+# shards, hard-capped so the nightly run's bandwidth stays bounded. The
+# targets MUST come from _target_video_files(dest, max_episodes) - the check
+# only reads videos of the episodes load_dataset actually loaded, so any
+# other episode sample downloads files the verdict ignores. Whole subsample
+# or nothing at the cap (a partial pick would bias toward early shards);
+# individual files that 404 are skipped - an unfetchable MP4 must never
+# kill an otherwise-good audit.
+VIDEO_SAMPLE_FILES = 24
 VIDEO_CAP_BYTES = 400 * 1000 * 1000
+# rows carry video_audited: 0 = pre-video board, 1 = v1 targeting bug (picked
+# a 24-episode spread disjoint from the loaded episodes - nothing was
+# audited), 2 = current. Lower marks re-audit once, then settle.
+VIDEO_AUDIT_MARK = 2
+
+
+def _video_subsample(targets: list[str], sizes: dict[str, int],
+                     count: int, cap: int) -> list[str] | None:
+    """A spread of up to `count` video files out of `targets`, or None when
+    the pick exceeds `cap` bytes (or a size is unknown, which cannot be
+    budgeted honestly). The ["videos/**"] sentinel (dataset smaller than the
+    episode sample: targeting declined) expands to every videos/ path the
+    Hub lists."""
+    if targets == ["videos/**"]:
+        targets = sorted(p for p in sizes if p.startswith("videos/"))
+    if not targets:
+        return None
+    if len(targets) > count:
+        idx = sorted({round(i * (len(targets) - 1) / (count - 1)) for i in range(count)})
+        targets = [targets[i] for i in idx]
+    if any(p not in sizes for p in targets):
+        return None
+    return targets if sum(sizes[p] for p in targets) <= cap else None
 
 
 def audit_one(repo_id: str, max_episodes: int, cap_bytes: int) -> DatasetReport:
@@ -385,16 +412,23 @@ def audit_one(repo_id: str, max_episodes: int, cap_bytes: int) -> DatasetReport:
     dest = Path(tempfile.mkdtemp(prefix="kinema-leaderboard-"))
     try:
         dest, sizes = download_sample(repo_id, cap_bytes, dest)
-        targets = _target_video_files(dest, VIDEO_SAMPLE_EPISODES) or []
-        video_bytes = sum(sizes.get(t, 0) for t in targets)
-        video = bool(targets) and video_bytes <= VIDEO_CAP_BYTES
-        if video:
-            for rel in targets:
-                _hub_download(repo_id, rel, dest)
-        elif targets:
-            print(f"{repo_id}: video subsample is {video_bytes / 1e6:.0f} MB, over the "
+        ctx = load_dataset(str(dest), max_episodes=max_episodes)
+        targets_all = _target_video_files(dest, max_episodes) or []
+        subset = _video_subsample(targets_all, sizes, VIDEO_SAMPLE_FILES, VIDEO_CAP_BYTES)
+        video = False
+        if subset:
+            got = 0
+            for rel in subset:
+                try:
+                    _hub_download(repo_id, rel, dest)
+                    got += 1
+                except Exception as e:  # noqa: BLE001
+                    print(f"{repo_id}: video fetch failed for {rel}: "
+                          f"{type(e).__name__} - skipping the file", flush=True)
+            video = got > 0
+        elif targets_all:
+            print(f"{repo_id}: video subsample over the "
                   f"{VIDEO_CAP_BYTES / 1e6:.0f} MB cap - visual-quality will skip", flush=True)
-        ctx = load_dataset(str(dest), max_episodes=max_episodes, video=video)
     finally:
         shutil.rmtree(dest, ignore_errors=True)
     rep = DatasetReport(
@@ -404,7 +438,7 @@ def audit_one(repo_id: str, max_episodes: int, cap_bytes: int) -> DatasetReport:
         frames=ctx.row_count,
         fps=ctx.fps,
         truncated=ctx.truncated,
-        video_audited=True,
+        video_audited=VIDEO_AUDIT_MARK,
     )
     cfg = CheckConfig(video=video)
     for check in ALL_CHECKS:
@@ -456,8 +490,9 @@ def render_dataset_page(rep: DatasetReport, audited: str | None = None) -> str:
 
 def audit_stale(entry: dict, engine: str, max_episodes: int) -> bool:
     """Whether a stored board entry is queued for re-audit: older check logic
-    (engine mismatch), a row from before board video audits (video_audited
-    unset), or a truncated audit that a higher --max-episodes would deepen
+    (engine mismatch), a row below the current video_audited mark
+    (unset, or from a superseded video-audit implementation), or a
+    truncated audit that a higher --max-episodes would deepen
     (report.episodes below the current flag). max_episodes=0 disables the
     depth check (rescore-only renders queue nothing). Gated rows are never
     queued; unsupported rows are retried on an engine rotation - a newer
@@ -469,10 +504,10 @@ def audit_stale(entry: dict, engine: str, max_episodes: int) -> bool:
         return entry.get("engine") != engine  # unsupported: retry per engine
     if entry.get("engine") != engine:
         return True
-    if not rep.get("video_audited"):
-        # rows from before board video audits: re-audit once so
-        # visual-quality runs on the capped subsample (or settles as
-        # no-video / over-cap)
+    if (rep.get("video_audited") or 0) < VIDEO_AUDIT_MARK:
+        # rows from before board video audits (0/missing) or from the v1
+        # targeting bug (1): re-audit once so visual-quality runs on the
+        # capped subsample (or settles as no-video / over-cap)
         return True
     return bool(rep.get("truncated")) and int(rep.get("episodes") or 0) < max_episodes
 
