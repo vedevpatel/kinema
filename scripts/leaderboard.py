@@ -384,9 +384,11 @@ VIDEO_CAP_BYTES = 400 * 1000 * 1000
 # a 24-episode spread disjoint from the loaded episodes - nothing was
 # audited), 2 = v2 lifecycle bug (checks ran after the sample dir was
 # deleted, so no video file could ever be seen), 3 = 24-file spread with a
-# hard cap (big-shard datasets skipped), 4 = current (single-shard fallback
-# for over-cap datasets). Lower marks re-audit once, then settle.
-VIDEO_AUDIT_MARK = 4
+# hard cap (big-shard datasets skipped), 4 = single-shard fallback that
+# gave up when the middle target alone was unbudgetable, 5 = current
+# (fallback picks the middle BUDGETABLE shard). Lower marks re-audit once,
+# then settle.
+VIDEO_AUDIT_MARK = 5
 
 
 def _video_subsample(targets: list[str], sizes: dict[str, int],
@@ -410,20 +412,18 @@ def _video_subsample(targets: list[str], sizes: dict[str, int],
 
 def _video_single_shard(targets: list[str], sizes: dict[str, int],
                         cap: int) -> str | None:
-    """Over-cap fallback: one shard, picked from the middle of the sorted
-    target list (median episode range, deterministic - never the first
-    shard, which would bias toward warm-up recordings). None when even one
-    file cannot be budgeted honestly (unknown size, or a single shard
-    already exceeds the cap)."""
+    """Over-cap fallback: one budgetable shard, picked from the middle of
+    the sorted budgetable list (median episode range among the files that
+    fit, deterministic - never biased toward the first shard, which would
+    skew toward warm-up recordings). None when no target can be budgeted
+    honestly (every file over the cap, or none has a known size)."""
     if targets == ["videos/**"]:
         targets = sorted(p for p in sizes if p.startswith("videos/"))
-    if not targets:
+    budgetable = sorted(t for t in targets
+                        if sizes.get(t) is not None and sizes[t] <= cap)
+    if not budgetable:
         return None
-    pick = targets[len(targets) // 2]
-    size = sizes.get(pick)
-    if size is None or size > cap:
-        return None
-    return pick
+    return budgetable[len(budgetable) // 2]
 
 
 def audit_one(repo_id: str, max_episodes: int, cap_bytes: int) -> DatasetReport:

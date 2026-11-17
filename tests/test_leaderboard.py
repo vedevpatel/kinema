@@ -85,14 +85,33 @@ def test_video_single_shard_picks_middle_and_respects_cap():
     sizes = {t: 100 for t in targets}
     # middle of the sorted list - never the first (warm-up) shard
     assert lb._video_single_shard(targets, sizes, 400) == targets[5]
-    assert lb._video_single_shard(targets, sizes, 99) is None  # one file > cap
-    sizes2 = dict(sizes)
-    del sizes2[targets[5]]
-    assert lb._video_single_shard(targets, sizes2, 400) is None  # unknown size
+    assert lb._video_single_shard(targets, sizes, 99) is None  # all files > cap
     assert lb._video_single_shard([], sizes, 400) is None
     # sentinel expansion: only videos/ paths
     s3 = {"videos/a.mp4": 10, "videos/b.mp4": 20, "data/x.parquet": 5}
     assert lb._video_single_shard(["videos/**"], s3, 400) == "videos/b.mp4"
+
+
+def test_video_single_shard_skips_unbudgetable_targets():
+    lb = _load_leaderboard()
+    # regression: v1 checked only the middle target and gave up when IT was
+    # over the cap, even when other targets fit (berkeley_rpt: 98/523/524 MB
+    # targets skipped entirely because the middle one was 523 MB)
+    targets = [f"videos/cam/chunk-000/file-{i:03d}.mp4" for i in range(3)]
+    sizes = {targets[0]: 98, targets[1]: 523, targets[2]: 524}
+    assert lb._video_single_shard(targets, sizes, 400) == targets[0]
+    # the middle of the BUDGETABLE list, not the first fitting file
+    sizes = {targets[0]: 100, targets[1]: 523, targets[2]: 100}
+    assert lb._video_single_shard(targets, sizes, 400) == targets[2]
+    # unlisted targets (missing from the size map) are skipped over, not
+    # treated as a reason to give up (robodojo: meta referenced 88 files
+    # absent from the repo, and the middle pick was one of them)
+    targets = [f"videos/cam/chunk-{i:03d}/file-000.mp4" for i in range(10)]
+    sizes = {t: 100 for t in targets}
+    del sizes[targets[5]]
+    assert lb._video_single_shard(targets, sizes, 400) == targets[4]
+    # nothing budgetable at all -> honest None
+    assert lb._video_single_shard(targets, {}, 400) is None
 
 
 def test_audit_one_falls_back_to_single_shard_when_spread_over_cap(tmp_path, monkeypatch):
@@ -169,7 +188,7 @@ def test_audit_one_falls_back_to_single_shard_when_spread_over_cap(tmp_path, mon
     monkeypatch.setattr(lb, "download_sample", fake_download_sample)
     monkeypatch.setattr(lb, "_hub_download", fake_hub_download)
     rep = lb.audit_one("org/ds", 250, 50 * 1000 * 1000)
-    assert rep.video_audited == 4
+    assert rep.video_audited == 5
     vq = {r.check_id: r for r in rep.results}["visual-quality"]
     assert not vq.skipped, f"visual-quality skipped: {vq.skip_reason}"
     assert downloaded == [vid_rel]  # exactly one shard fetched, not the spread
@@ -239,7 +258,7 @@ def test_audit_one_runs_visual_quality_on_downloaded_videos(tmp_path, monkeypatc
     monkeypatch.setattr(lb, "download_sample", fake_download_sample)
     monkeypatch.setattr(lb, "_hub_download", fake_hub_download)
     rep = lb.audit_one("org/ds", 250, 50 * 1000 * 1000)
-    assert rep.video_audited == 4
+    assert rep.video_audited == 5
     vq = {r.check_id: r for r in rep.results}["visual-quality"]
     assert not vq.skipped, f"visual-quality skipped: {vq.skip_reason}"
 
@@ -279,13 +298,13 @@ def test_audit_stale_reaudits_rows_without_video_audit():
     engine = "e" * 12
     base = {"engine": engine, "report": {"source": "org/ds", "episodes": 10, "truncated": False}}
     assert lb.audit_stale(base, engine, 250) is True  # no video_audited key
-    for legacy in (True, 1, 2, 3):  # every superseded mark re-audits once
+    for legacy in (True, 1, 2, 3, 4):  # every superseded mark re-audits once
         row = {"engine": engine, "report": {**base["report"], "video_audited": legacy}}
         assert lb.audit_stale(row, engine, 250) is True
-    settled = {"engine": engine, "report": {**base["report"], "video_audited": 4}}
+    settled = {"engine": engine, "report": {**base["report"], "video_audited": 5}}
     assert lb.audit_stale(settled, engine, 250) is False
     # depth-staleness still applies on top once video is settled
-    deep = {"engine": engine, "report": {**base["report"], "video_audited": 4, "truncated": True}}
+    deep = {"engine": engine, "report": {**base["report"], "video_audited": 5, "truncated": True}}
     assert lb.audit_stale(deep, engine, 250) is True
 
 
