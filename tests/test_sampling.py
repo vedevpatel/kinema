@@ -7,7 +7,7 @@ import pyarrow.parquet as pq
 import pytest
 
 from kinema.checks import CheckConfig, load_config_overrides
-from kinema.dataset import _spread, _target_data_files
+from kinema.dataset import _meta_shard_map, _spread, _target_data_files
 
 
 def _v3_meta(root, mapping):
@@ -282,3 +282,51 @@ def test_cancelled_spilled_load_leaves_nothing(tmp_path, monkeypatch):
     with pytest.raises(CancelledError, match="while reading"):
         load_dataset(str(root), cancelled=CancelAt(at=probe.calls))  # the last row group
     assert _spill_dirs(tmp) == []
+
+
+def test_meta_shard_map_reads_v3_pointers(tmp_path):
+    _v3_meta(tmp_path, [(0, 0, 0), (1, 0, 0), (2, 0, 1)])
+    assert _meta_shard_map(tmp_path) == {
+        0: "data/chunk-000/file-000.parquet",
+        1: "data/chunk-000/file-000.parquet",
+        2: "data/chunk-000/file-001.parquet",
+    }
+    assert _meta_shard_map(tmp_path / "elsewhere") is None
+
+
+def test_loader_ignores_stale_dual_layout_files(tmp_path):
+    """A twice-converted v3 repo - stale episode_*.parquet beside the packed
+    shards the metadata points to - must not double-count frames. Seen on
+    unitreerobotics/G1_Dex1_Stack_Block: episodes 0-199 loaded once from
+    each layout, and dropped-frames FAILed them on phantom metadata length
+    mismatches."""
+    import pyarrow.compute as pc
+
+    from kinema.fixtures.synth import make_dataset
+    root = make_dataset(tmp_path / "ds", episodes=24)
+    packed = root / "data" / "chunk-000" / "file-000.parquet"
+    t = pq.read_table(packed)
+    pq.write_table(t.filter(pc.equal(t.column("episode_index"), 0)),
+                   root / "data" / "chunk-000" / "episode_000000.parquet")
+    from kinema.dataset import load_dataset
+    ctx = load_dataset(str(root))
+    meta = ctx.meta_for(0)
+    assert meta is not None and len(ctx.rows_for(0)) == meta.length  # not 2x
+
+
+def test_loader_falls_back_to_glob_when_pointed_shards_missing(tmp_path):
+    """The metadata points at packed shards that were never written; a repo
+    holding only per-episode files must still load."""
+    import pyarrow.compute as pc
+
+    from kinema.fixtures.synth import make_dataset
+    root = make_dataset(tmp_path / "ds", episodes=6)
+    packed = root / "data" / "chunk-000" / "file-000.parquet"
+    t = pq.read_table(packed)
+    for e in sorted(set(t.column("episode_index").to_pylist())):
+        pq.write_table(t.filter(pc.equal(t.column("episode_index"), e)),
+                       root / "data" / "chunk-000" / f"episode_{e:06d}.parquet")
+    packed.unlink()
+    from kinema.dataset import load_dataset
+    ctx = load_dataset(str(root))
+    assert ctx.row_count == t.num_rows

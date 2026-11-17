@@ -376,3 +376,44 @@ def test_flagship_probe_skips_gated_repos(monkeypatch):
     out = lb.find_lerobot_datasets(2, 0)
     flag = [d["id"] for d in out if d["lane"] == "flagship"]
     assert flag == ["RoboCOIN/open_b", "RoboCOIN/open_d"]
+
+
+def test_download_sample_skips_dual_layout_leftovers(monkeypatch, tmp_path):
+    """v3 repos carrying stale episode_*.parquet beside the packed shards:
+    the byte cap must buy the shards the metadata points to (seen on
+    unitreerobotics/G1_Dex1_Stack_Block: 200 duplicate files sorted ahead
+    of the packed shards and ate the download budget)."""
+    import types
+
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    lb = _load_leaderboard()
+    sib = [
+        types.SimpleNamespace(rfilename="meta/info.json", size=10),
+        types.SimpleNamespace(rfilename="meta/episodes/chunk-000/file-000.parquet", size=10),
+        types.SimpleNamespace(rfilename="data/chunk-000/episode_000000.parquet", size=100),
+        types.SimpleNamespace(rfilename="data/chunk-000/episode_000001.parquet", size=100),
+        types.SimpleNamespace(rfilename="data/chunk-000/file-000.parquet", size=100),
+    ]
+    monkeypatch.setattr("huggingface_hub.dataset_info",
+                        lambda *a, **k: types.SimpleNamespace(siblings=sib))
+    downloaded = []
+
+    def fake_dl(rid, name, dest):
+        downloaded.append(name)
+        p = Path(dest) / name
+        p.parent.mkdir(parents=True, exist_ok=True)
+        if name == "meta/episodes/chunk-000/file-000.parquet":
+            pq.write_table(pa.table({
+                "episode_index": pa.array([0, 1], type=pa.int64()),
+                "data/chunk_index": pa.array([0, 0], type=pa.int64()),
+                "data/file_index": pa.array([0, 0], type=pa.int64()),
+            }), p)
+        else:
+            p.write_text("x")
+
+    monkeypatch.setattr(lb, "_hub_download", fake_dl)
+    lb.download_sample("org/ds", 10**9, tmp_path)
+    assert "data/chunk-000/file-000.parquet" in downloaded
+    assert not any("episode_" in n for n in downloaded)

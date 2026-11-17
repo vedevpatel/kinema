@@ -436,12 +436,10 @@ def test_duplicate_catalogued_episode_ids_fail_once(base):
     assert not any(len(set(f.details.get("episodes", []))) == 1 for f in dup.findings)
 
 
-def test_unreadable_data_file_is_reported_not_a_crash(base, tmp_path):
-    f = base / "data" / "chunk-000" / "file-000.parquet"
-    good = pq.read_table(f)
-    half = good.num_rows // 2
-    pq.write_table(good.slice(0, half), f)
-    pq.write_table(good.slice(half), base / "data" / "chunk-000" / "file-001.parquet")
+def test_unreadable_data_file_is_reported_not_a_crash(tmp_path):
+    # the corrupt shard must be one the metadata POINTS to: stray unpointed
+    # files under data/ are not read by design (stale dual-layout fix)
+    base = make_dataset(tmp_path / "ds", episodes=24, shards=2)
     broken = base / "data" / "chunk-000" / "file-001.parquet"
     broken.write_bytes(broken.read_bytes()[: len(broken.read_bytes()) // 2])  # truncated
     ctx = load_dataset(str(base))

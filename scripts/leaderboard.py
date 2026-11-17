@@ -28,7 +28,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from kinema.checks import ALL_CHECKS, CheckConfig, Severity  # noqa: E402
-from kinema.dataset import DatasetError, _target_video_files, load_dataset  # noqa: E402
+from kinema.dataset import DatasetError, _meta_shard_map, _target_video_files, load_dataset  # noqa: E402
 from kinema.engine import engine_version  # noqa: E402
 from kinema.report import (  # noqa: E402
     SCORE_MODEL,
@@ -352,6 +352,14 @@ def download_sample(repo_id: str, cap_bytes: int, dest: Path) -> tuple[Path, dic
         _hub_download(repo_id, name, dest)
     budget = cap_bytes
     data_files = sorted((n, sz) for n, sz in sib if n.startswith("data/"))
+    # v3 shard pointers are authoritative: skip stale dual-layout leftovers
+    # (episode_*.parquet beside the packed shards) - they would burn the byte
+    # cap and hundreds of rate-limited requests for zero audit value
+    shard_map = _meta_shard_map(dest)
+    if shard_map:
+        pointed = [(n, sz) for n, sz in data_files if n in set(shard_map.values())]
+        if pointed:
+            data_files = pointed
     # cap file count too: v2.1 keeps one small parquet per episode, and
     # hundreds of per-file requests are what trips the Hub's rate limits.
     # Candidates are spread evenly over the dataset (not the first files:

@@ -234,6 +234,33 @@ class DatasetContext:
         return self._meta_index.get(int(ep_index))
 
 
+def _meta_shard_map(root: Path) -> dict[int, str] | None:
+    """episode_index -> repo-relative packed data shard, from v3 metadata.
+
+    None when the metadata or its shard-location columns are missing or
+    unreadable - callers then fall back to layout guessing. Repos converted
+    twice can carry BOTH the packed file-*.parquet the metadata points to
+    and stale episode_*.parquet leftovers; only the metadata's list is
+    authoritative."""
+    ep_dir = root / "meta" / "episodes"
+    if not ep_dir.is_dir():
+        return None
+    out: dict[int, str] = {}
+    cols = ("episode_index", "data/chunk_index", "data/file_index")
+    for f in sorted(ep_dir.glob("**/*.parquet")):
+        try:
+            names = pq.read_schema(f).names
+            if not all(c in names for c in cols):
+                return None  # episodes parquet without shard locations
+            t = pq.read_table(f, columns=list(cols)).to_pydict()
+        except (OSError, pa.ArrowInvalid, ValueError):
+            return None  # unreadable meta: best-effort only
+        for ep, ch, fi in zip(t[cols[0]], t[cols[1]], t[cols[2]]):
+            if ch is not None and fi is not None:
+                out[int(ep)] = f"data/chunk-{int(ch):03d}/file-{int(fi):03d}.parquet"
+    return out or None
+
+
 def _target_data_files(root: Path, max_episodes: int) -> list[str] | None:
     """Repo-relative data files holding a spread sample of episodes, so a
     sampled Hub audit downloads only the shards it will read.
@@ -249,21 +276,9 @@ def _target_data_files(root: Path, max_episodes: int) -> list[str] | None:
     if not ids or max_episodes >= len(ids):
         return ["data/**"]
     wanted = set(_spread(ids, max_episodes))
-    ep_dir = root / "meta" / "episodes"
-    if ep_dir.is_dir():
-        files: set[str] = set()
-        cols = ("episode_index", "data/chunk_index", "data/file_index")
-        for f in sorted(ep_dir.glob("**/*.parquet")):
-            try:
-                names = pq.read_schema(f).names
-                if not all(c in names for c in cols):
-                    return None  # episodes parquet without shard locations
-                t = pq.read_table(f, columns=list(cols)).to_pydict()
-            except (OSError, pa.ArrowInvalid, ValueError):
-                return None  # unreadable meta: targeting is best-effort
-            for ep, ch, fi in zip(t[cols[0]], t[cols[1]], t[cols[2]]):
-                if int(ep) in wanted and ch is not None and fi is not None:
-                    files.add(f"data/chunk-{int(ch):03d}/file-{int(fi):03d}.parquet")
+    shard_map = _meta_shard_map(root)
+    if shard_map is not None:
+        files = {shard_map[ep] for ep in wanted if ep in shard_map}
         return sorted(files) if files else None
     if (root / "meta" / "episodes.jsonl").exists():
         return [f"data/**/episode_{i:06d}.parquet" for i in sorted(wanted)]
@@ -628,7 +643,17 @@ def load_dataset(
         stats_json, episode_stats, version, [e.index for e in episodes]
     )
 
-    data_files = sorted(root.glob("data/**/*.parquet"))
+    # the metadata's shard pointers (v3) are authoritative over what lies
+    # under data/: twice-converted repos can carry stale episode_*.parquet
+    # files beside the packed shards, and reading both counts the shared
+    # episodes' frames twice. Glob only when the metadata names nothing.
+    shard_map = _meta_shard_map(root)
+    data_files: list[Path] = []
+    if shard_map:
+        data_files = sorted({root / rel for rel in set(shard_map.values())
+                             if (root / rel).is_file()})
+    if not data_files:
+        data_files = sorted(root.glob("data/**/*.parquet"))
     if not data_files:
         raise DatasetError(f"no frame data found under data/ in {root}")
 
