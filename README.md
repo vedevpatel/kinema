@@ -189,6 +189,10 @@ local `kinema check` scans the full dataset. Board audits also fetch a
 so visual-quality runs on the board; a dataset whose spread exceeds the cap
 falls back to the middle shard that still fits the budget, and skips only
 when no shard can be budgeted (the fallback and the skip are logged in the workflow run).
+camera-coverage reads per-episode video segments from the metadata where the
+format records them (v3); on v2.1 datasets it skips on the board rather than
+count videos a sampled audit did not fetch as missing - a full local
+`kinema check` still measures coverage from disk.
 Sampled and full scans can score differently - for example pusht scores 89 on the
 board and 79 on a full local scan, because a 50-episode sample's recomputed stats
 are compared against stats.json values computed over all 206 episodes.

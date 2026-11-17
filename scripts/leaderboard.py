@@ -460,6 +460,10 @@ def audit_one(repo_id: str, max_episodes: int, cap_bytes: int) -> DatasetReport:
                   f"{VIDEO_CAP_BYTES / 1e6:.0f} MB cap and no single shard fits - "
                   f"visual-quality will skip", flush=True)
         ctx = load_dataset(str(dest), max_episodes=max_episodes, video=video)
+        # the board always fetches a targeted video subset (the capped
+        # subsample or the single-shard fallback), never the full tree:
+        # disk-based camera coverage must defer to the metadata
+        ctx.video_partial = True
         # the checks MUST run before the finally's rmtree: visual-quality
         # reads the downloaded MP4s off disk; every other check works from
         # the context's in-memory tables

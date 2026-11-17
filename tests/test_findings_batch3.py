@@ -255,6 +255,47 @@ def test_camera_coverage_v3_segments(tmp_path):
     assert res.findings and res.findings[0].details["episodes"] == [5, 9]
 
 
+def test_camera_coverage_skips_on_partial_video_fetch(tmp_path):
+    # sampled audits (the board, or `kinema check owner/ds --video
+    # --max-episodes N`) fetch only a subset of the episode videos: the
+    # check must skip instead of counting unfetched episodes as missing
+    root = make_dataset(tmp_path / "ds", episodes=24)
+    cam = "observation.images.top"
+    _edit_info(root, lambda info: info["features"].update(
+        {cam: {"dtype": "video", "shape": [480, 640, 3]}}))
+    d = root / "videos" / "chunk-000" / cam
+    d.mkdir(parents=True)
+    for ep in range(0, 24, 3):  # only the "fetched" subset on disk
+        (d / f"episode_{ep:06d}.mp4").write_bytes(b"")
+    ctx = load_dataset(str(root))
+    assert not ctx.video_partial  # a local path is whatever the user has
+    ctx.video_partial = True  # a sampled Hub audit sets the flag
+    res = run("camera-coverage", ctx)
+    assert res.skipped
+    assert "partially fetched" in res.skip_reason
+
+
+def test_camera_coverage_v3_segments_survive_partial_fetch(tmp_path):
+    # v3 metadata records per-episode segments and meta/** is always fully
+    # fetched, so coverage stays authoritative even on a sampled audit
+    root = make_dataset(tmp_path / "ds", episodes=24)
+    cam = "observation.images.top"
+    _edit_info(root, lambda info: (info["features"].update(
+        {cam: {"dtype": "video", "shape": [480, 640, 3]}}),
+        info.update({"video_path": "videos/{video_key}/chunk-{chunk_index:03d}/file-{file_index:03d}.mp4"})))
+    mf = root / "meta" / "episodes" / "chunk-000" / "file-000.parquet"
+    m = pq.read_table(mf).to_pydict()
+    m[f"videos/{cam}/chunk_index"] = [0 if e not in (5, 9) else None for e in m["episode_index"]]
+    m[f"videos/{cam}/file_index"] = [0 if e not in (5, 9) else None for e in m["episode_index"]]
+    m[f"videos/{cam}/from_timestamp"] = [e * 6.0 if e not in (5, 9) else None for e in m["episode_index"]]
+    m[f"videos/{cam}/to_timestamp"] = [(e + 1) * 6.0 if e not in (5, 9) else None for e in m["episode_index"]]
+    pq.write_table(pa.table(m), mf)
+    ctx = load_dataset(str(root))
+    ctx.video_partial = True
+    res = run("camera-coverage", ctx)
+    assert res.findings and res.findings[0].details["episodes"] == [5, 9]
+
+
 def _set_episode_tasks(root, updates: dict[int, list[str]]):
     mf = root / "meta" / "episodes" / "chunk-000" / "file-000.parquet"
     m = pq.read_table(mf).to_pydict()

@@ -166,6 +166,11 @@ class DatasetContext:
     reward: np.ndarray | None = None
     done: np.ndarray | None = None
     truncated: bool = False  # True when --max-episodes limited the load
+    # True when only a subset of the dataset's episode videos was fetched
+    # (targeted/sampled Hub downloads, or --video not passed for a Hub
+    # dataset): what is on disk then says nothing about the episodes that
+    # were not fetched, so disk-based camera coverage does not apply
+    video_partial: bool = False
     # per-episode {feature: {stat: array}} for EVERY catalogued episode
     # (meta is always complete, even when the frame data is sampled)
     episode_stats: dict = field(default_factory=dict, repr=False)

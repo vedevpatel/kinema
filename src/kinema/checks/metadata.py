@@ -75,6 +75,13 @@ class CameraCoverageCheck(Check):
                     for cam in per_cam:
                         have.setdefault(cam, set()).add(ep)
         else:
+            if ctx.video_partial:
+                # a sampled audit fetches only a subset of the episode
+                # videos, and v2.1 metadata records no segments to consult
+                # instead: what is on disk says nothing about the episodes
+                # that were not fetched
+                return self.skip("episode videos only partially fetched - "
+                                 "camera coverage needs a full video audit")
             for p in sorted(ctx.root.glob("videos/*/*/episode_*.mp4")):
                 try:
                     ep = int(p.stem.split("_")[-1])
