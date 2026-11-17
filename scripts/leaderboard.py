@@ -383,9 +383,10 @@ VIDEO_CAP_BYTES = 400 * 1000 * 1000
 # rows carry video_audited: 0 = pre-video board, 1 = v1 targeting bug (picked
 # a 24-episode spread disjoint from the loaded episodes - nothing was
 # audited), 2 = v2 lifecycle bug (checks ran after the sample dir was
-# deleted, so no video file could ever be seen), 3 = current. Lower marks
-# re-audit once, then settle.
-VIDEO_AUDIT_MARK = 3
+# deleted, so no video file could ever be seen), 3 = 24-file spread with a
+# hard cap (big-shard datasets skipped), 4 = current (single-shard fallback
+# for over-cap datasets). Lower marks re-audit once, then settle.
+VIDEO_AUDIT_MARK = 4
 
 
 def _video_subsample(targets: list[str], sizes: dict[str, int],
@@ -407,6 +408,24 @@ def _video_subsample(targets: list[str], sizes: dict[str, int],
     return targets if sum(sizes[p] for p in targets) <= cap else None
 
 
+def _video_single_shard(targets: list[str], sizes: dict[str, int],
+                        cap: int) -> str | None:
+    """Over-cap fallback: one shard, picked from the middle of the sorted
+    target list (median episode range, deterministic - never the first
+    shard, which would bias toward warm-up recordings). None when even one
+    file cannot be budgeted honestly (unknown size, or a single shard
+    already exceeds the cap)."""
+    if targets == ["videos/**"]:
+        targets = sorted(p for p in sizes if p.startswith("videos/"))
+    if not targets:
+        return None
+    pick = targets[len(targets) // 2]
+    size = sizes.get(pick)
+    if size is None or size > cap:
+        return None
+    return pick
+
+
 def audit_one(repo_id: str, max_episodes: int, cap_bytes: int) -> DatasetReport:
     import shutil
     import tempfile
@@ -416,6 +435,15 @@ def audit_one(repo_id: str, max_episodes: int, cap_bytes: int) -> DatasetReport:
         dest, sizes = download_sample(repo_id, cap_bytes, dest)
         targets_all = _target_video_files(dest, max_episodes) or []
         subset = _video_subsample(targets_all, sizes, VIDEO_SAMPLE_FILES, VIDEO_CAP_BYTES)
+        if subset is None and targets_all:
+            # big-shard dataset: the 24-file spread busts the cap, so grade
+            # the loaded episodes living in ONE middle shard instead
+            single = _video_single_shard(targets_all, sizes, VIDEO_CAP_BYTES)
+            if single:
+                subset = [single]
+                print(f"{repo_id}: 24-file video spread over the "
+                      f"{VIDEO_CAP_BYTES / 1e6:.0f} MB cap - falling back to "
+                      f"single shard {single}", flush=True)
         video = False
         if subset:
             got = 0
@@ -429,7 +457,8 @@ def audit_one(repo_id: str, max_episodes: int, cap_bytes: int) -> DatasetReport:
             video = got > 0
         elif targets_all:
             print(f"{repo_id}: video subsample over the "
-                  f"{VIDEO_CAP_BYTES / 1e6:.0f} MB cap - visual-quality will skip", flush=True)
+                  f"{VIDEO_CAP_BYTES / 1e6:.0f} MB cap and no single shard fits - "
+                  f"visual-quality will skip", flush=True)
         ctx = load_dataset(str(dest), max_episodes=max_episodes, video=video)
         # the checks MUST run before the finally's rmtree: visual-quality
         # reads the downloaded MP4s off disk; every other check works from

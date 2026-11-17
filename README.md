@@ -186,8 +186,9 @@ Board audits a sample of 250 episodes per dataset (`--max-episodes 250`), spread
 evenly across the dataset, to keep a nightly run of 200 datasets feasible; a
 local `kinema check` scans the full dataset. Board audits also fetch a
 24-file spread of the audited episodes' video shards, hard-capped at 400 MB,
-so visual-quality runs on the board; a dataset whose subsample exceeds the
-cap skips it (the skip is logged in the workflow run).
+so visual-quality runs on the board; a dataset whose spread exceeds the cap
+falls back to a single middle shard, and skips only when even one shard
+cannot be budgeted (the fallback and the skip are logged in the workflow run).
 Sampled and full scans can score differently - for example pusht scores 89 on the
 board and 79 on a full local scan, because a 50-episode sample's recomputed stats
 are compared against stats.json values computed over all 206 episodes.
