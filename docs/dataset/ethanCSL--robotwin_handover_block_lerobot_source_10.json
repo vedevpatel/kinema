@@ -5,8 +5,8 @@
   "frames": 2835,
   "fps": 30.0,
   "truncated": false,
-  "video_audited": 2,
-  "score": 94,
+  "video_audited": 3,
+  "score": 88,
   "score_model": "tiered-v2",
   "verdict": "WARN",
   "checks": [
@@ -477,13 +477,18 @@
     {
       "id": "episode-file-pointers",
       "title": "Episode file pointers (v3 shard metadata)",
-      "verdict": "SKIP",
+      "verdict": "PASS",
       "weight": 8,
       "weight_basis": "placeholder",
-      "summary": "",
-      "skipped": true,
-      "skip_reason": "meta/episodes records no shard locations (data/chunk_index, data/file_index)",
-      "details": {},
+      "summary": "every shard pointer matches its file's contents (10 episodes, 1 shard(s))",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "broken": [],
+        "judged": 10,
+        "catalogued": 10,
+        "local_shards": 1
+      },
       "findings": [],
       "charge": 8
     },
@@ -493,7 +498,7 @@
       "verdict": "PASS",
       "weight": 8,
       "weight_basis": "placeholder",
-      "summary": "10 episodes, 0 tasks in meta/tasks; 0 finding(s)",
+      "summary": "10 episodes, 9 tasks in meta/tasks; 0 finding(s)",
       "skipped": false,
       "skip_reason": "",
       "details": {},
@@ -516,14 +521,149 @@
     {
       "id": "visual-quality",
       "title": "Visual quality (blur, lighting)",
-      "verdict": "SKIP",
+      "verdict": "WARN",
       "weight": 6,
       "weight_basis": "placeholder",
-      "summary": "",
-      "skipped": true,
-      "skip_reason": "no video files found for the loaded episodes",
-      "details": {},
-      "findings": [],
+      "summary": "10 episodes x 3 camera(s) sampled; median blur observation.images.cam_high 15, observation.images.cam_left_wrist 7, observation.images.cam_right_wrist 8",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "median_blur_per_camera": {
+          "observation.images.cam_high": 15.380069414227536,
+          "observation.images.cam_left_wrist": 6.779959238683733,
+          "observation.images.cam_right_wrist": 7.530433734271567
+        },
+        "median_p95_brightness_per_camera": {
+          "observation.images.cam_high": 254.0,
+          "observation.images.cam_left_wrist": 254.0,
+          "observation.images.cam_right_wrist": 252.75
+        },
+        "median_saturated_fraction_per_camera": {
+          "observation.images.cam_high": 0.23921549479166665,
+          "observation.images.cam_left_wrist": 0.08725423177083333,
+          "observation.images.cam_right_wrist": 0.18733154296875
+        }
+      },
+      "findings": [
+        {
+          "severity": "WARN",
+          "message": "camera observation.images.cam_high: blurry in 10/10 episodes (blur score < 30; worst [8, 6, 0, 5, 4, 2, 7, 9])",
+          "episode_index": null,
+          "details": {
+            "camera": "observation.images.cam_high",
+            "kind": "blurry",
+            "episodes": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            "values": {
+              "0": 14.178910701624718,
+              "1": 21.443835191110843,
+              "2": 15.61999500747488,
+              "3": 19.36278102584427,
+              "4": 15.140143820980192,
+              "5": 14.40926352913942,
+              "6": 13.893594454949017,
+              "7": 18.342243146723515,
+              "8": 12.077339278616789,
+              "9": 18.679262034673023
+            }
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "camera observation.images.cam_high: overexposed in 3/10 episodes (saturated-pixel fraction > 0.25; worst [4, 8, 6])",
+          "episode_index": null,
+          "details": {
+            "camera": "observation.images.cam_high",
+            "kind": "overexposed",
+            "episodes": [
+              4,
+              6,
+              8
+            ],
+            "values": {
+              "4": 0.27010091145833337,
+              "6": 0.2639925130208333,
+              "8": 0.2644482421875
+            }
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "camera observation.images.cam_left_wrist: blurry in 10/10 episodes (blur score < 30; worst [3, 5, 8, 7, 9, 2, 1, 0])",
+          "episode_index": null,
+          "details": {
+            "camera": "observation.images.cam_left_wrist",
+            "kind": "blurry",
+            "episodes": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            "values": {
+              "0": 7.186008839215713,
+              "1": 6.872822657305845,
+              "2": 6.814986350395403,
+              "3": 6.27684085602701,
+              "4": 7.291754103214117,
+              "5": 6.527560596903945,
+              "6": 7.312904112574989,
+              "7": 6.679304723750117,
+              "8": 6.553230801407276,
+              "9": 6.7449321269720635
+            }
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "camera observation.images.cam_right_wrist: blurry in 10/10 episodes (blur score < 30; worst [9, 2, 0, 1, 8, 5, 6, 4])",
+          "episode_index": null,
+          "details": {
+            "camera": "observation.images.cam_right_wrist",
+            "kind": "blurry",
+            "episodes": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            "values": {
+              "0": 6.754662834558494,
+              "1": 6.76418181939666,
+              "2": 6.7196682821046485,
+              "3": 8.667754002552936,
+              "4": 7.85136258164931,
+              "5": 7.608783023587371,
+              "6": 7.693927416992714,
+              "7": 8.109465171731301,
+              "8": 7.452084444955762,
+              "9": 6.456440643730064
+            }
+          }
+        }
+      ],
       "charge": 6
     },
     {

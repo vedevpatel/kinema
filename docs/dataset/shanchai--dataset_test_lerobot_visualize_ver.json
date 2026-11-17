@@ -5,8 +5,8 @@
   "frames": 894,
   "fps": 30.0,
   "truncated": false,
-  "video_audited": 2,
-  "score": 90,
+  "video_audited": 3,
+  "score": 84,
   "score_model": "tiered-v2",
   "verdict": "WARN",
   "checks": [
@@ -183,13 +183,18 @@
     {
       "id": "episode-file-pointers",
       "title": "Episode file pointers (v3 shard metadata)",
-      "verdict": "SKIP",
+      "verdict": "PASS",
       "weight": 8,
       "weight_basis": "placeholder",
-      "summary": "",
-      "skipped": true,
-      "skip_reason": "meta/episodes records no shard locations (data/chunk_index, data/file_index)",
-      "details": {},
+      "summary": "every shard pointer matches its file's contents (3 episodes, 1 shard(s))",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "broken": [],
+        "judged": 3,
+        "catalogued": 3,
+        "local_shards": 1
+      },
       "findings": [],
       "charge": 8
     },
@@ -199,7 +204,7 @@
       "verdict": "PASS",
       "weight": 8,
       "weight_basis": "placeholder",
-      "summary": "3 episodes, 0 tasks in meta/tasks; 0 finding(s)",
+      "summary": "3 episodes, 1 tasks in meta/tasks; 0 finding(s)",
       "skipped": false,
       "skip_reason": "",
       "details": {},
@@ -222,14 +227,47 @@
     {
       "id": "visual-quality",
       "title": "Visual quality (blur, lighting)",
-      "verdict": "SKIP",
+      "verdict": "WARN",
       "weight": 6,
       "weight_basis": "placeholder",
-      "summary": "",
-      "skipped": true,
-      "skip_reason": "no video files found for the loaded episodes",
-      "details": {},
-      "findings": [],
+      "summary": "3 episodes x 2 camera(s) sampled; median blur observation.images.front 413, observation.images.wrist 21",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "median_blur_per_camera": {
+          "observation.images.front": 413.1309872815957,
+          "observation.images.wrist": 20.501155634439503
+        },
+        "median_p95_brightness_per_camera": {
+          "observation.images.front": 189.0,
+          "observation.images.wrist": 124.0
+        },
+        "median_saturated_fraction_per_camera": {
+          "observation.images.front": 0.0014095052083333334,
+          "observation.images.wrist": 0.0
+        }
+      },
+      "findings": [
+        {
+          "severity": "WARN",
+          "message": "camera observation.images.wrist: blurry in 3/3 episodes (blur score < 30; worst [0, 1, 2])",
+          "episode_index": null,
+          "details": {
+            "camera": "observation.images.wrist",
+            "kind": "blurry",
+            "episodes": [
+              0,
+              1,
+              2
+            ],
+            "values": {
+              "0": 16.831803870341034,
+              "1": 20.501155634439503,
+              "2": 21.558176928954182
+            }
+          }
+        }
+      ],
       "charge": 6
     },
     {
