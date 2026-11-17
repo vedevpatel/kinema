@@ -80,12 +80,20 @@ def badge(v: str) -> str:
     return f'<span class="badge b-{v}">{v}</span>'
 
 
-def _probe_dataset(api, repo_id: str, downloads: int, likes: int) -> dict | None:
+def _probe_dataset(api, repo_id: str, downloads: int, likes: int,
+                   skip_gated: bool = False) -> dict | None:
     """The board entry for one Hub dataset, or None when it has no LeRobot
-    metadata (meta/info.json) - the same gate both listing lanes apply."""
+    metadata (meta/info.json) - the same gate both listing lanes apply.
+    With skip_gated, gated repos also return None: info.json is public on
+    gated repos, so the plain probe waves them onto the board and the audit
+    only hits the 403 at fetch time. Lanes that cannot reallocate the seat
+    (top, new) keep showing gated rows; the flagship lane skips them so the
+    seat goes to the next auditable dataset."""
     try:
         info = api.dataset_info(repo_id, files_metadata=True)
     except Exception:
+        return None
+    if skip_gated and getattr(info, "gated", None):
         return None
     sib = [(s.rfilename, s.size or 0) for s in (info.siblings or [])]
     if "meta/info.json" not in [n for n, _ in sib]:
@@ -161,7 +169,10 @@ def find_lerobot_datasets(limit: int, new_lane: int = 0) -> list[dict]:
         for d in api.list_datasets(author=org, sort="downloads", limit=seats * 4):
             if got >= seats:
                 break
-            e = _probe_dataset(api, d.id, d.downloads or 0, getattr(d, "likes", 0) or 0)
+            # skip_gated: a gated repo would take the seat and show "gated"
+            # forever; the next auditable dataset makes better use of it
+            e = _probe_dataset(api, d.id, d.downloads or 0, getattr(d, "likes", 0) or 0,
+                               skip_gated=True)
             if e:
                 flagship.append(e)
                 got += 1

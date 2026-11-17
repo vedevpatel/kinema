@@ -346,3 +346,33 @@ def test_report_video_audited_roundtrip():
     # rows stored by the buggy v1 targeting (true) read as mark 1
     d["video_audited"] = True
     assert report_from_dict(d).video_audited == 1
+def test_flagship_probe_skips_gated_repos(monkeypatch):
+    """Gated flagship candidates must not take seats: info.json is public on
+    gated repos, so without the gated check the seat shows 'gated' forever
+    instead of going to the next auditable dataset."""
+    import types
+
+    lb = _load_leaderboard()
+    monkeypatch.setattr(lb, "FLAGSHIP_ORG_SEATS", {"RoboCOIN": 2})
+    monkeypatch.setattr(lb, "FLAGSHIP_SEEDS", ())
+    candidates = [("RoboCOIN/gated_a", True), ("RoboCOIN/open_b", False),
+                  ("RoboCOIN/gated_c", True), ("RoboCOIN/open_d", False)]
+
+    class _FakeApi:
+        def list_datasets(self, **kwargs):
+            if "author" in kwargs:
+                return iter(types.SimpleNamespace(id=rid, downloads=100 - i, likes=0)
+                            for i, (rid, _) in enumerate(candidates))
+            return iter([])
+
+        def dataset_info(self, repo_id, **kwargs):
+            gated = dict(candidates)[repo_id]
+            return types.SimpleNamespace(
+                gated=("auto" if gated else False),
+                siblings=[types.SimpleNamespace(rfilename="meta/info.json", size=1)],
+                downloads=10, likes=0)
+
+    monkeypatch.setattr("huggingface_hub.HfApi", lambda: _FakeApi())
+    out = lb.find_lerobot_datasets(2, 0)
+    flag = [d["id"] for d in out if d["lane"] == "flagship"]
+    assert flag == ["RoboCOIN/open_b", "RoboCOIN/open_d"]
