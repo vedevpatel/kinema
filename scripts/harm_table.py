@@ -1170,9 +1170,30 @@ def main_gpu(args) -> int:
     return {"complete": 0, "refused": 3, "session-budget": 75}[status]
 
 
+def main_status(args) -> int:
+    """Read-only ledger summary: per-run status and GPU hours. Reads the
+    manifest JSON directly - constructing a Manifest rewrites rows still
+    marked running to abandoned, which would corrupt a live run's ledger."""
+    if not args.manifest or not Path(args.manifest).expanduser().exists():
+        raise SystemExit(f"--status needs an existing --manifest file (got {args.manifest!r})")
+    data = json.loads(Path(args.manifest).expanduser().read_text())
+    runs = data.get("runs", {})
+    for key in sorted(runs):
+        rec = runs[key]
+        print(f"{rec.get('status', '?'):9s} {key} {rec.get('gpu_seconds', 0.0) / 3600:.2f} h")
+    done = sum(r.get("gpu_seconds", 0.0) for r in runs.values() if r.get("status") == "done")
+    spent = (sum(r.get("gpu_seconds", 0.0) for r in runs.values())
+             + sum(r.get("gpu_seconds", 0.0) for r in data.get("abandoned", []))
+             + sum(r.get("gpu_seconds", 0.0) for r in data.get("overhead", [])))
+    print(f"done-hours {done / 3600:.2f}, ledger-spent {spent / 3600:.2f} "
+          f"of {data.get('ceiling_gpu_hours', '?')}")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--dry-run", action="store_true", help="CPU ridge-BC path (harm_study.py math); no GPU, no manifest")
+    ap.add_argument("--status", action="store_true", help="print the manifest ledger and exit (read-only)")
     ap.add_argument("--manifest", help="GPU run ledger (JSON); resumed if present")
     ap.add_argument("--out", help="table path (GPU default docs/harm-table.json; dry-run writes only if given)")
     ap.add_argument("--steps", type=int, default=STEPS)
@@ -1186,6 +1207,8 @@ def main() -> int:
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--cache-dir", default="~/.cache/kinema-harm-table")
     args = ap.parse_args()
+    if args.status:
+        return main_status(args)
     bad = [a for a in args.arms if a not in ARMS]
     if bad or "clean" not in args.arms:
         raise SystemExit(f"--arms must include clean and come from {list(ARMS)}; got {bad or args.arms}")

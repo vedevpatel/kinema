@@ -482,3 +482,24 @@ def test_shifted_stats_arrays_moves_mean_only():
     assert np.allclose(s2.std(0), state.std(0)) and np.allclose(a2.std(0), action.std(0))
     assert ht.DEFECTS["stale_stats_offset_0.5sigma"].stats_shift_sigma == 0.5
     assert ht.DEFECTS["outlier_burst_5pct"].check == "outlier-episodes"
+
+
+def test_status_is_read_only(tmp_path, capsys):
+    """--status prints the ledger without the Manifest constructor's
+    running->abandoned rewrite - a live run's ledger must survive a peek."""
+    manifest = tmp_path / "m.json"
+    manifest.write_text(json.dumps({
+        "schema": ht.MANIFEST_SCHEMA, "created": "2026-11-16T00:00:00Z",
+        "ceiling_gpu_hours": 18,
+        "runs": {"k/clean/seed0": {"status": "done", "gpu_seconds": 3600.0},
+                 "k/arm/seed1": {"status": "running", "gpu_seconds": 900.0}},
+        "abandoned": [{"key": "k/old/seed0", "gpu_seconds": 600.0}],
+        "overhead": []}))
+    rc = ht.main_status(type("A", (), {"manifest": str(manifest)})())
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "running   k/arm/seed1 0.25 h" in out
+    assert "done-hours 1.00, ledger-spent 1.42 of 18" in out
+    after = json.loads(manifest.read_text())
+    assert after["runs"]["k/arm/seed1"]["status"] == "running"  # untouched
+    assert after["runs"]["k/clean/seed0"]["status"] == "done"
