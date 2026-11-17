@@ -98,8 +98,20 @@ def _probe_dataset(api, repo_id: str, downloads: int, likes: int) -> dict | None
     }
 
 
-def _merge_lanes(top: list[dict], recent: list[dict], limit: int, new_lane: int) -> list[dict]:
-    """Top-downloaded board (lane "top") plus a probation lane of the newest
+# flagship publishers whose LeRobot-format datasets never surface under the
+# "lerobot" search (their repos don't carry the name): a capped number of
+# seats per org onboards their top datasets without flooding the board with
+# one publisher's per-task sets (RoboCOIN alone has 810, which would evict
+# most of the ecosystem under a pure download ranking)
+FLAGSHIP_ORG_SEATS = {"RoboCOIN": 25, "unitreerobotics": 15}
+# individual flagship datasets the search misses for the same reason
+FLAGSHIP_SEEDS = ("GT-111/agibotworld_alpha_v3_eef",)
+
+
+def _merge_lanes(top: list[dict], recent: list[dict], limit: int, new_lane: int,
+                 flagship: list[dict] | None = None) -> list[dict]:
+    """Top-downloaded board (lane "top"), a capped block of flagship
+    publisher seats (lane "flagship"), plus a probation lane of the newest
     uploads (lane "new"): fresh datasets get audited before they are popular,
     which is exactly when a QA flag is cheapest to act on. No duplicates;
     the lane tag rides the entry into data.json."""
@@ -108,8 +120,13 @@ def _merge_lanes(top: list[dict], recent: list[dict], limit: int, new_lane: int)
     for d in top[:limit]:
         out.append({**d, "lane": "top"})
         seen.add(d["id"])
+    for d in flagship or []:
+        if d["id"] in seen:
+            continue
+        out.append({**d, "lane": "flagship"})
+        seen.add(d["id"])
     for d in recent:
-        if len(out) >= limit + new_lane:
+        if sum(1 for r in out if r["lane"] == "new") >= new_lane:
             break
         if d["id"] in seen:
             continue
@@ -138,7 +155,26 @@ def find_lerobot_datasets(limit: int, new_lane: int = 0) -> list[dict]:
                 recent.append(e)
             if len(recent) >= new_lane:
                 break
-    return _merge_lanes(top, recent, limit, new_lane)
+    flagship: list[dict] = []
+    for org, seats in FLAGSHIP_ORG_SEATS.items():
+        got = 0
+        for d in api.list_datasets(author=org, sort="downloads", limit=seats * 4):
+            if got >= seats:
+                break
+            e = _probe_dataset(api, d.id, d.downloads or 0, getattr(d, "likes", 0) or 0)
+            if e:
+                flagship.append(e)
+                got += 1
+    for seed in FLAGSHIP_SEEDS:
+        try:
+            d = api.dataset_info(seed)
+        except Exception:
+            continue
+        e = _probe_dataset(api, seed, getattr(d, "downloads", 0) or 0,
+                           getattr(d, "likes", 0) or 0)
+        if e:
+            flagship.append(e)
+    return _merge_lanes(top, recent, limit, new_lane, flagship)
 
 
 def _classic_resolve_download(repo_id: str, name: str, dest: Path) -> None:
@@ -569,6 +605,8 @@ def render_index(entries: list[dict], generated: str, harm_table: bool = False, 
             link = f"<a href='dataset/{esc(e['slug'])}.html'>{esc(e['id'])}</a>"
             if e.get("lane") == "new":
                 link += ' <span class=dim title="newest-uploads probation lane">(new)</span>'
+            if e.get("lane") == "flagship":
+                link += ' <span class=dim title="flagship publisher seats">(flagship)</span>'
 
             score = f"<span class=score>{r['score']}</span>"
             model = r.get("score_model", "legacy-v0")

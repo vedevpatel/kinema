@@ -179,7 +179,10 @@ RAM, so a full load of a DROID-sized dataset cannot OOM a smaller machine.
 
 ## The leaderboard
 
-The most-downloaded LeRobot datasets on Hugging Face, audited nightly:
+The most-downloaded LeRobot datasets on Hugging Face, audited nightly, plus a
+capped block of seats per flagship publisher (RoboCOIN, Unitree) whose
+LeRobot-format datasets the search does not surface, and a probation lane of
+the newest uploads:
 **[vedevpatel.github.io/kinema](https://vedevpatel.github.io/kinema/)**
 
 Board audits a sample of 250 episodes per dataset (`--max-episodes 250`), spread

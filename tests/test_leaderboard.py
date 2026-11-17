@@ -41,6 +41,30 @@ def test_merge_lanes_caps_and_empty_lane():
     assert len(out) == 4
 
 
+def test_merge_lanes_flagship_seats():
+    lb = _load_leaderboard()
+    top = [_d(i, 100 - i) for i in range(4)]
+    # org/ds2 is already on the top board: no duplicate
+    flagship = [{"id": "org/ds2", "downloads": 999, "likes": 0, "data_bytes": 1},
+                {"id": "RoboCOIN/big", "downloads": 900, "likes": 0, "data_bytes": 1}]
+    recent = [_d(200), _d(201)]
+    out = lb._merge_lanes(top, recent, limit=3, new_lane=2, flagship=flagship)
+    assert [d["id"] for d in out] == ["org/ds0", "org/ds1", "org/ds2",
+                                      "RoboCOIN/big", "org/ds200", "org/ds201"]
+    assert [d["lane"] for d in out] == ["top"] * 3 + ["flagship"] + ["new"] * 2
+
+
+def test_merge_lanes_flagship_does_not_eat_the_new_lane():
+    lb = _load_leaderboard()
+    # the new lane keeps its full seat count however many flagship rows merge
+    flagship = [{"id": f"RoboCOIN/t{i}", "downloads": 900, "likes": 0, "data_bytes": 1}
+                for i in range(25)]
+    recent = [_d(300 + i) for i in range(5)]
+    out = lb._merge_lanes([], recent, limit=3, new_lane=5, flagship=flagship)
+    assert [d["lane"] for d in out].count("flagship") == 25
+    assert [d["lane"] for d in out].count("new") == 5
+
+
 def test_index_marks_new_lane_rows():
     lb = _load_leaderboard()
     entries = [{"id": "org/ds", "slug": "org--ds", "downloads": 1, "lane": "new",
@@ -286,7 +310,8 @@ def test_hub_listing_kwargs_match_installed_api(monkeypatch):
     monkeypatch.setattr("huggingface_hub.HfApi", lambda: _FakeApi())
     lb.find_lerobot_datasets(2, 2)
 
-    assert len(calls) == 2  # top lane + newest lane
+    assert len(calls) == 4  # top lane + newest lane + flagship org queries
+    assert sum('author' in c for c in calls) == len(lb.FLAGSHIP_ORG_SEATS)
     params = inspect.signature(HfApi.list_datasets).parameters
     for kwargs in calls:
         unknown = set(kwargs) - set(params)
