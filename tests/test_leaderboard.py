@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+
+import pytest
 from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
@@ -77,6 +79,75 @@ def test_video_subsample_expands_whole_tree_sentinel():
     assert lb._video_subsample(["videos/**"], sizes, 24, 15) is None  # 20 > 15
 
 
+def test_audit_one_runs_visual_quality_on_downloaded_videos(tmp_path, monkeypatch):
+    """Regression for the v2 lifecycle bug: the checks used to run after the
+    tempdir was deleted, so every board visual-quality verdict was a SKIP
+    even though the MP4s had been fetched."""
+    av = pytest.importorskip("av")
+    import json
+
+    import numpy as np
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    from kinema.fixtures.synth import make_dataset
+
+    lb = _load_leaderboard()
+    cam, fps, length, episodes, size = "observation.images.top", 10, 6, 6, 64
+    root = make_dataset(tmp_path / "ds", episodes=episodes)
+    vid = root / "videos" / cam / "chunk-000" / "file-000.mp4"
+    vid.parent.mkdir(parents=True)
+    with av.open(str(vid), "w") as out:
+        st = out.add_stream("mpeg4", rate=fps)
+        st.width = st.height = size
+        st.pix_fmt = "yuv420p"
+        st.bit_rate = 4_000_000
+        img = np.full((size, size, 3), 140, dtype=np.uint8)
+        img[16:48, 16:48] = 220
+        for _ in range(episodes * length):
+            for pkt in st.encode(av.VideoFrame.from_ndarray(img, format="rgb24")):
+                out.mux(pkt)
+        for pkt in st.encode():
+            out.mux(pkt)
+    mf = root / "meta" / "episodes" / "chunk-000" / "file-000.parquet"
+    m = pq.read_table(mf).to_pydict()
+    m[f"videos/{cam}/chunk_index"] = [0] * episodes
+    m[f"videos/{cam}/file_index"] = [0] * episodes
+    m[f"videos/{cam}/from_timestamp"] = [e * length / fps for e in m["episode_index"]]
+    m[f"videos/{cam}/to_timestamp"] = [(e + 1) * length / fps for e in m["episode_index"]]
+    pq.write_table(pa.table(m), mf)
+    info = json.loads((root / "meta" / "info.json").read_text())
+    info["video_path"] = "videos/{video_key}/chunk-{chunk_index:03d}/file-{file_index:03d}.mp4"
+    info["features"][cam] = {"dtype": "video", "shape": [size, size, 3]}
+    (root / "meta" / "info.json").write_text(json.dumps(info))
+
+    sizes = {str(p.relative_to(root)): p.stat().st_size
+             for p in root.rglob("*") if p.is_file()}
+
+    import shutil
+
+    def fake_download_sample(repo_id, cap_bytes, dest):
+        for rel in sizes:
+            if rel.startswith(("meta/", "data/")):
+                tgt = dest / rel
+                tgt.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(root / rel, tgt)
+        return dest, sizes
+
+    def fake_hub_download(repo_id, rel, dest):
+        tgt = dest / rel
+        tgt.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(root / rel, tgt)
+        return tgt
+
+    monkeypatch.setattr(lb, "download_sample", fake_download_sample)
+    monkeypatch.setattr(lb, "_hub_download", fake_hub_download)
+    rep = lb.audit_one("org/ds", 250, 50 * 1000 * 1000)
+    assert rep.video_audited == 3
+    vq = {r.check_id: r for r in rep.results}["visual-quality"]
+    assert not vq.skipped, f"visual-quality skipped: {vq.skip_reason}"
+
+
 def test_hub_listing_kwargs_match_installed_api(monkeypatch):
     """Listing calls must only use kwargs the installed huggingface_hub accepts.
 
@@ -112,12 +183,13 @@ def test_audit_stale_reaudits_rows_without_video_audit():
     engine = "e" * 12
     base = {"engine": engine, "report": {"source": "org/ds", "episodes": 10, "truncated": False}}
     assert lb.audit_stale(base, engine, 250) is True  # no video_audited key
-    buggy = {"engine": engine, "report": {**base["report"], "video_audited": True}}
-    assert lb.audit_stale(buggy, engine, 250) is True  # v1 bug mark (True == 1 < 2)
-    settled = {"engine": engine, "report": {**base["report"], "video_audited": 2}}
+    for legacy in (True, 1, 2):  # every superseded mark re-audits once
+        row = {"engine": engine, "report": {**base["report"], "video_audited": legacy}}
+        assert lb.audit_stale(row, engine, 250) is True
+    settled = {"engine": engine, "report": {**base["report"], "video_audited": 3}}
     assert lb.audit_stale(settled, engine, 250) is False
     # depth-staleness still applies on top once video is settled
-    deep = {"engine": engine, "report": {**base["report"], "video_audited": 2, "truncated": True}}
+    deep = {"engine": engine, "report": {**base["report"], "video_audited": 3, "truncated": True}}
     assert lb.audit_stale(deep, engine, 250) is True
 
 
@@ -125,8 +197,8 @@ def test_report_video_audited_roundtrip():
     from kinema.report import DatasetReport, report_from_dict, report_to_dict
 
     rep = DatasetReport(source="org/ds", format_version="v3", episodes=1,
-                        frames=10, fps=30.0, video_audited=2)
-    assert report_from_dict(report_to_dict(rep)).video_audited == 2
+                        frames=10, fps=30.0, video_audited=3)
+    assert report_from_dict(report_to_dict(rep)).video_audited == 3
     # rows stored before the field existed read as mark 0 (re-audit once)
     d = report_to_dict(rep)
     del d["video_audited"]

@@ -382,8 +382,10 @@ VIDEO_SAMPLE_FILES = 24
 VIDEO_CAP_BYTES = 400 * 1000 * 1000
 # rows carry video_audited: 0 = pre-video board, 1 = v1 targeting bug (picked
 # a 24-episode spread disjoint from the loaded episodes - nothing was
-# audited), 2 = current. Lower marks re-audit once, then settle.
-VIDEO_AUDIT_MARK = 2
+# audited), 2 = v2 lifecycle bug (checks ran after the sample dir was
+# deleted, so no video file could ever be seen), 3 = current. Lower marks
+# re-audit once, then settle.
+VIDEO_AUDIT_MARK = 3
 
 
 def _video_subsample(targets: list[str], sizes: dict[str, int],
@@ -412,7 +414,6 @@ def audit_one(repo_id: str, max_episodes: int, cap_bytes: int) -> DatasetReport:
     dest = Path(tempfile.mkdtemp(prefix="kinema-leaderboard-"))
     try:
         dest, sizes = download_sample(repo_id, cap_bytes, dest)
-        ctx = load_dataset(str(dest), max_episodes=max_episodes)
         targets_all = _target_video_files(dest, max_episodes) or []
         subset = _video_subsample(targets_all, sizes, VIDEO_SAMPLE_FILES, VIDEO_CAP_BYTES)
         video = False
@@ -429,24 +430,28 @@ def audit_one(repo_id: str, max_episodes: int, cap_bytes: int) -> DatasetReport:
         elif targets_all:
             print(f"{repo_id}: video subsample over the "
                   f"{VIDEO_CAP_BYTES / 1e6:.0f} MB cap - visual-quality will skip", flush=True)
+        ctx = load_dataset(str(dest), max_episodes=max_episodes, video=video)
+        # the checks MUST run before the finally's rmtree: visual-quality
+        # reads the downloaded MP4s off disk; every other check works from
+        # the context's in-memory tables
+        rep = DatasetReport(
+            source=repo_id,
+            format_version=ctx.format_version,
+            episodes=ctx.total_episodes,
+            frames=ctx.row_count,
+            fps=ctx.fps,
+            truncated=ctx.truncated,
+            video_audited=VIDEO_AUDIT_MARK,
+        )
+        cfg = CheckConfig(video=video)
+        for check in ALL_CHECKS:
+            try:
+                rep.results.append(check.run(ctx, cfg))
+            except Exception as e:  # noqa: BLE001
+                rep.results.append(check.skip(f"check crashed: {type(e).__name__}: {e}"))
+        return rep
     finally:
         shutil.rmtree(dest, ignore_errors=True)
-    rep = DatasetReport(
-        source=repo_id,
-        format_version=ctx.format_version,
-        episodes=ctx.total_episodes,
-        frames=ctx.row_count,
-        fps=ctx.fps,
-        truncated=ctx.truncated,
-        video_audited=VIDEO_AUDIT_MARK,
-    )
-    cfg = CheckConfig(video=video)
-    for check in ALL_CHECKS:
-        try:
-            rep.results.append(check.run(ctx, cfg))
-        except Exception as e:  # noqa: BLE001
-            rep.results.append(check.skip(f"check crashed: {type(e).__name__}: {e}"))
-    return rep
 
 
 def _waiver_note(charge: dict) -> str:

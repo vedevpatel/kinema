@@ -225,7 +225,7 @@ def _depth_entry(engine, *, episodes=50, truncated=True):
     return {"id": "org/ds", "slug": "org--ds", "downloads": 1, "engine": engine,
             "report": {"verdict": "WARN", "score": 90, "score_model": "tiered-v2",
                        "episodes": episodes, "truncated": truncated, "checks": [],
-                       "video_audited": 2}}
+                       "video_audited": 3}}
 
 
 def test_audit_stale_depth_rules():
