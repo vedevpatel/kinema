@@ -78,3 +78,27 @@ def test_hub_listing_kwargs_match_installed_api(monkeypatch):
     for kwargs in calls:
         unknown = set(kwargs) - set(params)
         assert not unknown, f"list_datasets kwargs not in installed hub API: {unknown}"
+
+
+def test_audit_stale_reaudits_rows_without_video_audit():
+    lb = _load_leaderboard()
+    engine = "e" * 12
+    base = {"engine": engine, "report": {"source": "org/ds", "episodes": 10, "truncated": False}}
+    assert lb.audit_stale(base, engine, 250) is True  # no video_audited key
+    settled = {"engine": engine, "report": {**base["report"], "video_audited": True}}
+    assert lb.audit_stale(settled, engine, 250) is False
+    # depth-staleness still applies on top once video is settled
+    deep = {"engine": engine, "report": {**base["report"], "video_audited": True, "truncated": True}}
+    assert lb.audit_stale(deep, engine, 250) is True
+
+
+def test_report_video_audited_roundtrip():
+    from kinema.report import DatasetReport, report_from_dict, report_to_dict
+
+    rep = DatasetReport(source="org/ds", format_version="v3", episodes=1,
+                        frames=10, fps=30.0, video_audited=True)
+    assert report_from_dict(report_to_dict(rep)).video_audited is True
+    # rows stored before the field existed read as not-yet-video-audited
+    d = report_to_dict(rep)
+    del d["video_audited"]
+    assert report_from_dict(d).video_audited is False

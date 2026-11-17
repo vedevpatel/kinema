@@ -220,9 +220,12 @@ def test_index_labels_unrescored_legacy_rows():
 
 
 def _depth_entry(engine, *, episodes=50, truncated=True):
+    # a current-format stored row: video_audited is set, so only the depth
+    # and engine rules under test can queue it
     return {"id": "org/ds", "slug": "org--ds", "downloads": 1, "engine": engine,
             "report": {"verdict": "WARN", "score": 90, "score_model": "tiered-v2",
-                       "episodes": episodes, "truncated": truncated, "checks": []}}
+                       "episodes": episodes, "truncated": truncated, "checks": [],
+                       "video_audited": True}}
 
 
 def test_audit_stale_depth_rules():

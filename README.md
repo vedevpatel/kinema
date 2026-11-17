@@ -182,9 +182,12 @@ RAM, so a full load of a DROID-sized dataset cannot OOM a smaller machine.
 The most-downloaded LeRobot datasets on Hugging Face, audited nightly:
 **[vedevpatel.github.io/kinema](https://vedevpatel.github.io/kinema/)**
 
-Board audits a sample of 50 episodes per dataset (`--max-episodes 50`), spread
+Board audits a sample of 250 episodes per dataset (`--max-episodes 250`), spread
 evenly across the dataset, to keep a nightly run of 200 datasets feasible; a
-local `kinema check` scans the full dataset.
+local `kinema check` scans the full dataset. Board audits also fetch the video
+shards for a 24-episode spread subsample, hard-capped at 400 MB, so
+visual-quality runs on the board; a dataset whose subsample exceeds the cap
+skips it (the skip is logged in the workflow run).
 Sampled and full scans can score differently - for example pusht scores 89 on the
 board and 79 on a full local scan, because a 50-episode sample's recomputed stats
 are compared against stats.json values computed over all 206 episodes.
@@ -199,7 +202,6 @@ kinema check /tmp/demo
 ## Roadmap
 
 - Auto-fix suggestions with safe rewrites (stats recompute, idle trimming).
-- Video checks on the leaderboard: v3 shared-MP4 attribution works locally (`--video`); the nightly board skips it because the MP4s run to hundreds of MB per camera.
 
 ## Development
 

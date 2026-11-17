@@ -28,7 +28,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from kinema.checks import ALL_CHECKS, CheckConfig, Severity  # noqa: E402
-from kinema.dataset import DatasetError, load_dataset  # noqa: E402
+from kinema.dataset import DatasetError, _target_video_files, load_dataset  # noqa: E402
 from kinema.engine import engine_version  # noqa: E402
 from kinema.report import (  # noqa: E402
     SCORE_MODEL,
@@ -281,12 +281,15 @@ def _range_read_parquet(repo_id: str, name: str, dest: Path, episodes: list[int]
     out.parent.mkdir(parents=True, exist_ok=True)
     pq.write_table(table, out)
 
-def download_sample(repo_id: str, cap_bytes: int, dest: Path) -> Path:
+def download_sample(repo_id: str, cap_bytes: int, dest: Path) -> tuple[Path, dict[str, int]]:
     """meta/** in full plus data files in name order until cap_bytes.
 
     v3 shards hold many episodes per file, so the first shard(s) are a
     real sample; v2.1 keeps one parquet per episode, so the first files
     are the first episodes. Either way the audit covers actual data.
+
+    Returns the sample root and the Hub's file-size map, so the caller can
+    budget a video subsample without a second dataset_info call.
     """
     from huggingface_hub import dataset_info
 
@@ -294,6 +297,7 @@ def download_sample(repo_id: str, cap_bytes: int, dest: Path) -> Path:
         (s.rfilename, s.size or 0)
         for s in (dataset_info(repo_id, files_metadata=True).siblings or [])
     ]
+    sizes = dict(sib)
     picked = [n for n, _ in sib if n.startswith("meta/")]
     # meta always comes down first: every branch needs it, both to audit and
     # to target range reads at row groups overlapping catalogued episodes
@@ -330,15 +334,15 @@ def download_sample(repo_id: str, cap_bytes: int, dest: Path) -> Path:
             msg = f"{type(e).__name__}: {e}"
             if "reconstruction" in msg or "cas-server" in msg or "Xet" in msg:
                 _classic_resolve_download(repo_id, smallest, dest)
-                return dest
+                return dest, sizes
             raise DatasetError(
                 f"smallest data shard is {ssize / 1e6:.0f} MB and range-read "
                 f"sampling failed: {msg}"
             )
-        return dest
+        return dest, sizes
     for name in chosen:
         _hub_download(repo_id, name, dest)
-    return dest
+    return dest, sizes
 
 
 def _clean_reason(msg: str) -> str:
@@ -366,14 +370,31 @@ _STATUS_LABELS = {
 }
 
 
+# visual-quality on the board: a spread subsample of episodes' video
+# shards, hard-capped so the nightly run's bandwidth stays bounded. Whole
+# subsample or nothing - a partial download would bias the check toward
+# early shards, so over-cap datasets skip gracefully (logged, not published).
+VIDEO_SAMPLE_EPISODES = 24
+VIDEO_CAP_BYTES = 400 * 1000 * 1000
+
+
 def audit_one(repo_id: str, max_episodes: int, cap_bytes: int) -> DatasetReport:
     import shutil
     import tempfile
 
     dest = Path(tempfile.mkdtemp(prefix="kinema-leaderboard-"))
     try:
-        download_sample(repo_id, cap_bytes, dest)
-        ctx = load_dataset(str(dest), max_episodes=max_episodes)
+        dest, sizes = download_sample(repo_id, cap_bytes, dest)
+        targets = _target_video_files(dest, VIDEO_SAMPLE_EPISODES) or []
+        video_bytes = sum(sizes.get(t, 0) for t in targets)
+        video = bool(targets) and video_bytes <= VIDEO_CAP_BYTES
+        if video:
+            for rel in targets:
+                _hub_download(repo_id, rel, dest)
+        elif targets:
+            print(f"{repo_id}: video subsample is {video_bytes / 1e6:.0f} MB, over the "
+                  f"{VIDEO_CAP_BYTES / 1e6:.0f} MB cap - visual-quality will skip", flush=True)
+        ctx = load_dataset(str(dest), max_episodes=max_episodes, video=video)
     finally:
         shutil.rmtree(dest, ignore_errors=True)
     rep = DatasetReport(
@@ -383,8 +404,9 @@ def audit_one(repo_id: str, max_episodes: int, cap_bytes: int) -> DatasetReport:
         frames=ctx.row_count,
         fps=ctx.fps,
         truncated=ctx.truncated,
+        video_audited=True,
     )
-    cfg = CheckConfig()
+    cfg = CheckConfig(video=video)
     for check in ALL_CHECKS:
         try:
             rep.results.append(check.run(ctx, cfg))
@@ -434,17 +456,23 @@ def render_dataset_page(rep: DatasetReport, audited: str | None = None) -> str:
 
 def audit_stale(entry: dict, engine: str, max_episodes: int) -> bool:
     """Whether a stored board entry is queued for re-audit: older check logic
-    (engine mismatch), or a truncated audit that a higher --max-episodes would
-    deepen (report.episodes below the current flag). max_episodes=0 disables
-    the depth check (rescore-only renders queue nothing). Gated rows are
-    never queued; unsupported rows are retried on an engine rotation - a
-    newer engine may support them."""
+    (engine mismatch), a row from before board video audits (video_audited
+    unset), or a truncated audit that a higher --max-episodes would deepen
+    (report.episodes below the current flag). max_episodes=0 disables the
+    depth check (rescore-only renders queue nothing). Gated rows are never
+    queued; unsupported rows are retried on an engine rotation - a newer
+    engine may support them."""
     if entry.get("status") == "gated":
         return False  # gated repos stay gated whatever the engine
     rep = entry.get("report")
     if not rep:
         return entry.get("engine") != engine  # unsupported: retry per engine
     if entry.get("engine") != engine:
+        return True
+    if not rep.get("video_audited"):
+        # rows from before board video audits: re-audit once so
+        # visual-quality runs on the capped subsample (or settles as
+        # no-video / over-cap)
         return True
     return bool(rep.get("truncated")) and int(rep.get("episodes") or 0) < max_episodes
 

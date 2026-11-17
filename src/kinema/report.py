@@ -229,6 +229,9 @@ class DatasetReport:
     fps: float | None
     results: list[CheckResult] = field(default_factory=list)
     truncated: bool = False
+    # the audit evaluated visual quality (video fetched or none exists);
+    # rows predating board video audits lack the key and re-audit once
+    video_audited: bool = False
 
     @property
     def verdict(self) -> Severity:
@@ -366,6 +369,7 @@ def report_to_dict(report: DatasetReport) -> dict[str, Any]:
         "frames": report.frames,
         "fps": report.fps,
         "truncated": report.truncated,
+        "video_audited": report.video_audited,
         "score": report.score,
         "score_model": SCORE_MODEL,
         "verdict": _MARK[report.verdict],
@@ -410,6 +414,7 @@ def report_from_dict(d: dict[str, Any]) -> DatasetReport:
         frames=d.get("frames", 0),
         fps=d.get("fps"),
         truncated=d.get("truncated", False),
+        video_audited=d.get("video_audited", False),
     )
     for cdict in d.get("checks", []):
         rep.results.append(_result_from_dict(cdict))
