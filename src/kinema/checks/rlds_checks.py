@@ -17,7 +17,8 @@ from dataclasses import dataclass
 from kinema.checks.base import CheckResult, Finding, Severity
 from kinema.rlds import RldsDataset, RldsError, GcsClient, decode_example, iter_records
 
-SHARD_RE = re.compile(r"-(?P<split>[A-Za-z0-9_]+)\.tfrecord-(?P<idx>\d{5})-of-(?P<total>\d{5})$")
+SHARD_RE = re.compile(
+    r"-(?P<split>[A-Za-z0-9_]+)\.(?:tfrecord|array_record)-(?P<idx>\d{5})-of-(?P<total>\d{5})$")
 SINGLE_SHARD_WARN_BYTES = 2 * 1024**3  # one corrupt object kills everything
 DEFAULT_SAMPLE_CAP = 64 * 1024**2  # skip episodes whose record is bigger
 
@@ -198,6 +199,13 @@ def rlds_step_structure(ds: RldsDataset, client: GcsClient,
         res.skip_reason = "no shards"
         return res
     name = sorted(ds.shards)[0][0]
+    if ".tfrecord-" not in name:
+        # ArrayRecord shards (bc_z): the payload framing is not TFRecord, so
+        # the sample decode would read garbage - skip it; the metadata checks
+        # still ran
+        res.skipped = True
+        res.skip_reason = "ArrayRecord shards: payload sampling not supported"
+        return res
     try:
         head = client.get(name, (0, 11))
         (length,) = struct.unpack_from("<Q", head, 0)

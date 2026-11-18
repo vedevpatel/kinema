@@ -320,7 +320,7 @@ class RldsDataset:
             raise RldsError(f"{name}/{version}: no {missing[0]} - no data in this bucket")
         info = client.get_json(vprefix + "dataset_info.json")
         features = client.get_json(vprefix + "features.json")
-        shards = [(n, s) for n, s in items if ".tfrecord-" in n]
+        shards = [(n, s) for n, s in items if ".tfrecord-" in n or ".array_record-" in n]
         return cls(name, version, info, features, shards)
 
 

@@ -225,3 +225,19 @@ def test_run_rlds_checks_metadata_only():
         "rlds-step-structure"]
     assert [r.verdict for r in results[:3]] == [Severity.OK] * 3
     assert results[3].skipped
+
+
+def test_array_record_shards_inventory_parse_and_sample_skip():
+    # bc_z on gresearch stores shards as ArrayRecord, not TFRecord
+    files = {
+        "ds/1.0.1/dataset_info.json": b'{"splits": [{"name": "train", "shardLengths": ["5", "5"]}]}',
+        "ds/1.0.1/features.json": b"{}",
+        "ds/1.0.1/ds-train.array_record-00000-of-00002": b"a" * 100,
+        "ds/1.0.1/ds-train.array_record-00001-of-00002": b"b" * 100,
+    }
+    ds = RldsDataset.probe(_StubClient(files), "ds/")
+    assert len(ds.shards) == 2 and ds.data_bytes == 200  # inventoried + counted
+    assert rlds_shard_inventory(ds).verdict == Severity.OK  # SHARD_RE parses them
+    assert rlds_episode_counts(ds).verdict == Severity.OK
+    res = rlds_step_structure(ds, _StubClient(files), RldsCheckConfig(sample=True))
+    assert res.skipped and "ArrayRecord" in res.skip_reason  # no garbage decode
