@@ -25,16 +25,17 @@ from kinema.dataset import ACTION_KEY, STATE_KEY
 from kinema.stats import aggregate, as_stat_dict, data_stats
 
 
-def _errors(actual: dict, ref: dict) -> dict[str, np.ndarray]:
-    """Per-stat, per-dim error in normalization-relevant units."""
+def _errors(actual: dict, ref: dict) -> tuple[dict[str, np.ndarray], np.ndarray]:
+    """Per-stat, per-dim error in normalization-relevant units.
+
+    Returns (errors, floored_mean): floored_mean carries the UNfloored mean
+    sigma-error on dims the constant-dim floor zeroed (0 elsewhere), so the
+    caller can surface a would-have-warned dim as one INFO instead of hiding
+    the floor's work.
+    """
     rng = np.maximum(ref["max"] - ref["min"], actual["max"] - actual["min"])
     rng_floor = np.maximum(rng, 1e-8)
     sigma = np.maximum.reduce([ref["std"], actual["std"], 1e-3 * rng, np.full_like(rng, 1e-8)])
-    out = {
-        "mean": np.abs(actual["mean"] - ref["mean"]) / sigma,
-        "min": np.abs(actual["min"] - ref["min"]) / rng_floor,
-        "max": np.abs(actual["max"] - ref["max"]) / rng_floor,
-    }
     # std ratio; dims with (near-)zero variance on both sides are check 8's job
     # (a std of 1e-3 vs 1e-7 on a constant dim is not drift that matters)
     # Converters often floor std (e.g. at 1e-3) for dead dims; a floor over
@@ -43,10 +44,23 @@ def _errors(actual: dict, ref: dict) -> dict[str, np.ndarray]:
     both_flat = (np.maximum(ref["std"], actual["std"]) < 1e-3 * scale) | (
         (actual["std"] < 1e-4 * scale) & (ref["std"] <= 1e-2 * scale)
     )
+    raw_mean = np.abs(actual["mean"] - ref["mean"]) / sigma
+    out = {
+        # the mean comparison gets the same floor as std: on a dim that does
+        # not move in the data, a stored-vs-recomputed mean difference is a
+        # DC offset on a constant input - inert - and the sigma floor
+        # (1e-3 * range) collapses to the stored std, which on a constant dim
+        # is converter f32-accumulation noise (RoboCOIN: stored mean off by
+        # 7.5e-6 on a channel whose true std is 0; a naive-f32 running sum
+        # reproduces the stored mean to 13 significant digits)
+        "mean": np.where(both_flat, 0.0, raw_mean),
+        "min": np.abs(actual["min"] - ref["min"]) / rng_floor,
+        "max": np.abs(actual["max"] - ref["max"]) / rng_floor,
+    }
     out["std"] = np.where(
         both_flat, 0.0, np.abs(actual["std"] - ref["std"]) / np.maximum(ref["std"], 1e-8)
     )
-    return out
+    return out, np.where(both_flat, raw_mean, 0.0)
 
 
 _UNIT = {"mean": "std devs", "std": "relative", "min": "of range", "max": "of range"}
@@ -90,7 +104,15 @@ class StatsDriftCheck(Check):
                 continue
         if any(ref.get(k) is None or ref[k].shape != actual[k].shape for k in ("mean", "std", "min", "max")):
             return worst
-        errs = _errors(actual, ref)
+        errs, floored_mean = _errors(actual, ref)
+        n_floored = int((floored_mean > cfg.stats_mean_warn_sigma).sum())
+        if n_floored:
+            res.findings.append(Finding(
+                self.id, Severity.INFO,
+                f"{feat}: {n_floored} near-constant dim(s) whose stored stats disagree "
+                "with the data at their own tiny scale - converter f32 noise, inert "
+                "for normalization (not scored)",
+                details={"feature": feat, "dims": n_floored}))
         for stat, err in errs.items():
             warn, fail = tol[stat]
             dim = int(np.argmax(err))

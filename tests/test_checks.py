@@ -72,6 +72,54 @@ def test_stats_drift(tmp_path, cfg):
     assert verdict("stats-drift", ctx, cfg) == Severity.WARN
 
 
+def test_stats_drift_floors_constant_dim_f32_noise(tmp_path, cfg):
+    # RoboCOIN-shaped: a channel constant in the data whose stored stats carry
+    # converter float32-accumulation noise. Not drift - the constant-dim floor
+    # absorbs it (no WARN/FAIL) and surfaces one INFO per feature.
+    ctx = defective(tmp_path, "constant-dim-f32-stats")
+    res = run("stats-drift", ctx, cfg)
+    assert res.verdict in (Severity.OK, Severity.INFO)
+    assert not any(f.severity >= Severity.WARN for f in res.findings)
+    info = [f for f in res.findings if f.severity == Severity.INFO]
+    assert len(info) == 1, [f.message for f in res.findings]
+    assert info[0].details["dims"] == 1
+    assert "near-constant" in info[0].message
+
+
+def test_errors_constant_dim_floor():
+    import numpy as np
+
+    from kinema.checks.stats_drift import _errors
+
+    actual = {
+        "mean": np.array([0.9, 0.1]),
+        "std": np.array([0.0, 0.2]),
+        "min": np.array([0.9, -0.5]),
+        "max": np.array([0.9, 0.7]),
+    }
+    ref = {k: v.copy() for k, v in actual.items()}
+
+    # accurate stored stats on the flat dim: floor applies but hides nothing
+    errs, floored = _errors(actual, ref)
+    assert errs["mean"][0] == 0.0 and errs["std"][0] == 0.0
+    assert floored[0] == 0.0  # no INFO
+
+    # f32 noise on the flat dim (primary branch: both stds tiny): mean and
+    # std errors zeroed, the raw would-have-warned error surfaces via floored,
+    # and min/max stay evaluated
+    ref["mean"] = np.array([0.9000075, 0.1])
+    ref["std"] = np.array([7.5e-6, 0.205])
+    errs, floored = _errors(actual, ref)
+    assert errs["mean"][0] == 0.0 and errs["std"][0] == 0.0
+    assert floored[0] > 0.1  # over the default WARN sigma line -> INFO
+    assert errs["std"][1] > 0  # the live dim's real 2.5% drift is untouched
+
+    # heuristic branch: dead in the data, tiny nonzero stored std floor
+    ref["std"] = np.array([1e-3, 0.2])
+    errs, _floored = _errors(actual, ref)
+    assert errs["mean"][0] == 0.0 and errs["std"][0] == 0.0
+
+
 def test_timestamp_grid_off_grid(tmp_path, cfg):
     ctx = defective(tmp_path, "timestamp-grid")
     res = run("timestamp-grid", ctx, cfg)

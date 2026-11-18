@@ -17,6 +17,7 @@ import pyarrow.parquet as pq
 
 KNOWN_DEFECTS = [
     "stats-drift",
+    "constant-dim-f32-stats",
     "timestamp-grid",
     "dropped-frames",
     "calibration-drift",
@@ -118,6 +119,12 @@ def make_dataset(
                 action[n - hold:] = action[n - hold - 1]
                 state[n - hold:] = state[n - hold - 1]
             action = np.hstack([action, vel])
+        if "constant-dim-f32-stats" in defects:
+            # RoboCOIN-shaped constant channel: the dim does not move in any
+            # episode; its stored stats get poisoned below with converter
+            # f32-accumulation noise
+            state[:, -1] = 0.90687436
+
         if ep == 0:
             first_state, first_action = state.copy(), action.copy()
 
@@ -272,6 +279,14 @@ def make_dataset(
     if "stats-drift" in defects:
         for k in ("mean", "std"):
             stats["action"][k] = (np.asarray(stats["action"][k]) * 1.08).tolist()
+
+    if "constant-dim-f32-stats" in defects:
+        # naive float32 running-sum noise on the constant dim: true std is 0,
+        # but the converter stores a mean off by ~8e-6 and fabricates a std of
+        # ~7.5e-6 (RoboCOIN dryer's joint5 channel, reproduced to 13 digits).
+        # Not drift: the constant-dim floor must absorb it and surface an INFO.
+        stats["observation.state"]["mean"][-1] = 0.90686685
+        stats["observation.state"]["std"][-1] = 7.51e-06
 
     features = {
         "action": {"dtype": "float64", "shape": [a_dim], "names": a_names},
