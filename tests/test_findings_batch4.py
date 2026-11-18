@@ -104,7 +104,7 @@ def test_sampled_load_without_episode_stats_catches_shifted_stored_mean(tmp_path
     ctx = load_dataset(str(root), max_episodes=24)
     assert ctx.truncated and not ctx.episode_stats
     res = run("stats-drift", ctx)
-    assert any(f.severity == Severity.WARN and f.details.get("reference") == "bootstrap"
+    assert any(f.severity == Severity.INFO and f.details.get("reference") == "bootstrap"
                for f in res.findings), [f.message for f in res.findings]
 
 

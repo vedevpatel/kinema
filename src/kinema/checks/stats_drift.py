@@ -282,13 +282,15 @@ class StatsDriftCheck(Check):
                             d = int(np.argmax(out))
                             if out[d] > 0:
                                 res.findings.append(Finding(
-                                    self.id, Severity.WARN,
+                                    self.id, Severity.INFO,
                                     f"{feat}.{kind}: the stored {kind} is inconsistent with the "
                                     f"loaded sample on dim {d} (stored {st[d]:.6g}, outside the "
                                     f"sample's {100 * (1 - cfg.stats_sample_alpha):.1f}% bootstrap "
                                     f"interval [{lo[d]:.6g}, {hi[d]:.6g}] over {E} episodes) - the "
-                                    "stored stats look wrong (sampled audit: load the full dataset "
-                                    "to confirm)",
+                                    "sample is deterministic, not random: this interval is descriptive "
+                                    "and does not establish incorrect stored stats; load the full "
+                                    "dataset to confirm",
+
                                     details={"feature": feat, "stat": kind, "dim": d,
                                              "reference": "bootstrap", "episodes": E,
                                              "stored": float(st[d]),

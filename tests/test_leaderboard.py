@@ -927,3 +927,33 @@ def test_metadata_only_bucket_does_not_claim_data_bearing_mirror(monkeypatch):
     monkeypatch.setattr(rlds.RldsDataset, "probe", classmethod(probe))
     rows = lb.probe_rlds_lane()
     assert len(rows) == 1 and rows[0]["rlds_bucket"] == second
+
+
+def test_error_rows_retry_and_depth_attempts_settle():
+    lb = _load_leaderboard()
+    assert lb.audit_stale({'engine': 'e', 'status': 'error', 'reason': '429'}, 'e', 250)
+    row = {'engine': 'e', 'audit_max_episodes': 250,
+           'report': {'truncated': True, 'episodes': 15, 'video_audited': 5}}
+    assert not lb.audit_stale(row, 'e', 250)
+    assert lb.audit_stale(row, 'e', 500)
+    assert lb.audit_stale({**row, 'last_audit_error': '429'}, 'e', 250)
+
+
+def test_discovery_omission_preserves_every_lane_and_updates_observed_metadata():
+    lb = _load_leaderboard()
+    old = [{'id': str(i), 'lane': lane, 'report': {'score': 70}}
+           for i, lane in enumerate(('top', 'new', 'flagship', 'rlds'))]
+    result = lb.reconcile_discovery(old, [{'id': '0', 'lane': 'new', 'downloads': 12}])
+    assert {e['id'] for e in result} == {'0', '1', '2', '3'}
+    assert result[0]['lane'] == 'new' and result[0]['downloads'] == 12
+    assert result[0]['discovery_current']
+    assert all(not e['discovery_current'] for e in result[1:])
+
+
+def test_failed_retry_does_not_destroy_previous_evidence():
+    lb = _load_leaderboard()
+    old = {'id': 'org/a', 'engine': 'old', 'report': {'score': 80}}
+    failed = {'id': 'org/a', 'engine': 'new', 'status': 'error', 'reason': '429'}
+    kept = lb.preserve_failed_retry(old, failed)
+    assert kept['report'] == old['report'] and kept['engine'] == 'old'
+    assert kept['last_audit_error'] == '429'

@@ -997,6 +997,24 @@ def render_dataset_page(rep: DatasetReport, audited: str | None = None,
     return page(f"{rep.source} - kinema audit", body)
 
 
+def reconcile_discovery(entries: list[dict], datasets: list[dict]) -> list[dict]:
+    """An omitted probe is not evidence of deletion, in any lane."""
+    current = {d["id"]: d for d in datasets}
+    out = []
+    for old in entries:
+        fresh = current.get(old["id"])
+        metadata = ({k: v for k, v in fresh.items()
+                     if k not in {"report", "engine", "reason", "status"}} if fresh else {})
+        out.append({**old, **metadata, "discovery_current": fresh is not None})
+    return out
+
+
+def preserve_failed_retry(old: dict, new: dict) -> dict:
+    if old.get("report") and not new.get("report") and new.get("status") == "error":
+        return {**old, "last_audit_error": new.get("reason", "unknown audit failure")}
+    return new
+
+
 def audit_stale(entry: dict, engine: str, max_episodes: int) -> bool:
     """Whether a stored board entry is queued for re-audit: older check logic
     (engine mismatch), a row below the current video_audited mark
@@ -1006,6 +1024,8 @@ def audit_stale(entry: dict, engine: str, max_episodes: int) -> bool:
     depth check (rescore-only renders queue nothing). Gated rows are never
     queued; unsupported rows are retried on an engine rotation - a newer
     engine may support them."""
+    if entry.get("status") == "error" or entry.get("last_audit_error"):
+        return True
     if entry.get("status") == "gated":
         return False  # gated repos stay gated whatever the engine
     rep = entry.get("report")
@@ -1018,7 +1038,8 @@ def audit_stale(entry: dict, engine: str, max_episodes: int) -> bool:
         # targeting bug (1): re-audit once so visual-quality runs on the
         # capped subsample (or settles as no-video / over-cap)
         return True
-    return bool(rep.get("truncated")) and int(rep.get("episodes") or 0) < max_episodes
+    depth = max(int(rep.get("episodes") or 0), int(entry.get("audit_max_episodes") or 0))
+    return bool(rep.get("truncated")) and depth < max_episodes
 
 
 def invalidate_capped_video_results(entries: list[dict], capped_ids: set[str],
@@ -1094,6 +1115,10 @@ def render_index(entries: list[dict], generated: str, harm_table: bool = False, 
                 link += (' <span class=dim title="Open X RLDS dataset on GCS; '
                          'metadata audit only">(rlds)</span>')
 
+            if e.get("discovery_current") is False:
+                link += ' <span class=dim>(not rediscovered this run)</span>'
+            if e.get("last_audit_error"):
+                link += f' <span class=dim title="{esc(e["last_audit_error"])}">(retry failed)</span>'
             score = f"<span class=score>{r['score']}</span>"
             model = r.get("score_model", "legacy-v0")
             if model != SCORE_MODEL:
@@ -1388,35 +1413,9 @@ def main() -> int:
             prev = json.loads(data_json.read_text()).get("datasets", [])
             entries = [
                 e for e in prev
-                if e.get("report") or (e.get("reason") and e.get("status") in ("gated", "unsupported"))
+                if e.get("report") or (e.get("reason") and e.get("status") in ("gated", "unsupported", "error"))
             ]
-            # drop datasets that fell out of the current top list - unless the
-            # listing came back suspiciously short (a Hub hiccup must not wipe
-            # the board)
-            current = {d["id"]: d for d in datasets}
-            if len(current) >= 0.5 * len({e["id"] for e in entries}):
-                dropped = [e["id"] for e in entries if e["id"] not in current]
-                entries = [e for e in entries if e["id"] in current]
-                # a dead rlds lane returns zero rows on a GCS hiccup - that
-                # must not prune the stored rlds board (the same hiccup
-                # shape the 0.5 guard covers for Hub listings)
-                if dropped and not any(i.startswith("rlds/") for i in current):
-                    rlds_kept = [e for e in prev
-                                 if e["id"].startswith("rlds/")]
-                    if rlds_kept:
-                        print(f"rlds lane returned no rows; keeping "
-                              f"{len(rlds_kept)} stored rlds entries", flush=True)
-                        entries.extend(rlds_kept)
-                        dropped = [i for i in dropped
-                                   if not i.startswith("rlds/")]
-                for e in entries:  # fresh download counts for the ranking
-                    if e["id"] in current:
-                        e["downloads"] = current[e["id"]].get("downloads", e.get("downloads", 0))
-                if dropped:
-                    print(f"dropping {len(dropped)} dataset(s) no longer in the top list")
-            else:
-                print(f"listing returned {len(current)} datasets for a board of {len(entries)}; "
-                      "not pruning")
+            entries = reconcile_discovery(entries, datasets)
             # stored results carry their verdicts: rescore them under the
             # current model so the whole board swaps models in this run
             n_moved = rescore_entries(entries)
@@ -1438,7 +1437,8 @@ def main() -> int:
 
     def process(d):
         slug = d["id"].replace("/", "--")
-        entry = {**d, "slug": slug, "engine": engine}
+        entry = {**d, "slug": slug, "engine": engine,
+                 "audit_max_episodes": args.max_episodes}
         if d["data_bytes"] > args.size_cap_mb * 1024 * 1024:
             entry["sampled"] = True
         try:
@@ -1468,7 +1468,7 @@ def main() -> int:
     def record(entry) -> None:
         for i, e in enumerate(entries):
             if e["id"] == entry["id"]:
-                entries[i] = entry  # replace the stale result in place
+                entries[i] = preserve_failed_retry(e, entry)
                 break
         else:
             entries.append(entry)
