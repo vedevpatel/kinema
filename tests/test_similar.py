@@ -43,7 +43,7 @@ def test_rank_orders_by_similarity_and_excludes_self():
     entries = [
         _entry(0, {"calibration-drift": "WARN"}),
         _entry(1, {"idle-segments": "WARN"}),
-        _entry(2, {}),
+        _entry(2, {"idle": "PASS"}),
         {**_entry(99, {"calibration-drift": "WARN"}), "id": "me/mine"},
     ]
     matches = rank(q, entries, k=3, exclude_id="me/mine")
@@ -54,7 +54,7 @@ def test_rank_orders_by_similarity_and_excludes_self():
 
 def test_rank_caps_k():
     q = _report({})
-    assert len(rank(q, [_entry(i, {}) for i in range(10)], k=4)) == 4
+    assert len(rank(q, [_entry(i, {"idle": "PASS"}) for i in range(10)], k=4)) == 4
 
 
 def test_fetch_board_caches_then_serves_stale(tmp_path):
@@ -120,3 +120,32 @@ def test_similar_datasets_requires_a_query(monkeypatch):
               "params": {"name": "similar_datasets", "arguments": {"k": 3}}}, emit=out.append)
     (reply,) = out
     assert "one of dataset or report_path" in reply["result"]["content"][0]["text"]
+
+
+def test_fail_is_a_problem_and_unaudited_is_not_a_perfect_match():
+    q = _report({'stats-drift': 'FAIL'})
+    assert distance(q, _entry(1, {'stats-drift': 'FAIL'})) < distance(q, _entry(2, {'idle': 'FAIL'}))
+    entries = [_entry(0, {}), _entry(1, {'stats-drift': 'FAIL'}), {'id': 'empty'}]
+    assert [m['id'] for m in rank(q, entries)] == ['org/ds1']
+
+
+def test_native_source_excludes_self():
+    q = _report({'idle': 'WARN'})
+    q['source'] = 'hf://org/ds1@main'
+    entries = [_entry(1, {'idle': 'WARN'}), _entry(2, {'idle': 'WARN'})]
+    assert [m['id'] for m in rank(q, entries)] == ['org/ds2']
+
+
+def test_dataset_route_serializes_report(tmp_path, monkeypatch):
+    from kinema.fixtures.synth import make_dataset
+    root = make_dataset(tmp_path / 'd', episodes=3)
+    monkeypatch.setattr(mcp, 'fetch_board', lambda: ([_entry(1, {'idle': 'WARN'})], {}))
+    s, out = mcp.McpServer(), []
+    s.handle({'jsonrpc': '2.0', 'id': 1, 'method': 'initialize',
+              'params': {'protocolVersion': '2025-06-18'}}, emit=out.append)
+    out.clear()
+    s.handle({'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call',
+              'params': {'name': 'similar_datasets', 'arguments': {'dataset': str(root)}}}, emit=out.append)
+    assert not out[0]['result'].get('isError'), out
+    payload = json.loads(out[0]['result']['content'][0]['text'])
+    assert payload['query']['dataset'] == str(root)

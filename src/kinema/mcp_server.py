@@ -65,7 +65,7 @@ from kinema.diagnose import (
     run_checks,
     summarize_report,
 )
-from kinema.report import render_json
+from kinema.report import render_json, report_to_dict
 from kinema.similar import fetch_board, load_query_report, rank
 
 SUPPORTED_PROTOCOL_VERSIONS = ["2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25"]
@@ -725,16 +725,17 @@ class McpServer:
                         cancelled=cancel,
                         progress=progress,
                     )
+                    query = report_to_dict(query)
                 entries, corpus = fetch_board()
                 payload = {
                     "query": {
-                        "dataset": query.get("dataset"),
+                        "dataset": query.get("source") or query.get("dataset"),
                         "score": query.get("score"),
                         "verdict": query.get("verdict"),
                     },
                     "corpus": corpus,
                     "matches": rank(query, entries, k=args.get("k") or 5,
-                                    exclude_id=query.get("dataset")),
+                                    exclude_id=query.get("source") or query.get("dataset")),
                 }
             else:  # run_checks
                 report, _ctx = run_checks(

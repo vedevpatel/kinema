@@ -108,3 +108,28 @@ def test_short_action_names_do_not_crash_gripper_message(tmp_path):
     ctx.action[:, 5] += 4.0
     ctx.action_names = ['only-one-name']
     CHECKS['calibration-drift']._gripper(ctx, CheckConfig(), (5, 5))
+
+
+@pytest.mark.parametrize('full_cache', [False, True])
+def test_hub_sampling_ignores_extra_cached_shards(tmp_path, monkeypatch, full_cache):
+    import kinema.dataset as ds
+    root = make_dataset(tmp_path / 'd', episodes=24, shards=6)
+    if not full_cache:
+        (root / 'data/chunk-000/file-002.parquet').unlink()  # not a requested anchor
+    import huggingface_hub
+    monkeypatch.setattr(huggingface_hub, 'list_repo_tree', lambda *a, **kw: [])
+    monkeypatch.setattr(ds, '_resolve_source', lambda *a, **kw: (root, 'org/name', None))
+    ctx = ds.load_dataset('hf://org/name', max_episodes=5)
+    assert ctx.episode_ids() == ds._spread(list(range(24)), 5)
+
+
+def test_zero_row_catalogued_episode_is_not_discarded(tmp_path):
+    root = make_dataset(tmp_path / 'd', episodes=6)
+    for p in root.glob('data/**/*.parquet'):
+        t = pq.read_table(p)
+        import pyarrow.compute as pc
+        pq.write_table(t.filter(pc.not_equal(t['episode_index'], 3)), p)
+    ctx = load_dataset(str(root))
+    assert 3 in ctx.episode_ids()
+    assert any(f.episode_index == 3 and f.severity == Severity.FAIL
+               for f in run('dropped-frames', ctx).findings)

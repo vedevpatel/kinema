@@ -27,11 +27,11 @@ _CACHE_MAX_AGE_S = 24 * 3600
 _FETCH_TIMEOUT_S = 15
 
 # verdicts that mark an evaluated problem; SKIP/INFO carry no defect signal
-_WARN = "WARN"
+_PROBLEMS = {"WARN", "FAIL"}
 
 
 def _warn_ids(report: dict[str, Any]) -> set[str]:
-    return {c.get("id") for c in report.get("checks") or [] if c.get("verdict") == _WARN} - {None}
+    return {c.get("id") for c in report.get("checks") or [] if c.get("verdict") in _PROBLEMS} - {None}
 
 
 def _report_of(entry: dict[str, Any]) -> dict[str, Any]:
@@ -63,10 +63,16 @@ def rank(query: dict[str, Any], entries: list[dict[str, Any]], k: int = 5,
     """The k closest board datasets, annotated so each match explains itself:
     which warnings are shared, and the measured MSE harm of those defects."""
     out: list[dict[str, Any]] = []
+    exclude_id = exclude_id or query.get("source") or query.get("dataset")
+    if exclude_id:
+        exclude_id = exclude_id.removeprefix("hf://").split("@", 1)[0]
     for e in entries:
         if exclude_id and e.get("id") == exclude_id:
             continue
         report = _report_of(e)
+        if not any(c.get("verdict") in {"PASS", "OK", "INFO", "WARN", "FAIL"}
+                   for c in report.get("checks") or []):
+            continue  # no evaluated evidence is not a perfect health match
         shared = sorted(_warn_ids(query) & _warn_ids(report))
         out.append({
             "id": e.get("id"),

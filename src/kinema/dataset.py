@@ -775,7 +775,11 @@ def load_dataset(
         lo, hi = np.searchsorted(meta_arr, [rng[0], rng[1] + 1])
         return meta_arr[lo:hi]
 
-    if max_episodes is not None and max_episodes < len(meta_ids):
+    if max_episodes is not None and repo_id is not None:
+        # Hub downloads target the metadata spread. Extra cached shards must
+        # not resample those anchors into a different, cache-dependent set.
+        targets = _spread(meta_ids, max_episodes)
+    elif max_episodes is not None and max_episodes < len(meta_ids):
         present_ids: set[int] = set()
         for _, _, ranges in files:
             for rng in ranges:
@@ -914,7 +918,12 @@ def load_dataset(
     # still audits the episodes it has instead of capping to absent ones
     present = set(np.unique(episode_index).tolist())
     if len(present) < len(episodes):
-        episodes = [e for e in episodes if e.index in present]
+        # A catalogued episode absent from an available authoritative shard
+        # is missing data, not an episode to erase from the audit. Keep it so
+        # dropped-frames can compare its declared length with zero rows.
+        episodes = [e for e in episodes if e.index in present or (
+            e.index in targets and shard_map and e.index in shard_map
+            and (root / shard_map[e.index]).is_file())]
         truncated = True
 
     if max_episodes is not None and len(episodes) > max_episodes:

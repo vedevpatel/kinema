@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import json
 from functools import lru_cache
 from pathlib import Path
 
@@ -39,7 +40,18 @@ def _strip_docstrings(tree: ast.AST) -> ast.AST:
 
 def _normalized(source: str) -> str:
     """Syntax tree without docstrings; comments and formatting never reach it."""
-    return ast.dump(_strip_docstrings(ast.parse(source)), annotate_fields=False)
+    def stable(node):
+        if isinstance(node, ast.AST):
+            return {"node": type(node).__name__, "fields": {
+                name: stable(value) for name, value in ast.iter_fields(node)
+                if value is not None and value != []}}
+        if isinstance(node, list):
+            return [stable(v) for v in node]
+        # repr preserves constant type (1 vs True) and supports bytes/complex.
+        return {"value": repr(node)}
+
+    return json.dumps(stable(_strip_docstrings(ast.parse(source))), sort_keys=True,
+                      separators=(",", ":"))
 
 
 @lru_cache(maxsize=1)
