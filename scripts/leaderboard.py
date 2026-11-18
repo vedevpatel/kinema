@@ -207,7 +207,7 @@ _RLDS_LANE_MAX_CALLS = 2500  # GCS JSON-API calls per bucket (gresearch's shard
 # listings paginate: ~17 calls/dataset; 600 starved the pass at the d's)
 
 
-def probe_rlds_lane() -> list[dict]:
+def probe_rlds_lane(workers: int = 8) -> list[dict]:
     """Board entries for the RLDS corpus on GCS (not Hugging Face).
 
     Discovery is an anonymous bucket listing per bucket in RLDS_BUCKETS;
@@ -222,7 +222,16 @@ def probe_rlds_lane() -> list[dict]:
     row - the resume prune guard keeps the stored rlds board when the lane
     comes back empty. Per-dataset probe failures still skip just that
     dataset. Rows carry no downloads/likes (GCS exposes neither) and ride
-    their own lane so zero-counts never pollute the download-ranked lanes."""
+    their own lane so zero-counts never pollute the download-ranked lanes.
+
+    Per-prefix probes run through _ordered_pool (the serial pass measured at
+    6-7 min of every run, 2026-11-18). Buckets stay serial in precedence
+    order and results are consumed in sorted-prefix order, so claimed-set
+    fall-through, board membership, and the call-budget trip point are
+    identical to the serial pass. Each probe gets its own GcsClient (the
+    constructor is stateless besides the call counter, which the consumer
+    reads after the task finishes); the budget still bounds pathological
+    pagination, with an overshoot of at most `workers` in-flight probes."""
     from kinema.rlds import GcsClient, RldsDataset
 
     out: list[dict] = []
@@ -231,25 +240,38 @@ def probe_rlds_lane() -> list[dict]:
         for bucket, base in RLDS_BUCKETS:
             client = GcsClient(bucket)
             prefixes, _ = client.list(prefix=base, delimiter="/")
-            for p in sorted(prefixes):
+            calls = client.calls
+
+            def probe_one(p: str, _bucket=bucket):
+                task_client = GcsClient(_bucket)
                 name = p.rstrip("/").split("/")[-1]
-                if name in claimed:
-                    continue  # a higher-precedence bucket already boards it
                 try:
-                    ds = RldsDataset.probe(client, p)
+                    ds = RldsDataset.probe(task_client, p)
                 except Exception as e:  # noqa: BLE001 - one dataset must not stall the lane
-                    print(f"rlds/{name}: probe failed in {bucket} ({type(e).__name__}) - skipping",
-                          flush=True)
-                    continue
-                claimed.add(name)
-                out.append({"id": f"rlds/{name}", "rlds": True, "rlds_prefix": p,
-                            "rlds_bucket": bucket,
-                            "version": ds.version, "downloads": 0, "likes": 0,
-                            "data_bytes": ds.data_bytes})
-                if client.calls > _RLDS_LANE_MAX_CALLS:
-                    print(f"rlds lane over {_RLDS_LANE_MAX_CALLS} API calls in "
-                          f"{bucket} - boarding what we have", flush=True)
-                    break
+                    print(f"rlds/{name}: probe failed in {_bucket} "
+                          f"({type(e).__name__}) - skipping", flush=True)
+                    return None, task_client.calls
+                return {"id": f"rlds/{name}", "rlds": True, "rlds_prefix": p,
+                        "rlds_bucket": _bucket,
+                        "version": ds.version, "downloads": 0, "likes": 0,
+                        "data_bytes": ds.data_bytes}, task_client.calls
+
+            todo = [p for p in sorted(prefixes)
+                    if p.rstrip("/").split("/")[-1] not in claimed]
+            stream = _ordered_pool(probe_one, todo, max(1, workers))
+            try:
+                for item in stream:
+                    entry, probe_calls = item if item is not None else (None, 0)
+                    calls += probe_calls
+                    if entry is not None:
+                        claimed.add(entry["rlds_prefix"].rstrip("/").split("/")[-1])
+                        out.append(entry)
+                    if calls > _RLDS_LANE_MAX_CALLS:
+                        print(f"rlds lane over {_RLDS_LANE_MAX_CALLS} API calls in "
+                              f"{bucket} - boarding what we have", flush=True)
+                        break
+            finally:
+                stream.close()
         return out
     except Exception as e:  # noqa: BLE001 - the lane dies quiet, the board lives
         print(f"rlds lane failed ({type(e).__name__}) - zero rlds rows this run "
@@ -388,39 +410,113 @@ def _merge_lanes(top: list[dict], recent: list[dict], limit: int, new_lane: int,
     return out
 
 
-def find_lerobot_datasets(limit: int, new_lane: int = 0) -> list[dict]:
+def _ordered_pool(fn, items, workers: int):
+    """Yield fn(item) in INPUT order with up to `workers` calls in flight.
+
+    Discovery probes are independent network calls; running them through a
+    small pool takes the serial discovery phase (measured ~8 min of every
+    run, 2026-11-18) down to about a minute without changing WHAT boards:
+    consumers early-stop (lane caps, the rlds call budget) on the in-order
+    result stream, so membership and ordering match the old serial loops
+    exactly. Close the generator on early exit (try/finally) so the pool
+    does not linger. A future that raises yields None: one bad probe must
+    not kill discovery (probe functions already catch and return None on
+    their own expected failures).
+    """
+    from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+
+    if workers <= 1:
+        yield from (fn(item) for item in items)
+        return
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        it = iter(items)
+        pending: dict = {}
+        results: dict = {}
+        idx = 0
+        exhausted = False
+
+        def submit_more() -> None:
+            nonlocal idx, exhausted
+            while not exhausted and len(pending) < workers:
+                try:
+                    item = next(it)
+                except StopIteration:
+                    exhausted = True
+                    return
+                pending[pool.submit(fn, item)] = idx
+                idx += 1
+
+        submit_more()
+        next_out = 0
+        while pending:
+            done, _ = wait(list(pending), return_when=FIRST_COMPLETED)
+            for f in done:
+                i = pending.pop(f)
+                try:
+                    results[i] = f.result()
+                except Exception:  # noqa: BLE001 - one probe must not kill discovery
+                    results[i] = None
+            submit_more()
+            while next_out in results:
+                yield results.pop(next_out)
+                next_out += 1
+
+
+def find_lerobot_datasets(limit: int, new_lane: int = 0, workers: int = 8) -> list[dict]:
     from huggingface_hub import HfApi
 
     api = HfApi()
     top: list[dict] = []
-    for d in api.list_datasets(search="lerobot", sort="downloads", limit=limit * 3):
-        e = _probe_dataset(api, d.id, d.downloads or 0, getattr(d, "likes", 0) or 0)
-        if e:
-            top.append(e)
-        if len(top) >= limit:
-            break
+    candidates = list(api.list_datasets(search="lerobot", sort="downloads",
+                                        limit=limit * 3))
+    stream = _ordered_pool(
+        lambda d: _probe_dataset(api, d.id, d.downloads or 0,
+                                 getattr(d, "likes", 0) or 0),
+        candidates, workers)
+    try:
+        for e in stream:
+            if e:
+                top.append(e)
+            if len(top) >= limit:
+                break
+    finally:
+        stream.close()
     recent: list[dict] = []
     if new_lane:
-        for d in api.list_datasets(search="lerobot", sort="created_at",
-                                   limit=new_lane * 3):
-            e = _probe_dataset(api, d.id, d.downloads or 0, getattr(d, "likes", 0) or 0)
-            if e:
-                recent.append(e)
-            if len(recent) >= new_lane:
-                break
+        candidates = list(api.list_datasets(search="lerobot", sort="created_at",
+                                            limit=new_lane * 3))
+        stream = _ordered_pool(
+            lambda d: _probe_dataset(api, d.id, d.downloads or 0,
+                                     getattr(d, "likes", 0) or 0),
+            candidates, workers)
+        try:
+            for e in stream:
+                if e:
+                    recent.append(e)
+                if len(recent) >= new_lane:
+                    break
+        finally:
+            stream.close()
     flagship: list[dict] = []
     for org, seats in FLAGSHIP_ORG_SEATS.items():
+        candidates = list(api.list_datasets(author=org, sort="downloads",
+                                            limit=seats * 4))
+        # skip_gated: a gated repo would take the seat and show "gated"
+        # forever; the next auditable dataset makes better use of it
+        stream = _ordered_pool(
+            lambda d: _probe_dataset(api, d.id, d.downloads or 0,
+                                     getattr(d, "likes", 0) or 0, skip_gated=True),
+            candidates, workers)
         got = 0
-        for d in api.list_datasets(author=org, sort="downloads", limit=seats * 4):
-            if got >= seats:
-                break
-            # skip_gated: a gated repo would take the seat and show "gated"
-            # forever; the next auditable dataset makes better use of it
-            e = _probe_dataset(api, d.id, d.downloads or 0, getattr(d, "likes", 0) or 0,
-                               skip_gated=True)
-            if e:
-                flagship.append(e)
-                got += 1
+        try:
+            for e in stream:
+                if e:
+                    flagship.append(e)
+                    got += 1
+                if got >= seats:
+                    break
+        finally:
+            stream.close()
     for seed in FLAGSHIP_SEEDS:
         try:
             d = api.dataset_info(seed)
@@ -430,15 +526,26 @@ def find_lerobot_datasets(limit: int, new_lane: int = 0) -> list[dict]:
                            getattr(d, "likes", 0) or 0)
         if e:
             flagship.append(e)
-    for nested_repo, seats in NESTED_REPO_SEATS.items():
+
+    def probe_one_nested(kv) -> list[dict]:
+        nested_repo, seats = kv
         try:
-            flagship.extend(_probe_nested(api, nested_repo, seats))
+            return _probe_nested(api, nested_repo, seats)
         except Exception as e:  # noqa: BLE001 - one repo must not stall discovery
             print(f"{nested_repo}: nested probe failed ({type(e).__name__}) - skipping",
                   flush=True)
+            return []
+
+    if NESTED_REPO_SEATS:
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(
+                max_workers=min(max(1, workers), len(NESTED_REPO_SEATS))) as pool:
+            for entries in pool.map(probe_one_nested, NESTED_REPO_SEATS.items()):
+                flagship.extend(entries)
     rlds: list[dict] = []
     try:
-        rlds = probe_rlds_lane()
+        rlds = probe_rlds_lane(workers=workers)
     except Exception as e:  # noqa: BLE001 - defense in depth; probe_rlds_lane logs
         print(f"rlds lane failed ({type(e).__name__}) - zero rlds rows", flush=True)
     return _merge_lanes(top, recent, limit, new_lane, flagship) + [
@@ -1155,7 +1262,8 @@ def main() -> int:
     else:
         print(f"listing top {args.limit} lerobot datasets on the Hub"
               + (f" + {args.new_lane} newest..." if args.new_lane else "..."))
-        datasets = find_lerobot_datasets(args.limit, args.new_lane)
+        datasets = find_lerobot_datasets(args.limit, args.new_lane,
+                                         workers=args.workers)
         print(f"found {len(datasets)} LeRobot-format datasets")
         if worklist_path:
             worklist_path.write_text(json.dumps(datasets))

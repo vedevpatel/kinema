@@ -712,3 +712,83 @@ def test_probe_rlds_lane_budget_breaks_mid_pass(monkeypatch):
     assert 0 < len(gre) < 50  # stopped at the budget, kept what it probed
     assert len(gre) == 13  # 1 + 200*13 = 2601 > 2500; the tripping row boards
     assert [r["id"] for r in rows if r["rlds_bucket"] == gdm] == ["rlds/alpha"]
+
+
+def test_ordered_pool_preserves_input_order():
+    lb = _load_leaderboard()
+    out = list(lb._ordered_pool(lambda i: i * 10, range(20), workers=8))
+    assert out == [i * 10 for i in range(20)]
+
+
+def test_ordered_pool_workers_1_is_strictly_serial_and_lazy():
+    lb = _load_leaderboard()
+    calls = []
+
+    def fn(i):
+        calls.append(i)
+        return i
+
+    stream = lb._ordered_pool(fn, range(10), workers=1)
+    assert calls == []  # lazy: nothing runs before the first pull
+    assert next(stream) == 0
+    assert calls == [0]  # serial: one at a time, in order
+    stream.close()
+
+
+def test_ordered_pool_future_exception_yields_none_not_raise():
+    lb = _load_leaderboard()
+
+    def fn(i):
+        if i == 2:
+            raise RuntimeError("boom")
+        return i
+
+    out = list(lb._ordered_pool(fn, range(5), workers=4))
+    assert out == [0, 1, None, 3, 4]
+
+
+def test_top_lane_parallel_probe_keeps_order_and_early_stop(monkeypatch):
+    """The top lane must board the first `limit` probed-ok candidates in
+    listing order under parallel probing, exactly as the serial loop did."""
+    import types
+
+    lb = _load_leaderboard()
+    monkeypatch.setattr(lb, "FLAGSHIP_ORG_SEATS", {})
+    monkeypatch.setattr(lb, "FLAGSHIP_SEEDS", ())
+    monkeypatch.setattr(lb, "NESTED_REPO_SEATS", {})
+    monkeypatch.setattr(lb, "probe_rlds_lane", lambda workers=8: [])
+    # odd candidates lack meta/info.json (probe returns None)
+    listed = [types.SimpleNamespace(id=f"org/ds{i}", downloads=100 - i, likes=0)
+              for i in range(12)]
+
+    class _FakeApi:
+        def list_datasets(self, **kwargs):
+            return iter(listed)
+
+        def dataset_info(self, repo_id, **kwargs):
+            i = int(repo_id.rsplit("ds", 1)[1])
+            sibs = [] if i % 2 else [types.SimpleNamespace(
+                rfilename="meta/info.json", size=1)]
+            return types.SimpleNamespace(gated=False, siblings=sibs,
+                                         downloads=10, likes=0)
+
+    monkeypatch.setattr("huggingface_hub.HfApi", lambda: _FakeApi())
+    out = lb.find_lerobot_datasets(3, 0, workers=8)
+    assert [d["id"] for d in out] == ["org/ds0", "org/ds2", "org/ds4"]
+
+
+def test_probe_rlds_lane_parallel_matches_serial(monkeypatch):
+    """Parallel per-prefix probes board the same rows, buckets and order as
+    the serial pass (consumption stays in sorted-prefix order)."""
+    lb = _load_leaderboard()
+    gdm, gresearch = lb.RLDS_BUCKETS[0][0], lb.RLDS_BUCKETS[1][0]
+    listings = {gdm: ["alpha", "beta", "gamma"],
+                gresearch: ["alpha", "beta", "gamma", "delta"]}
+    probes = {gdm: ["alpha"], gresearch: ["alpha", "beta", "gamma", "delta"]}
+    _patch_rlds(monkeypatch, listings=listings, probes=probes)
+    serial = lb.probe_rlds_lane(workers=1)
+    _patch_rlds(monkeypatch, listings=listings, probes=probes)
+    parallel = lb.probe_rlds_lane(workers=8)
+    assert parallel == serial
+    assert [r["id"] for r in parallel] == [
+        "rlds/alpha", "rlds/beta", "rlds/delta", "rlds/gamma"]
