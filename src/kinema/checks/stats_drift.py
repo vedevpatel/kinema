@@ -40,7 +40,9 @@ def _errors(actual: dict, ref: dict) -> tuple[dict[str, np.ndarray], np.ndarray]
     # (a std of 1e-3 vs 1e-7 on a constant dim is not drift that matters)
     # Converters often floor std (e.g. at 1e-3) for dead dims; a floor over
     # a dim that does not move in the data is not drift that matters.
-    scale = np.maximum(1.0, np.abs(ref["mean"]))
+    # Absolute position offset is not a scale for variance. A joint centered
+    # at 1000 can still have meaningful motion of 0.1 about that center.
+    scale = 1.0
     both_flat = (np.maximum(ref["std"], actual["std"]) < 1e-3 * scale) | (
         (actual["std"] < 1e-4 * scale) & (ref["std"] <= 1e-2 * scale)
     )
@@ -115,6 +117,7 @@ class StatsDriftCheck(Check):
                 details={"feature": feat, "dims": n_floored}))
         for stat, err in errs.items():
             warn, fail = tol[stat]
+            err = np.where(np.isfinite(err), err, -np.inf)
             dim = int(np.argmax(err))
             e = float(err[dim])
             worst = max(worst, e / fail)
@@ -225,6 +228,7 @@ class StatsDriftCheck(Check):
                     if "min" in stored and "max" in stored and stored["min"].shape == actual["min"].shape:
                         rng = np.maximum(stored["max"] - stored["min"], 1e-8)
                         over = np.maximum(stored["min"] - actual["min"], actual["max"] - stored["max"]) / rng
+                        over = np.where(np.isfinite(over), over, -np.inf)
                         dim = int(np.argmax(over))
                         e = float(over[dim])
                         worst = max(worst, e / cfg.stats_range_fail)

@@ -236,7 +236,7 @@ class CalibrationDriftCheck(Check):
         info = {"joint": j, "free_end": label, "offset_fraction": off, "still_frames": nfr,
                 "kind": "gripper"}
         if abs(off) > cfg.calib_gripper_warn:
-            name = f" ({ctx.action_names[j]})" if ctx.action_names else ""
+            name = f" ({ctx.action_names[j]})" if ctx.action_names and j < len(ctx.action_names) else ""
             return [(Severity.WARN, f"gripper {j}{name}: even at its free ({label}) end the "
                      f"measured position sits {off:+.1%} of its range off the command - gripper "
                      "calibration drift", info)], info

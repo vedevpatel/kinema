@@ -59,16 +59,23 @@ def aggregate(per_episode: list[dict[str, np.ndarray]]) -> dict[str, np.ndarray]
 
 
 def data_stats(arr: np.ndarray) -> dict[str, np.ndarray] | None:
-    data = arr[np.isfinite(arr).all(axis=1)]
-    if len(data) == 0:
+    if not len(arr):
         return None
-    return {
-        "mean": data.mean(axis=0),
-        "std": data.std(axis=0),
-        "min": data.min(axis=0),
-        "max": data.max(axis=0),
-        "count": np.array([float(len(data))]),
-    }
+    # A corrupt dimension must not erase finite evidence on every other dim.
+    # Keep the common all-finite path fast without copying the whole array.
+    if np.isfinite(arr).all():
+        return {"mean": arr.mean(axis=0), "std": arr.std(axis=0),
+                "min": arr.min(axis=0), "max": arr.max(axis=0),
+                "count": np.array([float(len(arr))])}
+    out = {k: np.full(arr.shape[1], np.nan) for k in ("mean", "std", "min", "max")}
+    for j in range(arr.shape[1]):
+        col = arr[:, j]
+        col = col[np.isfinite(col)]
+        if len(col):
+            out["mean"][j], out["std"][j] = col.mean(), col.std()
+            out["min"][j], out["max"][j] = col.min(), col.max()
+    out["count"] = np.array([float(len(arr))])
+    return out
 
 
 # --- feature semantics from info.json names -------------------------------

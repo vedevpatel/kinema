@@ -105,12 +105,23 @@ def _camera_features(ctx) -> dict[str, dict]:
 
 
 def _spatial_size(feat: dict) -> tuple[int, int] | None:
-    """(width, height) from a [C, H, W]-style declared shape."""
+    """(width, height), using named axes or an unambiguous CHW/HWC shape."""
     shape = feat.get("shape")
-    if isinstance(shape, list) and len(shape) >= 2:
-        h, w = int(shape[-2]), int(shape[-1])
-        if h > 0 and w > 0:
-            return w, h
+    if not isinstance(shape, list) or len(shape) not in (2, 3):
+        return None
+    names = feat.get("names")
+    if isinstance(names, list) and "height" in names and "width" in names:
+        h, w = shape[names.index("height")], shape[names.index("width")]
+    elif len(shape) == 2:
+        h, w = shape
+    elif shape[-1] in (1, 3, 4) and shape[0] not in (1, 3, 4):
+        h, w = shape[:2]
+    elif shape[0] in (1, 3, 4) and shape[-1] not in (1, 3, 4):
+        h, w = shape[1:]
+    else:
+        return None
+    if isinstance(h, int) and isinstance(w, int) and h > 0 and w > 0:
+        return w, h
     return None
 
 

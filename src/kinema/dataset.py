@@ -735,12 +735,27 @@ def load_dataset(
                    *([reward_col] if reward_col else []),
                    *([done_col] if done_col else [])]
 
+    # Never concatenate differently-shaped column inventories. Missing columns
+    # otherwise shorten only one array (or leave zero-filled memmap slots),
+    # assigning a later episode's values to an earlier episode. Reject that
+    # unsupported schema explicitly before reading any frames.
+    column_inventory: frozenset[str] | None = None
+
     # Which episodes each row group holds, from the footer statistics alone
     # (no data read). None for a row group whose stats are missing.
     files: list[tuple[Path, pq.ParquetFile, list[tuple[int, int] | None]]] = []
     for f in data_files:
         try:
             pf = pq.ParquetFile(f)
+            inventory = frozenset(pf.schema_arrow.names) & frozenset(wanted_cols)
+            if column_inventory is None:
+                column_inventory = inventory
+            elif inventory != column_inventory:
+                raise DatasetError(
+                    f"inconsistent checked columns in {f.relative_to(root)}: "
+                    f"missing {sorted(column_inventory - inventory)}, "
+                    f"extra {sorted(inventory - column_inventory)}; "
+                    "mixed shard schemas cannot be aligned safely")
             md = pf.metadata
             col_idx = md.schema.names.index("episode_index")
             ranges = []
@@ -886,10 +901,10 @@ def load_dataset(
         if spill:
             m = maps[name]
             m.flush()
-            return m[:n].reshape(n) if widths.get(name, 1) == 1 else m[:n]
+            return m[:n] if name in widths else m[:n].reshape(n)
         cl = chunks[name]
         out = cl[0] if len(cl) == 1 else np.concatenate(cl)
-        return out.reshape(-1) if out.shape[1] == 1 else out
+        return out if name in widths else out.reshape(-1)
 
     episode_index = _take("episode_index")
     truncated = False
@@ -949,7 +964,7 @@ def load_dataset(
         else None
     )
     done = (
-        _masked(_take(done_col)).astype(bool, copy=False)
+        _masked(_take(done_col))
         if done_col and done_col in seen
         else None
     )

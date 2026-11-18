@@ -70,7 +70,8 @@ class IdleSegmentsCheck(Check):
         if action is None:
             return self.skip("action column missing")
         fps = ctx.fps or 30.0
-        eps = np.maximum(1e-8, cfg.idle_eps_frac * np.nanstd(action, axis=0))
+        finite_action = np.where(np.isfinite(action), action, np.nan)
+        eps = np.maximum(1e-8, cfg.idle_eps_frac * np.nanstd(finite_action, axis=0))
         state = ctx.state
         # the robot "did not move" over a run when every state dim stays
         # within a sliver of its dataset range (robust to sensor jitter,

@@ -458,8 +458,15 @@ class RewardDoneCheck(Check):
                     ))
 
         if ctx.done is not None:
-            d = np.asarray(ctx.done, dtype=bool)
-            if not d.any():
+            raw = np.asarray(ctx.done, dtype=float)
+            valid_done = np.isfinite(raw)
+            d = raw == 1
+            if not valid_done.all():
+                res.findings.append(Finding(
+                    self.id, Severity.INFO,
+                    f"done has {int((~valid_done).sum())} unknown/null value(s); "
+                    "termination patterns of affected episodes not evaluated"))
+            if valid_done.all() and not d.any():
                 res.findings.append(Finding(
                     self.id, Severity.WARN,
                     "done is never True on any frame - episodes never terminate; "
@@ -476,6 +483,8 @@ class RewardDoneCheck(Check):
                 for ep in ctx.episode_ids():
                     rows = ctx.rows_for(ep)
                     if len(rows) < 2:
+                        continue
+                    if not valid_done[rows].all():
                         continue
                     flags = d[rows]
                     if not flags.any():
