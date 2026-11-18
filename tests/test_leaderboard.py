@@ -957,3 +957,25 @@ def test_failed_retry_does_not_destroy_previous_evidence():
     kept = lb.preserve_failed_retry(old, failed)
     assert kept['report'] == old['report'] and kept['engine'] == 'old'
     assert kept['last_audit_error'] == '429'
+
+
+def test_stale_omitted_row_retries_without_destroying_good_report(tmp_path, monkeypatch):
+    import json
+    from kinema.report import DatasetReport, report_to_dict
+    lb = _load_leaderboard()
+    rep = DatasetReport('org/old', 'v3.0', 10, 600, 10.)
+    stored = {'id': 'org/old', 'slug': 'org--old', 'lane': 'flagship', 'engine': 'old',
+              'data_bytes': 100, 'downloads': 0, 'report': report_to_dict(rep)}
+    (tmp_path / 'data.json').write_text(json.dumps({'datasets': [stored]}))
+    monkeypatch.setattr(lb, 'find_lerobot_datasets', lambda *a, **kw: [])
+    calls = []
+    def retry(*args, **kwargs):
+        calls.append(args[0])
+        raise lb.DatasetError('HTTP 429 temporary')
+    monkeypatch.setattr(lb, 'audit_one', retry)
+    monkeypatch.setattr(sys, 'argv', ['leaderboard', '--out', str(tmp_path)])
+    assert lb.main() == 0
+    assert calls == ['org/old']
+    row = json.loads((tmp_path / 'data.json').read_text())['datasets'][0]
+    assert row['report'] == stored['report']
+    assert row['engine'] == 'old' and '429' in row['last_audit_error']
