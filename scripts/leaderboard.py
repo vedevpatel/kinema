@@ -1469,6 +1469,17 @@ def main() -> int:
         return entry
 
     todo = [d for d in datasets if d["id"] not in done_ids]
+    discovered = {d["id"] for d in datasets}
+    # A failed discovery probe must not strand the preserved stale evidence.
+    # Reuse only its recorded route and discovery metadata, never the old
+    # report/engine stamp as if it were a fresh execution.
+    for e in entries:
+        if e["id"] not in discovered and e["id"] not in done_ids:
+            d = {k: v for k, v in e.items() if k in {
+                "id", "downloads", "likes", "data_bytes", "lane", "subpath",
+                "repo_scope", "rlds", "rlds_prefix", "rlds_bucket", "version"}}
+            d.setdefault("data_bytes", 0)
+            todo.append(d)
     todo.sort(key=lambda d: d["id"] not in stale_ids)  # stale results first
     max_pending = max(1, args.workers) * 2
 
