@@ -418,6 +418,23 @@ def test_reward_done_done_everywhere_still_warns(tmp_path):
                for f in res.findings)
 
 
+def test_reward_done_long_terminal_run_still_warns(tmp_path):
+    # done=True for the last half of every episode is the continuation
+    # defect, not a padding convention: the padding INFO caps at 2 frames
+    root = make_dataset(tmp_path / "ds", episodes=24)
+    t = pq.read_table(root / "data" / "chunk-000" / "file-000.parquet").to_pydict()
+    n = len(t["episode_index"])
+    done = np.zeros(n, dtype=bool)
+    fi = np.asarray(t["frame_index"])
+    done[fi > fi.max() // 2] = True
+    _add_reward_done(root, (0.5 + np.random.default_rng(0).standard_normal(n) * 0.1).tolist(),
+                     done.tolist())
+    res = run("reward-done", load_dataset(str(root)))
+    assert any("continues after termination" in f.message and f.severity == Severity.WARN
+               and len(f.details["episodes"]) == 24 for f in res.findings)
+    assert not any("padding convention" in f.message for f in res.findings)
+
+
 def test_reward_done_skips_without_fields(tmp_path):
     root = make_dataset(tmp_path / "ds", episodes=24)
     res = run("reward-done", load_dataset(str(root)))

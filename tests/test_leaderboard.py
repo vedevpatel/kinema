@@ -794,3 +794,48 @@ def test_probe_rlds_lane_parallel_matches_serial(monkeypatch):
     assert parallel == serial
     assert [r["id"] for r in parallel] == [
         "rlds/alpha", "rlds/beta", "rlds/delta", "rlds/gamma"]
+
+
+def test_probe_paginates_at_sibling_cap(monkeypatch):
+    import types
+
+    lb = _load_leaderboard()
+    sib = [types.SimpleNamespace(rfilename=f"data/{i}.parquet", size=2)
+           for i in range(100_000)]
+    api = types.SimpleNamespace(dataset_info=lambda *a, **k:
+                                types.SimpleNamespace(siblings=sib, gated=False))
+    tree = [types.SimpleNamespace(path="meta/info.json", size=10),
+            types.SimpleNamespace(path="data/full.parquet", size=999),
+            types.SimpleNamespace(path="data")]
+    monkeypatch.setattr("huggingface_hub.list_repo_tree", lambda *a, **k: iter(tree))
+    assert lb._probe_dataset(api, "org/big", 1, 2)["data_bytes"] == 999
+
+
+def test_cap_preserves_waiver_evidence_and_input():
+    import copy
+
+    from kinema.report import report_from_dict, rescore_report_dict
+
+    lb = _load_leaderboard()
+    # First 100 overlap perfectly, but full sets don't meet the waiver bar.
+    # Capping these would spuriously waive stuck-actuator and change score.
+    checks = []
+    for cid, eps in (("idle-segments", list(range(500))),
+                     ("stuck-actuator", list(range(100)) + list(range(1000, 1500))),
+                     ("video-file-pointers", list(range(300)))):
+        checks.append({"id": cid, "title": cid, "summary": "x", "verdict": "WARN",
+                       "findings": [{"severity": "WARN", "message": "x",
+                                     "episode_index": None, "details": {"episodes": eps}}]})
+    rep = {"source": "org/a", "checks": checks}
+    rescore_report_dict(rep)
+    entries = [{"id": "org/a", "report": rep}]
+    original = copy.deepcopy(entries)
+    capped = lb._cap_detail_lists(entries)
+    assert entries == original
+    assert len(capped[0]["report"]["checks"][0]["findings"][0]["details"]["episodes"]) == 500
+    detail = capped[0]["report"]["checks"][2]["findings"][0]["details"]
+    assert len(detail["episodes"]) == 100 and detail["episodes_total"] == 300
+    assert lb._cap_detail_lists(capped) == capped
+    assert report_from_dict(capped[0]["report"]).score == rep["score"]
+    rescore_report_dict(capped[0]["report"])
+    assert capped[0]["report"]["score"] == rep["score"]

@@ -333,6 +333,20 @@ def _probe_dataset(api, repo_id: str, downloads: int, likes: int,
     if skip_gated and getattr(info, "gated", None):
         return None
     sib = [(s.rfilename, s.size or 0) for s in (info.siblings or [])]
+    if len(sib) >= 100_000:
+        # dataset_info's siblings cap: re-list with pagination so data_bytes
+        # and the meta/info.json test see the whole repo (a data/ tree over
+        # 100k files would otherwise hide meta/ and shrink the byte count)
+        from huggingface_hub import list_repo_tree
+
+        try:
+            sib = [(f.path, f.size or 0)
+                   for f in list_repo_tree(repo_id, repo_type="dataset", recursive=True)
+                   if hasattr(f, "size")]
+        except Exception as exc:  # noqa: BLE001 - don't advertise incomplete inventory
+            print(f"{repo_id}: complete discovery listing failed ({type(exc).__name__})",
+                  flush=True)
+            return None
     if "meta/info.json" not in [n for n, _ in sib]:
         return None
     return {
@@ -1175,29 +1189,40 @@ def write_harm_table(out: Path) -> bool:
 _DETAIL_LIST_CAP = 100
 
 
-def _cap_detail_lists(entries: list) -> None:
-    """Keep data.json under GitHub's 100 MB hard file limit: a finding that
-    implicates thousands of episodes or files lists the first 100 and
-    records the full count beside it. The board renders counts, not
-    rosters - episode lists were 52% of the compact payload (0.6 MB each
-    on the DROID-scale rows) and pretty-printing doubled the rest.
-    Mutates entries in place; the per-dataset pages inherit the cap."""
-    for e in entries:
+def _cap_detail_lists(entries: list) -> list:
+    """Return a serialization copy of entries with oversized detail lists
+    capped at 100 (+ a <key>_total count). Keeps data.json under GitHub's
+    100 MB hard file limit: episode lists were 52% of the compact payload
+    (0.6 MB each on the DROID-scale rows) and pretty-printing doubled the
+    rest. The board renders counts, not rosters. The in-memory entries keep
+    their full evidence for page rendering and same-run scoring;
+    episode evidence for checks participating in scoring waivers stays
+    complete, so future rescoring never uses a truncated overlap set."""
+    import copy
+
+    from kinema.report import WAIVER_EDGES
+
+    scoring_checks = {cid for edge in WAIVER_EDGES for cid in edge}
+    capped = copy.deepcopy(entries)
+    for e in capped:
         for chk in (e.get("report") or {}).get("checks") or []:
             dets = [chk.get("details") or {}]
             dets += [f.get("details") or {} for f in chk.get("findings") or []]
             for det in dets:
                 for k, v in list(det.items()):
+                    if k == "episodes" and chk.get("id") in scoring_checks:
+                        continue
                     if isinstance(v, list) and len(v) > _DETAIL_LIST_CAP:
                         det[k] = v[:_DETAIL_LIST_CAP]
-                        det[f"{k}_total"] = len(v)
+                        det.setdefault(f"{k}_total", len(v))
+    return capped
 
 
 def _write(out: Path, entries: list, generated: str, max_episodes: int = 0) -> None:
     """Atomic writes so a kill mid-run never leaves a corrupt or missing site."""
-    _cap_detail_lists(entries)
     data = json.dumps(
-        {"generated": generated, "score_model": SCORE_MODEL, "datasets": entries},
+        {"generated": generated, "score_model": SCORE_MODEL,
+         "datasets": _cap_detail_lists(entries)},
         separators=(",", ":"), default=str,
     )
     idx = render_index(entries, generated, harm_table=write_harm_table(out), max_episodes=max_episodes)

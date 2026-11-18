@@ -370,16 +370,16 @@ def _target_video_files(root: Path, max_episodes: int) -> list[str] | None:
 
 def _resolve_source(
     source: str, video: bool = False, max_episodes: int | None = None
-) -> tuple[Path, str | None]:
-    """Return (local_root, repo_id). Downloads from the Hub when needed."""
+) -> tuple[Path, str | None, str | None]:
+    """Return (local_root, repo_id, revision). Downloads from the Hub when needed."""
     src = source.strip()
     if src.startswith("hf://"):
         src = src[len("hf://"):]
     p = Path(src).expanduser()
     if p.exists():
         if p.suffix == ".zip":
-            return _extract_zip(p), None
-        return p, None
+            return _extract_zip(p), None, None
+        return p, None, None
     # Treat as a Hub repo id.
     if "/" not in src:
         raise DatasetError(
@@ -437,8 +437,8 @@ def _resolve_source(
         local = local / subpath
         if not local.is_dir():
             raise DatasetError(f"{src}//{subpath}: nothing under {subpath!r} in the repo")
-        return local, f"{src}//{subpath}"
-    return local, src
+        return local, f"{src}//{subpath}", revision
+    return local, src, revision
 
 
 def _load_episode_meta(root: Path) -> list[EpisodeMeta]:
@@ -634,8 +634,29 @@ def load_dataset(
     cooperatively - after the download and between row groups - and raises
     CancelledError; a Hub download in flight is not interrupted."""
     _raise_if_cancelled(cancelled, "before loading")
-    root, repo_id = _resolve_source(source, video=video, max_episodes=max_episodes)
+    root, repo_id, revision = _resolve_source(source, video=video, max_episodes=max_episodes)
     _raise_if_cancelled(cancelled, "after download")
+    full_videos = video and max_episodes is None
+    repo_files = None
+    if repo_id is not None and not full_videos:
+        # the pointer checks need the repo's own file listing: the local tree
+        # holds only what the targeted fetch brought down. Paginate with
+        # list_repo_tree - dataset_info's siblings cap at 100k entries, which
+        # false-FAILed DROID/Bridge-scale repos. A listing failure (gated
+        # repo, offline) leaves repo_files None and those checks skip.
+        base, _, sub = repo_id.partition("//")
+        try:
+            from huggingface_hub import list_repo_tree
+
+            repo_files = sorted(
+                (f.path[len(sub) + 1:] if sub else f.path)
+                for f in list_repo_tree(base, repo_type="dataset",
+                                        revision=revision, recursive=True)
+                if hasattr(f, "size") and (not sub or f.path.startswith(sub + "/"))
+            )
+        except Exception:  # noqa: BLE001 - no listing means skip, not crash
+            repo_files = None
+        _raise_if_cancelled(cancelled, "after repo listing")
     info_path = root / "meta" / "info.json"
     if not info_path.exists():
         raise DatasetError(f"{root} is not a LeRobot dataset (meta/info.json missing)")
@@ -953,9 +974,11 @@ def load_dataset(
         truncated=truncated,
         # a Hub source whose videos were not fully fetched holds an
         # incomplete local tree: disk-based camera coverage and video pointer
-        # existence must not read absence as defect. _resolve_source only
-        # fetches videos/** when video=True and no episode cap applies.
-        video_partial=repo_id is not None and not (video and max_episodes is None),
+        # existence must not read absence as defect. _resolve_source fetches
+        # the full videos tree only without an episode cap; sampled --video
+        # fetches a targeted subset.
+        video_partial=repo_id is not None and not full_videos,
+        repo_files=repo_files,
         episode_stats=episode_stats,
         stats_json=stats_json,
         stats_source=stats_source,

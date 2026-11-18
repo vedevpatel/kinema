@@ -253,6 +253,11 @@ class VideoFilePointersCheck(Check):
             return self.skip("episode videos only partially fetched - pointer "
                              "existence needs the full repo file listing")
         else:
+            if not (ctx.root / "videos").is_dir():
+                # a local copy holding only data/ + meta/ (a common partial
+                # download) is not evidence about videos it never fetched
+                return self.skip("no episode videos fetched - fetch the videos/ "
+                                 "tree (--video for Hub repos) to verify pointers")
             existing = {p.relative_to(ctx.root).as_posix()
                         for p in ctx.root.glob("videos/**/*") if p.is_file()}
             basis = "the files on disk"
@@ -466,10 +471,16 @@ class RewardDoneCheck(Check):
                         continue
                     first = int(flags.argmax())
                     if flags[first:].all():
+                        suffix = len(flags) - first
                         if first == 0:
                             all_true.append(ep)
-                        elif first < len(flags) - 1:
-                            padding.append((ep, len(flags) - first))
+                        elif 1 < suffix <= 2:
+                            # the one verified padding convention (pusht's
+                            # final two frames); a longer terminal run means
+                            # the trajectory really does continue post-done
+                            padding.append((ep, suffix))
+                        elif suffix > 2:
+                            continued.append(ep)
                         # a single final-frame True is the normal convention
                     else:
                         continued.append(ep)

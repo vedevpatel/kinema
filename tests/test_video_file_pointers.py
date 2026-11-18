@@ -82,6 +82,17 @@ def test_local_disk_glob_without_a_repo_listing(tmp_path):
     assert "against the files on disk" in res.summary
 
 
+def test_local_copy_without_the_videos_tree_skips(tmp_path):
+    # data/ + meta/ only (a common partial local copy): the pointers are not
+    # evidence about videos the copy never fetched
+    import shutil
+
+    root = make_dataset(tmp_path / "novideos", episodes=10, cameras=["cam_high"])
+    shutil.rmtree(root / "videos")
+    res = _run(root, repo_files=None)
+    assert res.skipped and "no episode videos fetched" in res.skip_reason
+
+
 def test_partial_video_fetch_skips_without_a_listing(tmp_path):
     root = make_dataset(tmp_path / "partial", episodes=10,
                         cameras=["cam_high"], defects=["missing-video-file"])
@@ -91,20 +102,47 @@ def test_partial_video_fetch_skips_without_a_listing(tmp_path):
     assert res.skipped and "partially fetched" in res.skip_reason
 
 
-def _as_hub(monkeypatch, root):
-    """Resolve any source to this root as if it were a Hub fetch."""
+def _as_hub(monkeypatch, root, listing="tree"):
+    """Resolve any source to this root as if it were a Hub fetch. listing:
+    "tree" = the repo listing mirrors the files on disk; "fail" = the
+    listing call raises (gated/offline)."""
+    import types
+
     monkeypatch.setattr("kinema.dataset._resolve_source",
-                        lambda source, video=False, max_episodes=None: (Path(root), "owner/name"))
+                        lambda source, video=False, max_episodes=None: (Path(root), "owner/name", None))
+    if listing == "tree":
+        files = sorted(p.relative_to(root).as_posix()
+                       for p in Path(root).rglob("*") if p.is_file())
+        tree = [types.SimpleNamespace(path=f, size=1) for f in files]
+        monkeypatch.setattr("huggingface_hub.list_repo_tree", lambda *a, **k: iter(tree))
+    else:
+        def boom(*a, **k):
+            raise OSError("offline")
+        monkeypatch.setattr("huggingface_hub.list_repo_tree", boom)
 
 
-def test_hub_load_without_video_marks_partial_and_skips(monkeypatch, tmp_path):
+def test_hub_load_without_video_verifies_against_the_repo_listing(monkeypatch, tmp_path):
     # regression pin for the no-video false FAIL: a Hub audit that fetched no
-    # videos must not let the pointer check read an empty disk as defects
+    # videos verifies pointers against the repo's own listing, not the empty
+    # disk - and still FAILs a file the listing really lacks
     root = make_dataset(tmp_path / "hubish", episodes=10,
                         cameras=["cam_high"], defects=["missing-video-file"])
     _as_hub(monkeypatch, root)
     ctx = load_dataset("owner/name")
     assert ctx.video_partial is True
+    assert ctx.repo_files is not None
+    res = CHECK.run(ctx, CheckConfig())
+    assert res.verdict == Severity.FAIL, res.summary
+    assert "against the repo file listing" in res.summary
+
+
+def test_hub_load_without_a_listing_skips(monkeypatch, tmp_path):
+    # listing unavailable (gated/offline): absence must not read as defect
+    root = make_dataset(tmp_path / "huboff", episodes=10,
+                        cameras=["cam_high"], defects=["missing-video-file"])
+    _as_hub(monkeypatch, root, listing="fail")
+    ctx = load_dataset("owner/name")
+    assert ctx.video_partial is True and ctx.repo_files is None
     res = CHECK.run(ctx, CheckConfig())
     assert res.skipped and "partially fetched" in res.skip_reason
 
@@ -171,3 +209,36 @@ def test_v21_template_paths_checked_against_listing(tmp_path):
     res_ok = CHECK.run(_v2_stub(root, files + [
         "videos/observation.images.top/chunk-000/episode_000003.mp4"]), CheckConfig())
     assert res_ok.verdict == Severity.OK, res_ok.summary
+
+
+def test_hub_root_listing_paths_are_not_trimmed(monkeypatch, tmp_path):
+    root = make_dataset(tmp_path / "goodhub", episodes=10, cameras=["cam_high"])
+    _as_hub(monkeypatch, root)
+    import shutil
+
+    shutil.rmtree(root / "videos")
+    ctx = load_dataset("owner/name")
+    assert "meta/info.json" in ctx.repo_files
+    assert CHECK.run(ctx, CheckConfig()).verdict == Severity.OK
+
+
+def test_hub_nested_listing_keeps_revision_and_relative_paths(monkeypatch, tmp_path):
+    import types
+
+    root = make_dataset(tmp_path / "nested", episodes=10, cameras=["cam_high"])
+    monkeypatch.setattr("kinema.dataset._resolve_source", lambda *a, **k:
+                        (root, "owner/name//task", "pinned-sha"))
+    files = [types.SimpleNamespace(path="task/" + p, size=1) for p in _repo_files(root)]
+    files.append(types.SimpleNamespace(path="other/else.mp4", size=1))
+    calls = []
+
+    def tree(*args, **kwargs):
+        calls.append((args, kwargs))
+        return iter(files)
+
+    monkeypatch.setattr("huggingface_hub.list_repo_tree", tree)
+    ctx = load_dataset("owner/name//task@pinned-sha")
+    assert calls[0][1]["revision"] == "pinned-sha"
+    assert "meta/info.json" in ctx.repo_files
+    assert not any(p.startswith("other/") for p in ctx.repo_files)
+    assert CHECK.run(ctx, CheckConfig()).verdict == Severity.OK
