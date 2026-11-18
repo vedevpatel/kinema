@@ -308,6 +308,7 @@ def test_hub_listing_kwargs_match_installed_api(monkeypatch):
             return iter([])
 
     monkeypatch.setattr("huggingface_hub.HfApi", lambda: _FakeApi())
+    monkeypatch.setattr(lb, "probe_rlds_lane", lambda: [])  # no live GCS in a kwargs test
     lb.find_lerobot_datasets(2, 2)
 
     assert len(calls) == 4  # top lane + newest lane + flagship org queries
@@ -373,6 +374,7 @@ def test_flagship_probe_skips_gated_repos(monkeypatch):
                 downloads=10, likes=0)
 
     monkeypatch.setattr("huggingface_hub.HfApi", lambda: _FakeApi())
+    monkeypatch.setattr(lb, "probe_rlds_lane", lambda: [])  # no live GCS in a flagship test
     out = lb.find_lerobot_datasets(2, 0)
     flag = [d["id"] for d in out if d["lane"] == "flagship"]
     assert flag == ["RoboCOIN/open_b", "RoboCOIN/open_d"]
@@ -572,3 +574,106 @@ def test_download_sample_nested_filters_siblings_and_prefixes_fetches(monkeypatc
     assert ("org/repo", "task_a/data/chunk-000/file-000.parquet") in downloaded
     assert not any(n.startswith("other/") or n.startswith("unrelated/")
                    for _, n in downloaded)
+
+
+# --- multi-bucket rlds lane -------------------------------------------------
+
+class _FakeRldsDs:
+    def __init__(self):
+        self.version = "1.0.0"
+        self.data_bytes = 10
+        self.episodes = 1
+
+
+def _patch_rlds(monkeypatch, listings, probes, fail_listing=None):
+    import kinema.rlds as rlds_mod
+
+    class FakeClient:
+        def __init__(self, bucket):
+            self.bucket = bucket
+            self.calls = 0
+
+        def list(self, prefix="", delimiter=""):
+            self.calls += 1
+            if self.bucket == fail_listing:
+                raise RuntimeError("gcs outage")
+            return [prefix + n + "/" for n in listings[self.bucket]], []
+
+    class FakeProbe:
+        @classmethod
+        def probe(cls, client, p):
+            name = p.rstrip("/").split("/")[-1]
+            if name not in probes.get(client.bucket, ()):
+                raise ValueError("no real data")
+            return _FakeRldsDs()
+
+    monkeypatch.setattr(rlds_mod, "GcsClient", FakeClient)
+    monkeypatch.setattr(rlds_mod, "RldsDataset", FakeProbe)
+
+
+def test_probe_rlds_lane_first_bucket_with_data_wins(monkeypatch):
+    lb = _load_leaderboard()
+    gdm, gresearch = lb.RLDS_BUCKETS[0][0], lb.RLDS_BUCKETS[1][0]
+    _patch_rlds(
+        monkeypatch,
+        listings={gdm: ["alpha", "beta", "gamma"], gresearch: ["alpha", "beta", "gamma", "delta"]},
+        # beta and gamma are placeholder-only in gdm (probe fails) but real in
+        # gresearch; delta exists only in gresearch and is not an Open X name
+        probes={gdm: ["alpha"], gresearch: ["alpha", "beta", "gamma", "delta"]},
+    )
+    rows = {r["id"]: r for r in lb.probe_rlds_lane()}
+    assert set(rows) == {"rlds/alpha", "rlds/beta", "rlds/gamma"}  # one row each
+    assert rows["rlds/alpha"]["rlds_bucket"] == gdm  # mirrored: precedence wins
+    assert rows["rlds/beta"]["rlds_bucket"] == gresearch  # placeholder falls through
+    assert rows["rlds/gamma"]["rlds_bucket"] == gresearch
+    assert all(r["rlds"] and r["downloads"] == 0 for r in rows.values())
+
+
+def test_probe_rlds_lane_bucket_outage_zeroes_the_whole_lane(monkeypatch):
+    # a listing-level failure must NOT fall through to the next bucket: that
+    # would silently swap mirrored datasets' bytes on a transient outage.
+    # Zero rows lets the resume prune guard keep the stored rlds board.
+    lb = _load_leaderboard()
+    gdm, gresearch = lb.RLDS_BUCKETS[0][0], lb.RLDS_BUCKETS[1][0]
+    _patch_rlds(
+        monkeypatch,
+        listings={gdm: [], gresearch: ["gamma"]},
+        probes={gresearch: ["gamma"]},
+        fail_listing=gdm,
+    )
+    assert lb.probe_rlds_lane() == []
+
+
+def test_audit_rlds_uses_the_rows_bucket(monkeypatch, tmp_path):
+    lb = _load_leaderboard()
+    gdm, gresearch = lb.RLDS_BUCKETS[0][0], lb.RLDS_BUCKETS[1][0]
+    seen = []
+
+    class FakeClient:
+        def __init__(self, bucket):
+            seen.append(bucket)
+            self.bucket = bucket
+            self.calls = 0
+
+        def read_json(self, name):
+            raise ValueError("stop after client construction")
+
+    import kinema.rlds as rlds_mod
+    monkeypatch.setattr(rlds_mod, "GcsClient", FakeClient)
+
+    class FakeProbe:
+        @classmethod
+        def probe(cls, client, p):
+            raise ValueError("stop after client construction")
+
+    monkeypatch.setattr(rlds_mod, "RldsDataset", FakeProbe)
+    try:
+        lb.audit_rlds({"id": "rlds/gamma", "rlds": True,
+                       "rlds_prefix": "robotics/gamma/", "rlds_bucket": gresearch})
+    except ValueError:
+        pass
+    try:  # a stored row from before the field existed falls back to gdm
+        lb.audit_rlds({"id": "rlds/alpha", "rlds": True, "rlds_prefix": "alpha/"})
+    except ValueError:
+        pass
+    assert seen == [gresearch, gdm]

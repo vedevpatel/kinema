@@ -199,43 +199,73 @@ def _probe_nested(api, repo_id: str, seats: int) -> list[dict]:
             for sub in ranked]
 
 
-RLDS_BUCKET = "gdm-robotics-open-x-embodiment"  # Open X-Embodiment corpus
-_RLDS_LANE_MAX_CALLS = 600  # GCS JSON-API calls for the whole rlds lane
+RLDS_BUCKETS = [  # precedence order: the first bucket holding REAL data wins
+    ("gdm-robotics-open-x-embodiment", ""),  # Open-X-official corpus
+    ("gresearch", "robotics/"),  # Google Research mirror + extra robot sets
+]
+_RLDS_LANE_MAX_CALLS = 600  # GCS JSON-API calls per bucket
 
 
 def probe_rlds_lane() -> list[dict]:
-    """Board entries for the Open X RLDS corpus on GCS (not Hugging Face).
+    """Board entries for the RLDS corpus on GCS (not Hugging Face).
 
-    Discovery is an anonymous bucket listing; each dataset prefix is probed
-    (newest TFDS semver, dataset_info.json + features.json). Any failure
-    logs and yields zero rlds rows - the HF lanes must never notice. Rows
-    carry no downloads/likes (GCS exposes neither) and ride their own lane
-    so zero-counts never pollute the download-ranked lanes."""
+    Discovery is an anonymous bucket listing per bucket in RLDS_BUCKETS;
+    each dataset prefix is probed (newest TFDS semver, dataset_info.json +
+    features.json). A dataset boards ONCE under rlds/<name>: the first
+    bucket in precedence order whose probe finds real data claims the name
+    (the gdm and gresearch copies of a mirrored dataset DIVERGE, so the
+    winning bucket is recorded on the row for reproducibility).
+    A bucket-level listing failure zeroes the WHOLE lane, not just that
+    bucket: falling through to a lower bucket on a transient outage would
+    silently swap a mirrored dataset's bytes, which is worse than a missing
+    row - the resume prune guard keeps the stored rlds board when the lane
+    comes back empty. Per-dataset probe failures still skip just that
+    dataset. Rows carry no downloads/likes (GCS exposes neither) and ride
+    their own lane so zero-counts never pollute the download-ranked lanes."""
     from kinema.rlds import GcsClient, RldsDataset
 
+    out: list[dict] = []
+    claimed: set[str] = set()
+    openx_names: set[str] = set()  # gdm's listing IS the Open X registry
     try:
-        client = GcsClient(RLDS_BUCKET)
-        prefixes, _ = client.list(delimiter="/")
-        out: list[dict] = []
-        for p in sorted(prefixes):
-            name = p.rstrip("/").split("/")[-1]
-            try:
-                ds = RldsDataset.probe(client, p)
-            except Exception as e:  # noqa: BLE001 - one dataset must not stall the lane
-                print(f"rlds/{name}: probe failed ({type(e).__name__}) - skipping",
-                      flush=True)
-                continue
-            out.append({"id": f"rlds/{name}", "rlds": True, "rlds_prefix": p,
-                        "version": ds.version, "downloads": 0, "likes": 0,
-                        "data_bytes": ds.data_bytes})
-            if client.calls > _RLDS_LANE_MAX_CALLS:
-                print(f"rlds lane over {_RLDS_LANE_MAX_CALLS} API calls - "
-                      "boarding what we have", flush=True)
-                break
+        for bucket, base in RLDS_BUCKETS:
+            client = GcsClient(bucket)
+            prefixes, _ = client.list(prefix=base, delimiter="/")
+            names_here = {p.rstrip("/").split("/")[-1] for p in prefixes}
+            if bucket == RLDS_BUCKETS[0][0]:
+                openx_names = names_here
+            skipped_non_openx = 0
+            for p in sorted(prefixes):
+                name = p.rstrip("/").split("/")[-1]
+                if bucket != RLDS_BUCKETS[0][0] and name not in openx_names:
+                    # not an Open X set (asimov_*, aloha_mobile, ...): held back
+                    # until the owner calls board/tag/exclude on non-Open-X sets
+                    skipped_non_openx += 1
+                    continue
+                if name in claimed:
+                    continue  # a higher-precedence bucket already boards it
+                try:
+                    ds = RldsDataset.probe(client, p)
+                except Exception as e:  # noqa: BLE001 - one dataset must not stall the lane
+                    print(f"rlds/{name}: probe failed in {bucket} ({type(e).__name__}) - skipping",
+                          flush=True)
+                    continue
+                claimed.add(name)
+                out.append({"id": f"rlds/{name}", "rlds": True, "rlds_prefix": p,
+                            "rlds_bucket": bucket,
+                            "version": ds.version, "downloads": 0, "likes": 0,
+                            "data_bytes": ds.data_bytes})
+                if client.calls > _RLDS_LANE_MAX_CALLS:
+                    print(f"rlds lane over {_RLDS_LANE_MAX_CALLS} API calls in "
+                          f"{bucket} - boarding what we have", flush=True)
+                    break
+            if skipped_non_openx:
+                print(f"rlds lane: {skipped_non_openx} non-Open-X prefix(es) in "
+                      f"{bucket} held back pending the scope decision", flush=True)
         return out
     except Exception as e:  # noqa: BLE001 - the lane dies quiet, the board lives
-        print(f"rlds lane failed ({type(e).__name__}) - zero rlds rows this run",
-              flush=True)
+        print(f"rlds lane failed ({type(e).__name__}) - zero rlds rows this run "
+              "(a bucket outage must not swap mirrored datasets' bytes)", flush=True)
         return []
 
 
@@ -244,7 +274,7 @@ def audit_rlds(entry: dict) -> DatasetReport:
     from kinema.checks.rlds_checks import run_rlds_checks
     from kinema.rlds import GcsClient, RldsDataset
 
-    client = GcsClient(RLDS_BUCKET)
+    client = GcsClient(entry.get("rlds_bucket", RLDS_BUCKETS[0][0]))
     ds = RldsDataset.probe(client, entry["rlds_prefix"])
     results = run_rlds_checks(ds, client)
     return DatasetReport(
@@ -785,7 +815,8 @@ def _waiver_note(charge: dict) -> str:
     return f" <span class=dim>(charge waived - same episodes as {esc(up)})</span>"
 
 
-def render_dataset_page(rep: DatasetReport, audited: str | None = None) -> str:
+def render_dataset_page(rep: DatasetReport, audited: str | None = None,
+                        rlds_ref: tuple[str, str] | None = None) -> str:
     charges = rep.charges()  # the same waiver the stored charge/waived_by fields record
     rows = "".join(
         f"<tr><td><code>{esc(r.check_id)}</code></td>"
@@ -802,8 +833,9 @@ def render_dataset_page(rep: DatasetReport, audited: str | None = None) -> str:
                     f"<li>{badge(f.severity.name)} <code>{esc(r.check_id)}</code> {esc(f.message)}</li>"
                 )
     if rep.source.startswith("rlds/"):
+        bucket, prefix = rlds_ref or (RLDS_BUCKETS[0][0], rep.source.removeprefix("rlds/") + "/")
         hub_url = ("https://console.cloud.google.com/storage/browser/"
-                   f"{RLDS_BUCKET}/{rep.source.removeprefix('rlds/')}")
+                   f"{bucket}/{prefix.rstrip('/')}")
     else:
         hub_base, hub_sub = _split_subpath(rep.source)
         hub_url = (f"https://huggingface.co/datasets/{hub_base}/tree/main/{hub_sub}"
@@ -1061,7 +1093,10 @@ def rewrite_dataset_pages(out: Path, entries: list[dict]) -> None:
                                f"{e['report']['score']}")
         for name, text in (
             (f"{e['slug']}.json", json.dumps(e["report"], indent=2, default=str)),
-            (f"{e['slug']}.html", render_dataset_page(rep, audited=m.group(1) if m else "unknown")),
+            (f"{e['slug']}.html", render_dataset_page(rep, audited=m.group(1) if m else "unknown",
+                                                       rlds_ref=(e.get("rlds_bucket", RLDS_BUCKETS[0][0]),
+                                                                 e.get("rlds_prefix", ""))
+                                                       if e["id"].startswith("rlds/") else None)),
         ):
             tmp = out / "dataset" / f".{name}.tmp"
             tmp.write_text(text)
@@ -1191,7 +1226,9 @@ def main() -> int:
             else:
                 rep = audit_one(d["id"], args.max_episodes, args.size_cap_mb * 1024 * 1024)
             entry["report"] = report_to_dict(rep)
-            (out / "dataset" / f"{slug}.html").write_text(render_dataset_page(rep))
+            (out / "dataset" / f"{slug}.html").write_text(render_dataset_page(
+                rep, rlds_ref=(d.get("rlds_bucket", RLDS_BUCKETS[0][0]), d.get("rlds_prefix", ""))
+                if d.get("rlds") else None))
             (out / "dataset" / f"{slug}.json").write_text(json.dumps(entry["report"], indent=2, default=str))
             print(f"    {d['id']}: score {rep.score}/100 ({rep.verdict.name})", flush=True)
         except DatasetError as e:
