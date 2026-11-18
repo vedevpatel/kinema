@@ -395,6 +395,41 @@ read is outside coverage and reported by the loader itself.
 
 No knobs.
 
+## rlds-episode-counts
+
+RLDS (Open X) datasets on GCS: dataset_info.json declares per-split shard
+episode counts in shardLengths; this check compares the declaration against
+the shards the bucket actually holds. FAIL when a declared split has the
+wrong number of shard files or a split's shards exist with no dataset_info
+entry; WARN on zero-episode declared shards. RLDS checks run in the
+leaderboard's rlds lane only - they audit GCS metadata, never download
+payloads.
+
+## rlds-feature-spec
+
+features.json sanity for RLDS datasets: FAIL when the featuresDict tree or
+the steps sequence (with is_first / is_last) is missing or unparseable;
+WARN when steps lack action or observation features; INFO when no image
+features are declared.
+
+## rlds-shard-inventory
+
+The RLDS analog of episode-file-pointers: shard names carry the pointer
+(<split>.tfrecord-NNNNN-of-MMMMM) and the bucket listing is the existence
+check. FAIL on missing (non-contiguous) shards, a filename-declared shard
+total that disagrees with the bucket, or zero-byte shards; WARN on a single
+shard over 2 GiB (one corrupt object kills the whole split) and on shard
+files with unparseable names.
+
+## rlds-step-structure
+
+Sample-mode-only (off in the nightly board run): fetches the first shard's
+first episode - after reading the 12-byte record header and skipping
+episodes over the 64 MiB sample cap - and decodes it with kinema's
+pure-Python TFRecord / tf.Example reader. FAIL when the record does not
+decode or the is_first / is_last framing is broken; WARN when a steps/*
+feature's value count is not a multiple of the step count.
+
 ## video-file-pointers
 
 Episode metadata pointing at a video file the repo does not contain - the

@@ -199,6 +199,65 @@ def _probe_nested(api, repo_id: str, seats: int) -> list[dict]:
             for sub in ranked]
 
 
+RLDS_BUCKET = "gdm-robotics-open-x-embodiment"  # Open X-Embodiment corpus
+_RLDS_LANE_MAX_CALLS = 600  # GCS JSON-API calls for the whole rlds lane
+
+
+def probe_rlds_lane() -> list[dict]:
+    """Board entries for the Open X RLDS corpus on GCS (not Hugging Face).
+
+    Discovery is an anonymous bucket listing; each dataset prefix is probed
+    (newest TFDS semver, dataset_info.json + features.json). Any failure
+    logs and yields zero rlds rows - the HF lanes must never notice. Rows
+    carry no downloads/likes (GCS exposes neither) and ride their own lane
+    so zero-counts never pollute the download-ranked lanes."""
+    from kinema.rlds import GcsClient, RldsDataset
+
+    try:
+        client = GcsClient(RLDS_BUCKET)
+        prefixes, _ = client.list(delimiter="/")
+        out: list[dict] = []
+        for p in sorted(prefixes):
+            name = p.rstrip("/").split("/")[-1]
+            try:
+                ds = RldsDataset.probe(client, p)
+            except Exception as e:  # noqa: BLE001 - one dataset must not stall the lane
+                print(f"rlds/{name}: probe failed ({type(e).__name__}) - skipping",
+                      flush=True)
+                continue
+            out.append({"id": f"rlds/{name}", "rlds": True, "rlds_prefix": p,
+                        "version": ds.version, "downloads": 0, "likes": 0,
+                        "data_bytes": ds.data_bytes})
+            if client.calls > _RLDS_LANE_MAX_CALLS:
+                print(f"rlds lane over {_RLDS_LANE_MAX_CALLS} API calls - "
+                      "boarding what we have", flush=True)
+                break
+        return out
+    except Exception as e:  # noqa: BLE001 - the lane dies quiet, the board lives
+        print(f"rlds lane failed ({type(e).__name__}) - zero rlds rows this run",
+              flush=True)
+        return []
+
+
+def audit_rlds(entry: dict) -> DatasetReport:
+    """The rlds audit: metadata checks over the GCS listing, no downloads."""
+    from kinema.checks.rlds_checks import run_rlds_checks
+    from kinema.rlds import GcsClient, RldsDataset
+
+    client = GcsClient(RLDS_BUCKET)
+    ds = RldsDataset.probe(client, entry["rlds_prefix"])
+    results = run_rlds_checks(ds, client)
+    return DatasetReport(
+        source=entry["id"],
+        format_version=f"rlds-{ds.version}",
+        episodes=ds.episodes,
+        frames=0,  # TFDS metadata declares no frame counts
+        fps=None,
+        results=results,
+        video_audited=VIDEO_AUDIT_MARK,
+    )
+
+
 def _probe_dataset(api, repo_id: str, downloads: int, likes: int,
                    skip_gated: bool = False) -> dict | None:
     """The board entry for one Hub dataset, or None when it has no LeRobot
@@ -340,7 +399,13 @@ def find_lerobot_datasets(limit: int, new_lane: int = 0) -> list[dict]:
         except Exception as e:  # noqa: BLE001 - one repo must not stall discovery
             print(f"{nested_repo}: nested probe failed ({type(e).__name__}) - skipping",
                   flush=True)
-    return _merge_lanes(top, recent, limit, new_lane, flagship)
+    rlds: list[dict] = []
+    try:
+        rlds = probe_rlds_lane()
+    except Exception as e:  # noqa: BLE001 - defense in depth; probe_rlds_lane logs
+        print(f"rlds lane failed ({type(e).__name__}) - zero rlds rows", flush=True)
+    return _merge_lanes(top, recent, limit, new_lane, flagship) + [
+        {**e, "lane": "rlds"} for e in rlds]
 
 
 def _classic_resolve_download(repo_id: str, name: str, dest: Path) -> None:
@@ -736,9 +801,13 @@ def render_dataset_page(rep: DatasetReport, audited: str | None = None) -> str:
                 findings.append(
                     f"<li>{badge(f.severity.name)} <code>{esc(r.check_id)}</code> {esc(f.message)}</li>"
                 )
-    hub_base, hub_sub = _split_subpath(rep.source)
-    hub_url = (f"https://huggingface.co/datasets/{hub_base}/tree/main/{hub_sub}"
-               if hub_sub else f"https://huggingface.co/datasets/{hub_base}")
+    if rep.source.startswith("rlds/"):
+        hub_url = ("https://console.cloud.google.com/storage/browser/"
+                   f"{RLDS_BUCKET}/{rep.source.removeprefix('rlds/')}")
+    else:
+        hub_base, hub_sub = _split_subpath(rep.source)
+        hub_url = (f"https://huggingface.co/datasets/{hub_base}/tree/main/{hub_sub}"
+                   if hub_sub else f"https://huggingface.co/datasets/{hub_base}")
     body = (
         f"<p><a href='../index.html'>&larr; leaderboard</a></p>"
         f"<h1>{esc(rep.source)}</h1>"
@@ -804,6 +873,9 @@ def render_index(entries: list[dict], generated: str, harm_table: bool = False, 
             if e.get("subpath"):
                 link += (' <span class=dim title="dataset nested inside a larger repo; '
                          'downloads are repo-level">(nested)</span>')
+            if e.get("lane") == "rlds":
+                link += (' <span class=dim title="Open X RLDS dataset on GCS; '
+                         'metadata audit only">(rlds)</span>')
 
             score = f"<span class=score>{r['score']}</span>"
             model = r.get("score_model", "legacy-v0")
@@ -825,8 +897,9 @@ def render_index(entries: list[dict], generated: str, harm_table: bool = False, 
             label = _STATUS_LABELS.get(e.get("status") or "error", _STATUS_LABELS["error"])
             detail = esc(e.get("reason", ""))
             checks = f'<span class=dim title="{detail}">{label}</span>'
+        downloads_cell = "-" if e.get("rlds") else f"{e['downloads']:,}"
         rows.append(
-            f"<tr><td>{i}</td><td>{link}</td><td>{e['downloads']:,}</td>"
+            f"<tr><td>{i}</td><td>{link}</td><td>{downloads_cell}</td>"
             f"<td>{score}</td><td>{verdict}</td><td>{checks}</td></tr>"
         )
     body = (
@@ -1066,8 +1139,21 @@ def main() -> int:
             if len(current) >= 0.5 * len({e["id"] for e in entries}):
                 dropped = [e["id"] for e in entries if e["id"] not in current]
                 entries = [e for e in entries if e["id"] in current]
+                # a dead rlds lane returns zero rows on a GCS hiccup - that
+                # must not prune the stored rlds board (the same hiccup
+                # shape the 0.5 guard covers for Hub listings)
+                if dropped and not any(i.startswith("rlds/") for i in current):
+                    rlds_kept = [e for e in prev
+                                 if e["id"].startswith("rlds/")]
+                    if rlds_kept:
+                        print(f"rlds lane returned no rows; keeping "
+                              f"{len(rlds_kept)} stored rlds entries", flush=True)
+                        entries.extend(rlds_kept)
+                        dropped = [i for i in dropped
+                                   if not i.startswith("rlds/")]
                 for e in entries:  # fresh download counts for the ranking
-                    e["downloads"] = current[e["id"]].get("downloads", e.get("downloads", 0))
+                    if e["id"] in current:
+                        e["downloads"] = current[e["id"]].get("downloads", e.get("downloads", 0))
                 if dropped:
                     print(f"dropping {len(dropped)} dataset(s) no longer in the top list")
             else:
@@ -1099,7 +1185,11 @@ def main() -> int:
         if d["data_bytes"] > args.size_cap_mb * 1024 * 1024:
             entry["sampled"] = True
         try:
-            rep = audit_one(d["id"], args.max_episodes, args.size_cap_mb * 1024 * 1024)
+            if d.get("rlds"):
+                entry["sampled"] = True  # metadata-only audit, never downloads
+                rep = audit_rlds(d)
+            else:
+                rep = audit_one(d["id"], args.max_episodes, args.size_cap_mb * 1024 * 1024)
             entry["report"] = report_to_dict(rep)
             (out / "dataset" / f"{slug}.html").write_text(render_dataset_page(rep))
             (out / "dataset" / f"{slug}.json").write_text(json.dumps(entry["report"], indent=2, default=str))
