@@ -69,7 +69,7 @@ def test_schema_pin():
         "outlier_burst_5pct": "outlier-episodes", "stale_stats_offset_0.5sigma": "stats-drift"}
     row = doc["rows"][0]
     assert set(row) == {"defect", "check", "recipe", "policy", "dataset_revision", "steps", "seeds",
-                        "mse_delta_pct", "success_delta_pts", "date", "confidence"}
+                        "mse_delta_pct", "success_delta_pts", "date", "confidence", "accelerator_pairs"}
     assert row["dataset_revision"] == "7628202a2180972f291ba1bc6723834921e72c19"
     assert row["seeds"] == [0, 1, 2] and row["confidence"] == "indicative (3 seeds)"
     # duplicates arm: mse 110+s vs clean 100+s; success 45 vs 50
@@ -379,7 +379,7 @@ def test_harm_table_page_names_the_weight_source(tmp_path):
     ht.write_table(out / "harm-table.json", _doc())
     assert lb.write_harm_table(out)
     page = (out / "harm-table.html").read_text()
-    assert "derived from this table where measured" in page
+    assert "historical v1.1 measurements" in page
     assert "not derived from this table yet" not in page
 
 
@@ -503,3 +503,19 @@ def test_status_is_read_only(tmp_path, capsys):
     after = json.loads(manifest.read_text())
     assert after["runs"]["k/arm/seed1"]["status"] == "running"  # untouched
     assert after["runs"]["k/clean/seed0"]["status"] == "done"
+
+
+def test_published_deltas_reproduce_raw_same_seed_runs():
+    doc = json.loads((SCRIPTS.parent / "docs/harm-table.json").read_text())
+    assert ht.validate_table(doc) == []
+    rows = {r["defect"]: r for r in doc["rows"]}
+    assert rows["outlier_burst_5pct"]["mse_delta_pct"]["mean"] == 107.722
+    assert not all(p["same_gpu"] for p in rows["outlier_burst_5pct"]["accelerator_pairs"])
+
+
+def test_validator_rejects_internally_consistent_but_raw_false_deltas():
+    doc = _doc()
+    row = doc["rows"][0]
+    row["mse_delta_pct"]["per_seed"] = [999.] * len(row["seeds"])
+    row["mse_delta_pct"]["mean"] = 999.
+    assert any("raw same-seed" in e for e in ht.validate_table(doc))

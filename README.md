@@ -21,37 +21,41 @@ kinema check owner/name@<commit> --video  # pinned revision; + blur/exposure fro
 kinema check lerobot/droid_1.0.1 --max-episodes 50   # spread sample; downloads only the shards it reads
 ```
 
+The source checkout is `0.1.1.dev0`. Published PyPI `0.1.0` predates some checks and RLDS work described here; use the Git install below for this source version. No new package release is implied.
+
 No `lerobot` dependency. Installs in seconds: `pyarrow`, `numpy`, `huggingface-hub`, `rich`.
 Works on LeRobot **v3.0 and v2.1** layouts, local directories, `.zip`s, and Hub repo ids.
 
 ## What it looks like
 
-`kinema check lerobot/pusht --policy smolvla`:
+Snapshot from `kinema check lerobot/pusht@7628202a2180972f291ba1bc6723834921e72c19 --policy smolvla`:
 
 ```
-lerobot/pusht  health score 90/100
+lerobot/pusht@7628202a2180972f291ba1bc6723834921e72c19  health score 90/100
 format v3.0 | 206 episodes | 25650 frames | fps 10.0
 
- check                 verdict  summary
- stats-drift           PASS     data matches meta/stats.json (worst 0% of the FAIL threshold)
- timestamp-grid        PASS     evenly spaced at 10 fps and monotonic
- dropped-frames        PASS     frame_index contiguous; episode lengths and video segments match the data
- calibration-drift     PASS     2 joint(s) + 0 gripper(s) agree; worst offset -0.0% of range (joint 1)
- idle-segments         PASS     no episode starts idle or idles >= 30%
- stuck-actuator        PASS     every joint moves wherever the dataset uses it
- action-saturation     PASS     no continuous action dim pinned at a limit above 5% (2 dims checked)
- nan-and-normalization PASS     no NaN/Inf; all dims have usable variance
- duplicate-and-leakage PASS     no exact, partial or near duplicates
- outlier-episodes      INFO     0 episode(s) to review, 25 mild, of 206; worst: [15, 97, 107, 116, 159, ...]
- embedded-images       PASS     no image features declared
- camera-coverage       PASS     1 camera(s) over 206 episodes; 0 missing segments
- episode-file-pointers PASS     every shard pointer matches its file's contents (206 episodes, 1 shard(s))
- task-strings          PASS     206 episodes, 1 tasks in meta/tasks; 0 finding(s)
- reward-done           INFO     reward and done present
- visual-quality        SKIP     pass --video to run (downloads MP4s; needs the video extra)
- deployment-readiness  WARN     0 blocker(s), 1 warning(s) for smolvla
+check                   verdict summary
+stats-drift             PASS    data matches meta/stats.json (worst 0% of the FAIL threshold)
+timestamp-grid          PASS    evenly spaced at 10 fps and monotonic
+dropped-frames          PASS    frame_index contiguous; episode lengths and video segments match the data
+calibration-drift       PASS    2 joint(s) + 0 gripper(s) agree; worst offset -0.0% of range (joint 1)
+idle-segments           PASS    no episode starts idle or idles >= 30%
+stuck-actuator          PASS    every joint moves wherever the dataset uses it
+action-saturation       PASS    no continuous action dim pinned at a limit above 5% (2 dims checked)
+nan-and-normalization   PASS    no NaN/Inf; all dims have usable variance
+duplicate-and-leakage   PASS    no exact, partial or near duplicates
+outlier-episodes        INFO    0 episode(s) to review, 25 mild, of 206; worst: [15, 97, 107, 116, 159, 3, 4, 5, 10, 16]
+embedded-images         PASS    no image features declared
+camera-coverage         PASS    1 camera(s) over 206 episodes; 0 missing segments
+episode-file-pointers   PASS    every shard pointer matches its file's contents (206 episodes, 1 shard(s))
+video-file-pointers     PASS    all 1 metadata-referenced video files exist (the repo file listing)
+task-strings            PASS    206 episodes, 1 tasks in meta/tasks; 0 finding(s)
+reward-done             INFO    reward and done present
+visual-quality          SKIP    pass --video to run (downloads MP4s; needs the video extra)
+deployment-readiness    WARN    0 blocker(s), 1 warning(s) for smolvla
+stats-f32-fingerprint   INFO
 
-verdict: WARN (0 fail, 1 warn, 27 info)
+verdict: WARN; score model tiered-v2
 ```
 
 Exit code is `1` on any FAIL (`--fail-on warn` to also gate on warnings), so it drops
@@ -73,19 +77,30 @@ lives in [docs/checks.md](docs/checks.md).
 | `action-saturation` | >5% of commands during motion pinned at exactly the min/max of a continuous, non-gripper dim | clipped commands the policy will imitate |
 | `nan-and-normalization` | NaN/Inf, zero-variance dims, std < 1e-6 | one NaN poisons the loss for the whole batch |
 | `duplicate-and-leakage` | exact-copy episodes, partial copies (an opening only two episodes share is a copied beginning, not a scripted start), near-duplicates (exact scan up to 100k episodes with memory-bounded blocks, an even sample with a note above that) | silent metric inflation |
-| `outlier-episodes` | IQR outliers on the harmful side only: duration and end pose within a task, jerk/velocity per dim in std units without grippers or velocity commands (recognised by name or by tracking the state's delta, not its level - a spike beyond a velocity dim's own step scale still counts). WARN when two independent signals agree (stillness does not count - that is idle-segments' job) or one is far out (Tukey k=3, >=6x median - tuned on held-out data so known-good datasets stay quiet - and for end pose >= half the end-pose range) | a handful of broken episodes dominate the gradient |
+| `outlier-episodes` | IQR outliers on the harmful side only: duration and end pose within a task, jerk/velocity per dim in std units without grippers or velocity commands (recognised by name or by tracking the state's delta, not its level - a spike beyond a velocity dim's own step scale still counts). WARN when two independent signals agree (stillness does not count - that is idle-segments' job) or one is far out (Tukey k=3, >=6x median - tuned using regression data, not a pristine holdout - and for end pose >= half the end-pose range) | a handful of broken episodes dominate the gradient |
 | `embedded-images` | image features stored inside the parquet shards instead of MP4 video chunks | bloated shards; every frame decodes on read |
 | `camera-coverage` | episodes with no video for a declared camera (v3 segment metadata, or the v2.1 files with `--video`) | a modality silently drops out for those episodes |
 | `episode-file-pointers` | v3 episode metadata naming a shard that does not hold the episode's rows (the [lerobot#2401](https://github.com/huggingface/lerobot/issues/2401) converter rollover bug) | LeRobot loads only the metadata-named file - the episode silently vanishes from training |
 | `video-file-pointers` | episode metadata naming a video file the repo does not contain (v3 segment columns or the v2.x `video_path` template, checked against the repo file listing) | the episode's rows load but its video does not decode - the failure surfaces far from the cause |
-| `rlds-episode-counts` | RLDS dataset_info shard episode counts vs the shards the GCS bucket holds | declared episodes that were never uploaded load as fewer demonstrations than the metadata promises |
-| `rlds-feature-spec` | RLDS features.json missing the steps sequence, action, or observation features | the dataset fails to load or trains on a spec that says nothing about what the steps contain |
-| `rlds-shard-inventory` | missing, zero-byte, or miscounted RLDS TFRecord shards (implicit naming-convention pointers) | episodes vanish quietly; one corrupt giant shard kills a whole split |
-| `rlds-step-structure` | broken is_first/is_last framing or per-step feature length drift in a sampled RLDS episode (sample mode) | episode boundaries are lies - training slices mid-demonstration |
 | `task-strings` | empty task strings, frames pointing at a `task_index` the task table does not define, episode tasks with no table entry | language conditioning trains on `""` or an unrecoverable task |
 | `reward-done` | constant or NaN reward, `done` never True, `done` True mid-episode with frames after it | RL / reward-conditioned training gets labels with no signal |
 | `visual-quality` | blur (variance of Laplacian, frames decimated to ~VGA first so one threshold works at any resolution), underexposure (95th-percentile brightness) and overexposure (pixels clipped at the codec's brightest level), per camera, sampled inside each episode's segment (v2.1 per-episode and v3 shared MP4s) | bad visuals cost ~30% of training loss ([HF GIGO](https://huggingface.co/blog/robotdata/gigo)). Needs `--video` and the `video` extra |
 | `deployment-readiness` | episode length vs the policy's action chunk, stats coverage, quantile-norm support, declared shapes, and what the policy conditions on (camera input, task language, typical resolution - declared per policy in `src/kinema/policies.json`) | the openpi #906 failure mode: low loss, failed robot |
+
+The table above is the LeRobot `kinema check` registry. It also includes
+`stats-f32-fingerprint`, an INFO-only exact converter-rounding provenance check.
+
+The leaderboard's separate RLDS lane runs these metadata checks on GCS objects,
+not through `kinema check` or the MCP LeRobot loader. Nontrajectory feature trees
+and ambiguous generations are not forced into trajectory FAIL verdicts.
+
+| RLDS check | evidence |
+|---|---|
+| `rlds-episode-counts` | declared split counts vs the selected shard generation |
+| `rlds-feature-spec` | known current or legacy trajectory feature structure |
+| `rlds-shard-inventory` | missing or zero-byte shards in an unambiguous generation |
+| `rlds-step-structure` | optional sampled TFRecord episode framing, off by default |
+| `rlds-mirror-drift` | disclosed differences between data-bearing bucket copies |
 
 ## Deployment readiness
 
@@ -128,14 +143,15 @@ layer on top of the same checks. Point your MCP client at it:
 `pip install -e .` checkout works too:
 `"command": "kinema", "args": ["mcp"]`.)
 
-Three tools:
+Four tools:
 
 - `diagnose_finetune(dataset, policy, symptom, policy_overrides?, max_episodes?)` -
   ranks the data causes that explain a failed run, each with check evidence, a
   docs citation and a next step. Every check runs whatever the symptom says;
-  the symptom only decides which causes rank first. Scope is deliberately narrow: the pi0 family
-  (`pi0`, `pi05`/`pi0.5`, `pi0_fast`) and two failure-mode clusters -
-  normalization/stats mismatch and idle/static segments. Training with a custom
+  the symptom only decides which causes rank first. Policies come from `policies.json`;
+  cause clusters include normalization, idle/static segments and metadata integrity.
+  RLDS keywords are recognized, but RLDS execution is a separate board lane, not
+  the LeRobot MCP loader. Training with a custom
   chunk size or mean/std normalization? Pass `policy_overrides`
   (`{"chunk_size": 10, "quantile_norm": false}`) and the diagnosis computes
   against *your* setup, not the declared defaults.
@@ -144,6 +160,9 @@ Three tools:
   JSON report written to a file (`<dataset>.kinema-report-<timestamp>.json` next
   to a local dataset, else `~/.cache/kinema/reports/`; an explicit `report_path`
   must be absolute and only replaces an earlier kinema report).
+- `similar_datasets(dataset? or report_path?, k?)` - ranks evaluated board reports
+  by shared WARN/FAIL evidence and shape. Unevaluated reports and the query itself
+  are excluded. This is retrieval, not a guarantee that a match is suitable.
 - `list_checks()` - the check catalog from the registry, with docs links.
 
 `dataset` is an absolute local path (directory or `.zip`) or a Hub repo id
@@ -160,8 +179,10 @@ the map honest against the engine.
 
 ## Tuning the thresholds
 
-Every threshold lives in `CheckConfig` with a conservative default. Override any
-of them without editing code - a JSON file of field names to values:
+Many numeric thresholds live in `CheckConfig` and can be overridden with a JSON
+file of field names to values. Other rules are module constants, including
+outlier agreement and relative-distance gates, metadata shares, and RLDS limits;
+those require a code change. For configurable fields:
 
 ```bash
 kinema check ./my-dataset --config tuning.json
@@ -201,9 +222,11 @@ camera-coverage reads per-episode video segments from the metadata where the
 format records them (v3); on v2.1 datasets it skips on the board rather than
 count videos a sampled audit did not fetch as missing - a full local
 `kinema check` still measures coverage from disk.
-Sampled and full scans can score differently - for example pusht scores 86 on the
-board and 100 on a full local scan, because a 50-episode sample's recomputed stats
-are compared against stats.json values computed over all 206 episodes.
+Sampled and full scans can score differently because coverage and applicable
+checks differ. A sample-vs-full stats comparison is not a sound explanation for
+a score difference: the checker uses exact per-episode stats where available.
+Inspect the per-check evidence, engine stamp and video coverage before comparing
+scores. Score examples are snapshots, not current promises.
 
 ## Try it on the demo dataset
 
@@ -236,10 +259,12 @@ detection rates a little under the measured ones - a drop means a threshold
 lost its teeth. Its **ceilings** are the measured baseline: how many untouched
 datasets each check already flags.
 
-The pinned calibration list splits into disjoint `tune` and `eval` halves
-(`scripts/calibration_datasets.txt`): thresholds, floors and ceilings are derived
-from the tune half, and the sensitivity guard runs on the eval half - the numbers
-that protect the checks were never tuned on the data that guards them.
+The pinned list has `tune` and `eval` regression groups, not a pristine held-out
+evaluation. Guard floors and ceilings used measurements from the eval group, and
+related corpora can overlap. `pusht-subtask` is grouped with `pusht` under tune to
+avoid that known family split. Report these guards as regression evidence, not an
+unbiased generalization estimate. Failed pinned loads make calibration incomplete
+rather than publishing a smaller success-looking sample.
 
 These suites need the Hub. If huggingface.co itself is unreachable they skip with a
 visible reason (`tests/netcheck.py`) instead of failing CI on someone else's outage.

@@ -1199,7 +1199,10 @@ def render_harm_table(doc: dict) -> str:
     steps = doc.get("steps", 0)
     steps_s = f"{steps / 1000:g}k" if steps >= 1000 else str(steps)
     evals = doc.get("eval_episodes")
-    scope = (f"{n_seeds} seed{'s' if n_seeds != 1 else ''} / "
+    paired_counts = [len(r.get("seeds") or []) for r in doc.get("rows", [])]
+    lo, hi = (min(paired_counts), max(paired_counts)) if paired_counts else (n_seeds, n_seeds)
+    seed_scope = (f"{lo} seeds" if lo == hi else f"{lo}-{hi} paired seeds per defect")
+    scope = (f"{seed_scope} / "
              + (f"{evals} eval episodes / " if evals else "no rollouts / ")
              + f"{steps_s} steps")
     pol, ds, comp = doc.get("policy", {}), doc.get("dataset", {}), doc.get("compute", {})
@@ -1220,7 +1223,8 @@ def render_harm_table(doc: dict) -> str:
         "<h1>Harm table</h1>"
         f"<p><b>{esc(scope)} - indicative ordering evidence, not claim-grade.</b> "
         "Each injected defect is trained against a clean arm under the same seed; deltas are "
-        "defect minus clean. Health-score weights are derived from this table where measured "
+        "defect minus clean. Cross-accelerator pairs are confounded, as noted below. "
+        "Health-score weights retain historical v1.1 measurements, not automatic updates from this table "
         f"(<a href='{_CHECKS_MD}#harm-table'>protocol</a>, "
         f"<a href='{_CHECKS_MD}#health-score'>weights</a>, <a href='index.html'>leaderboard</a>).</p>"
         f"<p class=dim>Policy: {esc(pol.get('name', ''))} ({esc(pol.get('source', ''))}), "
@@ -1229,7 +1233,10 @@ def render_harm_table(doc: dict) -> str:
         f"{len(ds.get('heldout_episodes') or [])} held-out episodes ({esc(ds.get('episode_sample', ''))}). "
         f"Seeds {esc(doc.get('seeds'))}. "
         f"Generated {esc(doc.get('generated', ''))}"
-        + (f"; {esc(comp['ledger_gpu_hours'])} GPU-hours on {esc(gpu)}" if "ledger_gpu_hours" in comp else "")
+        + (f"; {esc(comp['table_runs_gpu_hours'])} GPU-hours across listed runs on {esc(gpu)}"
+           if "table_runs_gpu_hours" in comp else "")
+        + (f"; partial ledger {esc(comp['ledger_gpu_hours'])} GPU-hours on {esc(gpu)} (not the run total)"
+           if "ledger_gpu_hours" in comp else "")
         + ".</p>"
         + (f"<p class=dim>{esc(doc['notes'])}</p>" if doc.get("notes") else "")
         + "<table><thead><tr><th>defect</th><th>check</th><th>recipe</th>"

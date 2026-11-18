@@ -259,9 +259,7 @@ DATASETS_FILE = Path(__file__).resolve().parent / "calibration_datasets.txt"
 
 
 def pinned_datasets(quick: bool = False, role: str | None = None) -> list[str]:
-    """The pinned list, optionally one role. `tune` is where thresholds,
-    floors and ceilings come from; `eval` is the held-out half the nightly
-    sensitivity guard runs on (tests/test_sensitivity.py)."""
+    """The pinned regression groups, not an untouched statistical holdout."""
     if role not in (None, "tune", "eval"):
         raise ValueError(f"role must be 'tune' or 'eval', got {role!r}")
     out = []
@@ -306,18 +304,24 @@ def main() -> int:
     ap.add_argument("--quick", action="store_true", help="the pinned list's small subset")
     ap.add_argument("--role", choices=["tune", "eval"],
                     help="one half of the pinned list: tune is where thresholds come "
-                    "from, eval is the held-out half the nightly guard runs on")
+                    "from; eval is the regression group the nightly guard runs on")
     ap.add_argument("--max-episodes", type=int, default=50)
     ap.add_argument("--markdown", default="")
     args = ap.parse_args()
 
     sources = args.datasets or pinned_datasets(quick=args.quick, role=args.role)
     ctxs = {}
+    failed = []
     for src in sources:
         try:
             ctxs[src] = load_dataset(src, max_episodes=args.max_episodes)
         except Exception as e:  # noqa: BLE001
-            print(f"skip {src}: {e}", file=sys.stderr)
+            failed.append(src)
+            print(f"FAILED {src}: {e}", file=sys.stderr)
+    if failed:
+        print(f"calibration incomplete: {len(failed)}/{len(sources)} pinned loads failed; "
+              "no partial calibration published", file=sys.stderr)
+        return 1
     sens, flagged = run_calibration(ctxs)
 
     lines = [f"# kinema calibration ({len(ctxs)} datasets, up to {args.max_episodes} episodes each)", ""]

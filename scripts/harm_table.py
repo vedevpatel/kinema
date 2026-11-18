@@ -580,6 +580,12 @@ def build_table(results: dict[tuple[str, int], dict], *, policy: dict, steps: in
                                   if succ is not None else {"per_seed": [None] * len(seeds), "mean": None}),
             "date": dates.get(defect, date),
             "confidence": confidence_label(len(seeds)),
+            "accelerator_pairs": [{"seed": s,
+                "defect_gpu": results[(defect, s)].get("gpu"),
+                "clean_gpu": results[("clean", s)].get("gpu"),
+                "same_gpu": (results[(defect, s)].get("gpu") is not None and
+                             results[(defect, s)].get("gpu") == results[("clean", s)].get("gpu"))}
+                for s in seeds],
         })
     runs = [{"arm": a, "seed": s, **{k: v for k, v in r.items() if k in _RUN_FIELDS}}
             for (a, s), r in sorted(results.items(), key=lambda kv: (ARMS.index(kv[0][0]), kv[0][1]))]
@@ -676,6 +682,20 @@ def validate_table(doc: Any) -> list[str]:
                 errs.append(f"{where} {metric} has non-finite or missing values")
             elif abs(_mean(ps) - m["mean"]) > 1e-3 + 1e-6 * abs(m["mean"]):
                 errs.append(f"{where} {metric}.mean is not the mean of per_seed")
+    raw = {(r.get("arm"), r.get("seed")): r for r in doc["runs"] if isinstance(r, dict)}
+    for row in doc["rows"]:
+        if not isinstance(row, dict) or not isinstance(row.get("seeds"), list):
+            continue
+        for i, seed in enumerate(row["seeds"]):
+            defect, clean = raw.get((row.get("defect"), seed)), raw.get(("clean", seed))
+            if not defect or not clean:
+                errs.append(f"{row.get('defect')}: missing raw same-seed runs for {seed}")
+                continue
+            d, c = defect.get("heldout_mse"), clean.get("heldout_mse")
+            values = (row.get("mse_delta_pct") or {}).get("per_seed") or []
+            if (_num(d) and _num(c) and c > 0 and i < len(values) and _num(values[i])
+                    and abs(100 * (d - c) / c - values[i]) > 0.0011):
+                errs.append(f"{row.get('defect')}: delta does not match raw same-seed runs for {seed}")
     if len(json.dumps(doc).encode()) >= MAX_TABLE_BYTES:
         errs.append(f"document is >= {MAX_TABLE_BYTES} bytes")
     return errs

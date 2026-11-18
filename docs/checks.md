@@ -1,6 +1,6 @@
 # The checks, one by one
 
-What each check flags, how it decides, its knobs (all `CheckConfig` fields,
+What each check flags, how it decides, its configurable knobs (`CheckConfig` fields,
 overridable with `kinema check --config tuning.json`), and the limits worth
 knowing before you trust or dismiss a finding. The one-line versions live in
 the README table; this is the long form.
@@ -21,7 +21,8 @@ more detailed never moves a score. The score is derived from stored per-check
 verdicts and stored findings, so any stored result can be rescored without
 re-running checks. `tiered-v2` is `tiered-v1.1` (same tiers, FAIL cost and
 waiver; `tiered-v1.1` was `tiered-v1` plus the waiver) with WARN weights
-re-anchored on harm table v1.1. Results with no `score_model` field were scored by
+re-anchored on historical harm table v1.1. These weights are frozen legacy
+policy, not automatically recomputed from the newer table. Results with no `score_model` field were scored by
 `legacy-v0` (hand-tuned weights); scores are not comparable across models.
 
 Correlated checks: one defect can trip two checks. A declared waiver edge
@@ -79,9 +80,10 @@ its basis in report JSON (`weight`, `weight_basis`):
 | outlier-episodes | 3 | placeholder |
 | any other check (task-strings, reward-done, ...) | 8 | placeholder |
 
-Measurements for placeholder weights come from the [harm table](#harm-table);
-the table is evidence, and re-anchoring a weight on it is a separate
-decision. The v1.1 re-anchor moved stuck-actuator from placeholder to
+The newer [harm table](#harm-table) contains measurements for some placeholder
+checks. Existing placeholder costs remain historical policy, not current measured
+harm estimates. Re-anchoring needs a separate score-model decision, especially
+where newer rows confound accelerator and seed effects. The v1.1 re-anchor moved stuck-actuator from placeholder to
 measured.
 
 Placeholder weights are the hand-tuned legacy values, kept until the harm
@@ -92,56 +94,30 @@ success-rate re-check is pending.
 
 ## Harm table
 
-The harm study v0 numbers above are one linear model's held-out MSE. The
-harm table (v1) re-measures defects on a real policy, with rollouts:
-`scripts/harm_table.py` writes `docs/harm-table.json` (schema
-`kinema.harm-table/v1`), and the leaderboard renders it as
-`harm-table.html`.
+The GPU table is `docs/harm-table.json`, rendered as `harm-table.html`, with raw
+runs and recipes from `scripts/harm_table.py`. The CPU ridge baseline is separate:
+see [harm-study.md](harm-study.md). Current evidence has eight defect arms plus
+clean, diffusion policy at 20k steps, batch 32, 50 rollout episodes, and 3 seeds
+per defect except duplicates (5). The dataset is pusht revision
+`7628202a2180972f291ba1bc6723834921e72c19`, spread sample 144 episodes,
+120 train and 24 held out. Exact episode IDs are in the JSON.
 
-- Dataset: `lerobot/pusht` at `7628202a2180972f291ba1bc6723834921e72c19`,
-  the harm study split: kinema's 144-episode sample (ids spread evenly over
-  the 206 episodes), the first 120 for training, the last 24 held out. The
-  table records both id lists.
-- Arms: clean plus six defects, each the target of one check -
-  `duplicates_20pct` (duplicate-and-leakage), `idle_start_30f`
-  (idle-segments), `scale_mismatch_0.5x_25pct` (calibration-drift), with the
-  recipes imported unchanged from `scripts/harm_study.py`, and
-  `stuck_joint_30pct` (stuck-actuator): one action dim, drawn once per
-  dataset, frozen to its episode-start value in 30% of episodes;
-  `action_saturation_30pct` (action-saturation): actions clipped to the
-  central 30% of each dim's range in every episode, so commands pile up at
-  exactly the dataset min/max; `dropped_frames_10pct_25pct` (dropped-frames):
-  10% of interior frames deleted in 25% of episodes.
-- Policy: LeRobot's diffusion-policy pusht example
-  (`examples/training/train_policy.py`, `lerobot==0.5.1`): `DiffusionConfig`
-  defaults (`num_inference_steps` at its default), Adam lr 1e-4, 20000
-  optimizer steps, batch 32 for every arm, normalization stats from each
-  arm's own training frames. Seeds 0, 1, 2; a seed fixes the defect draw and
-  the training randomness.
-- Outcomes, defect vs clean under the same seed: held-out action MSE delta
-  (%, the action the policy executes at each held-out frame, raw units) and
-  rollout success delta (points, 50 `gym_pusht` episodes, LeRobot's own eval
-  loop, env seeds identical across arms).
-- Compute: every GPU run is on a manifest; completed runs are resumed, never
-  retrained; an arm whose projected cumulative GPU time exceeds 15 GPU-hours
-  is refused before it launches.
-- `--dry-run` reruns every recipe through the harm study's ridge-BC math
-  on CPU (no rollouts): the v0 arms must reproduce the v0 numbers within
-  tolerance; the newer arms self-check (the recipe bites as designed) and
-  print indicative numbers.
+Arithmetic was corrected on 2026-11-18 from unchanged raw runs using the
+repository's same-seed builder. The outlier burst mean is +107.722% and stale
+stats mean +16.893% held-out MSE, replacing +120.178%/+23.730% values previously
+computed against mean clean L4 runs at different seeds. Those newer defect seeds
+0-2 used L4 while same-seed clean baselines used A100. Accelerator and stochastic
+effects remain confounded. `accelerator_pairs` records this for each row; neither
+comparison is an isolated causal estimate. Duplicate and dropped-frame deltas
+straddle zero, so these runs do not establish benign behavior. Rollout success
+is near the floor and cannot rank the defects.
 
-Limit: 3 seeds, 50 eval episodes and 20k steps make the table indicative
-ordering evidence, not claim-grade. This table is v1.2; it supersedes the
-v1.1 four-arm table of 2026-11-15 (which superseded the 5k-step v1 table
-of 2026-11-14). Rollout success stayed at the floor for every arm at both
-budgets (clean 2%/4%/2% at 20k steps), so success deltas cannot separate
-defects in this protocol - held-out MSE is the outcome metric.
-`stuck_joint_30pct` freezes a joint in more than `stuck_warn_share` (25%)
-of episodes, so stuck-actuator reports that joint as INFO, not WARN - its
-row measures harm the score does not charge. `dropped_frames_10pct_25pct`
-is measured benign on pusht/diffusion at 20k steps (+3.3% mean held-out
-MSE, seeds -8.9% to +16.2%); the dropped-frames check stays WARN because
-frame gaps still signal a broken recording pipeline.
+The listed runs sum to 16.118 GPU-hours. The 11.424-hour ledger is partial, not
+total compute. The published compute record reports an 18-hour ceiling; the
+harness's default ceiling is 15 hours and can be overridden per run. Completed
+manifest runs resume without retraining. This correction does not authorize or
+launch more training. Scoring retains its historical v1.1 weights, separately
+from the newer table. See [scale-test.md](scale-test.md) for loader scale checks.
 
 ## stats-drift
 
@@ -157,7 +133,8 @@ all per-episode stats, the way LeRobot builds it. A sampled load without
 per-episode stats gets a bootstrap reference once enough episodes are
 loaded (>= 8): the sampling distribution of the pooled mean/std, resampling
 episodes (frames within one are autocorrelated, so the episode is the
-unit), and stored stats outside the 99.9% interval are flagged. With too
+unit). Stored stats outside the 99.9% interval are INFO only: deterministic
+spread samples do not justify random-sample significance claims. With too
 few episodes only the gross backstop applies (std off >= 3x, mean off
 >= 2 sigma); a full load stays the conclusive audit.
 
@@ -201,19 +178,15 @@ the unblocked end says anything). Dims that look like unnamed grippers or
 on/off commands - including toggles the slot prior misses, such as odd-sized
 bimanual layouts - are reported but never gated.
 
-Delta commands (most Open X-Embodiment conversions) get a scale-agreement
-verdict: the measured per-frame step of the paired state dim is regressed
-on the command, and a slope far from 1 (with R^2 >= 0.5) means action and
-state disagree on scale - a conversion-units bug, or commands the robot
-cannot follow (on lerobot/xarm_lift_medium the measured steps run at
-~0.07x the commanded ones, R^2 up to 0.98: flagged). A delta command has
-no still-frame offset or backlash to fit - scale agreement is the only
-measurable signal on deltas. Absolute EE-pose
-actions still cannot be compared without the robot's kinematics; those
-dims classify as "different space" and sit the check out.
+Delta commands can be normalized or transformed by the controller. Regressing
+state steps on commands measures an action/state ratio, but a slope far from 1
+does not establish a conversion error without a common-unit contract. Such
+ratios remain INFO evidence, not scored warnings. Absolute-position calibration
+checks are separate. Absolute EE-pose actions cannot be compared without the
+robot's kinematics and sit the check out.
 
 Limit (score weight): a WARN costs 10, tier A, measured - action scale 0.5x
-in 25% of episodes (the delta-scale defect) raised held-out action MSE by
+in 25% of episodes (an injected action-scale mismatch) raised held-out action MSE by
 1475.3% in harm table v1.1 (diffusion policy, 20k steps). Constant offsets on absolute commands
 share the weight without a measurement of their own.
 
@@ -319,7 +292,7 @@ No knobs.
 
 Limit (score weight): a WARN costs 2, tier C, measured - 20% duplicate
 episodes moved held-out action MSE by -3.6% in harm table v1.1 (diffusion
-policy, 20k steps): easy to detect, benign at both measured budgets. Split
+policy, 20k steps): easy to detect, but seed deltas straddle zero and do not establish benign behavior. Split
 leakage inflates evaluation rather than hurting training, a harm this weight
 does not price.
 
@@ -534,3 +507,10 @@ constant-dim floor covers the normalization consequence). Detection
 recomputes the naive f32 stats on a sample of episodes and requires a
 bitwise match on both mean and std plus a material float64 disagreement,
 so honest stats never match.
+
+## rlds-mirror-drift
+
+The board RLDS lane compares two data-bearing GCS copies. It reports version,
+episode, shard and byte differences, with bucket identity preserved. It never
+substitutes a healthy mirror for an incomplete selected copy. Ambiguous shard
+generations skip comparison. This is not part of the LeRobot CLI registry.

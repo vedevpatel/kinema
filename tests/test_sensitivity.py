@@ -1,16 +1,9 @@
 """Nightly sensitivity guard: on pinned real datasets, gross injected defects
 must be caught, and untouched data must not grow new flags.
 
-Runs on the EVAL half of scripts/calibration_datasets.txt - the held-out
-half. Thresholds, floors and ceilings are derived from the tune half, so
-the numbers below were never tuned on the data that guards them (finding
-#10: tuning and test sets must be disjoint). Pinned revisions keep the
-numbers deterministic. Network-dependent: runs with KINEMA_E2E=1.
-
-Floors sit a little under the measured rates so noise-free code changes pass;
-a drop below one means a threshold lost its teeth. Ceilings are the measured
-baseline: a rise means a new false positive - or a real issue newly found, in
-which case read it and raise the ceiling deliberately.
+Runs on the eval regression group in scripts/calibration_datasets.txt.
+Floors and ceilings were measured on that group. It is a regression guard,
+not a pristine held-out generalization estimate.
 """
 
 from __future__ import annotations
@@ -27,7 +20,7 @@ pytestmark = e2e_mark()
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 # defect label -> [(magnitude, minimum detection rate)], measured on the eval
-# quick set (the held-out half; rates differ from the tune half by dataset mix)
+# quick regression group; rates differ from the tune group by dataset mix
 FLOORS = {
     "action std stored x m": [(4.0, 0.90)],
     "action mean shifted m std": [(1.0, 0.85)],

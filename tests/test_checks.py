@@ -342,3 +342,20 @@ def test_quantile_warn_reads_raw_stats_json(tmp_path):
     ctx = load_dataset(str(root))
     res = run("deployment-readiness", ctx, CheckConfig(policy="pi0"))
     assert any(f.severity == Severity.WARN and "q01/q99" in f.message for f in res.findings)
+
+
+def test_console_findings_cap_is_global_and_printed_once():
+    from io import StringIO
+    from rich.console import Console
+    from kinema.checks import CheckResult, Finding
+    from kinema.report import render_console
+    report = DatasetReport('test', 'v3.0', 1, 20, 10.)
+    for cid in ('first', 'second', 'third'):
+        result = CheckResult(cid, cid)
+        result.findings = [Finding(cid, Severity.INFO, f'{cid} finding {i}') for i in range(3)]
+        report.results.append(result)
+    out = StringIO()
+    render_console(report, Console(file=out, width=100), max_findings=2)
+    text = out.getvalue()
+    assert text.count('more findings') == 1
+    assert '7 more findings' in text

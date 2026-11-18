@@ -19,7 +19,9 @@ def _docs_sections() -> set[str]:
 
 
 def test_every_cited_check_exists():
-    known = {c.id for c in ALL_CHECKS}
+    known = {c.id for c in ALL_CHECKS} | {
+        "rlds-episode-counts", "rlds-feature-spec", "rlds-shard-inventory",
+        "rlds-step-structure", "rlds-mirror-drift"}
     for cause in CAUSES["causes"]:
         assert cause["indicates"]["check_id"] in known, cause["id"]
     for name, cluster in CAUSES["clusters"].items():
@@ -81,3 +83,9 @@ def test_every_message_needle_is_emitted_by_its_check():
         check = by_id[cause["indicates"]["check_id"]]
         src = inspect.getsource(inspect.getmodule(type(check)))
         assert needle in src, f"{cause['id']}: {needle!r} not emitted by {check.id}"
+
+
+def test_cause_map_has_no_stray_top_level_clusters():
+    from kinema.diagnose import clusters_for_symptom
+    assert set(CAUSES) == {"version", "clusters", "causes", "blind_spots"}
+    assert "rlds-integrity" in clusters_for_symptom("RLDS shard inventory failure")

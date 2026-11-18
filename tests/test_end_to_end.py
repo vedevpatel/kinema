@@ -17,7 +17,7 @@ pytestmark = e2e_mark()
 
 
 def test_pusht_end_to_end():
-    ctx = load_dataset("lerobot/pusht")
+    ctx = load_dataset("lerobot/pusht@7628202a2180972f291ba1bc6723834921e72c19")
     assert ctx.total_episodes == 206
     assert ctx.fps == 10.0
     assert ctx.state is not None and ctx.action is not None

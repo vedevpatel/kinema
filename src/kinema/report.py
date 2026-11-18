@@ -310,19 +310,20 @@ def render_console(report: DatasetReport, console=None, max_findings: int = 12) 
 
     shown = 0
     for r in report.results:
+        if shown >= max_findings:
+            break
         if r.skipped or not r.findings:
             continue
         console.print(f"\n[bold]{r.check_id}[/bold] - {r.title}")
         for f in r.findings:
             if shown >= max_findings:
-                remaining = sum(
-                    len(x.findings) for x in report.results if not x.skipped
-                ) - shown
-                console.print(f"  [dim]... {remaining} more findings (use --json)[/dim]")
                 break
             console.print(f"  [{_STYLE[f.severity]}]{_MARK[f.severity]}[/{_STYLE[f.severity]}] {f.message}")
             shown += 1
 
+    remaining = sum(len(x.findings) for x in report.results if not x.skipped) - shown
+    if remaining > 0:
+        console.print(f"  [dim]... {remaining} more findings (use --json)[/dim]")
     console.print(
         f"\n[bold]verdict: [{_STYLE[report.verdict]}]{_MARK[report.verdict]}[/{_STYLE[report.verdict]}][/bold] "
         f"({c['fail']} fail, {c['warn']} warn, {c['info']} info)"
