@@ -164,6 +164,7 @@ def _registry() -> list[Check]:
     )
     from kinema.checks.outliers import OutlierEpisodesCheck
     from kinema.checks.stats_drift import StatsDriftCheck
+    from kinema.checks.stats_provenance import StatsF32FingerprintCheck
     from kinema.checks.timestamps import DroppedFramesCheck, TimestampGridCheck
     from kinema.checks.visual import VisualQualityCheck
 
@@ -186,6 +187,7 @@ def _registry() -> list[Check]:
         RewardDoneCheck(),
         VisualQualityCheck(),
         DeploymentReadinessCheck(),
+        StatsF32FingerprintCheck(),
     ]
 
 

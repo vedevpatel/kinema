@@ -518,3 +518,18 @@ custom config may disagree with them, which is what `policy_overrides` and
 the JSON file are for.
 
 No `CheckConfig` knobs; runtime flags `--policy` and `--video`.
+## stats-f32-fingerprint
+
+Were the stored per-episode stats computed from the data, or are they a
+converter's float32 accumulation error stored as if it were statistics?
+Some converters compute stats with a naive f32 running sum; on long
+episodes the rounding is deterministic, so the stored mean and std
+reproduce a naive f32 recomputation bitwise while disagreeing with the
+float64 truth. On a constant channel this fabricates a nonzero std and
+DC-offsets the mean: a pipeline normalizing from these stats feeds the
+policy the converter's rounding error. The data itself is fine, so the
+finding is an INFO (stats-drift owns material disagreement, and its
+constant-dim floor covers the normalization consequence). Detection
+recomputes the naive f32 stats on a sample of episodes and requires a
+bitwise match on both mean and std plus a material float64 disagreement,
+so honest stats never match.

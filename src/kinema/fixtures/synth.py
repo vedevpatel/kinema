@@ -18,6 +18,7 @@ import pyarrow.parquet as pq
 KNOWN_DEFECTS = [
     "stats-drift",
     "constant-dim-f32-stats",
+    "f32-naive-episode-stats",
     "timestamp-grid",
     "dropped-frames",
     "calibration-drift",
@@ -215,11 +216,29 @@ def make_dataset(
     state_all, action_all = np.asarray(rows_state), np.asarray(rows_action)
     feats = [("action", action_all)] + ([("observation.state", state_all)] if with_state else [])
     ep_cols: dict[str, list] = {}
+    naive = "f32-naive-episode-stats" in defects
     for m in ep_meta:
         sel = ep_arr == m["episode_index"]
         for feat, arr in feats:
-            for k, v in _stats(arr[sel]).items():
-                ep_cols.setdefault(f"stats/{feat}/{k}", []).append(v)
+            if naive:
+                # converter that computes per-episode stats in naive float32:
+                # running f32 sum for the mean, running f32 sum of squared
+                # deviations for the std (the RoboCOIN fingerprint - bitwise
+                # reproducible, materially off from the f64 truth). min/max/
+                # count stay exact: accumulation only touches mean/std.
+                from kinema.checks.stats_provenance import _naive_f32_stats
+
+                m32, s32 = _naive_f32_stats(arr[sel])
+                exact = _stats(arr[sel])
+                for k, v in exact.items():
+                    if k == "mean":
+                        v = m32.tolist()
+                    elif k == "std":
+                        v = s32.tolist()
+                    ep_cols.setdefault(f"stats/{feat}/{k}", []).append(v)
+            else:
+                for k, v in _stats(arr[sel]).items():
+                    ep_cols.setdefault(f"stats/{feat}/{k}", []).append(v)
     # video segments, as LeRobot v3 records them per camera: episodes packed
     # 5 to a shared MP4, [from, to) seconds inside it. ep_meta is appended in
     # episode order, so the position IS the episode index.

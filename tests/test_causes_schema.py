@@ -57,8 +57,10 @@ def test_clusters_have_keywords_and_checks():
 
 def test_confidence_follows_the_severity_rule():
     """The spec's mapping: FAIL -> high, WARN -> medium. A WARN-level cause
-    claiming high confidence (review finding 5) contradicts it."""
-    rule = {"FAIL": "high", "WARN": "medium"}
+    claiming high confidence (review finding 5) contradicts it. INFO causes
+    never gate a verdict and may claim high confidence when the signal is
+    exact by construction (stats-f32-fingerprint: a bitwise match)."""
+    rule = {"FAIL": "high", "WARN": "medium", "INFO": "high"}
     for cause in CAUSES["causes"]:
         for sev, conf in cause["confidence"].items():
             assert conf == rule[sev], f"{cause['id']}: {sev} -> {conf}"

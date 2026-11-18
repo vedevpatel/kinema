@@ -2,45 +2,106 @@
   "version": 1,
   "clusters": {
     "normalization": {
-      "keywords": ["normaliz", "stats", "statistics", "wrong scale", "scale mismatch", "scaling", "scaled", "rescal", "quantile", "q01", "q99", "mean/std", "z-score"],
-      "checks": ["stats-drift", "nan-and-normalization", "deployment-readiness"]
+      "keywords": [
+        "normaliz",
+        "stats",
+        "statistics",
+        "wrong scale",
+        "scale mismatch",
+        "scaling",
+        "scaled",
+        "rescal",
+        "quantile",
+        "q01",
+        "q99",
+        "mean/std",
+        "z-score"
+      ],
+      "checks": [
+        "stats-drift",
+        "nan-and-normalization",
+        "deployment-readiness",
+        "stats-f32-fingerprint"
+      ]
     },
     "idle": {
-      "keywords": ["doesn't move", "does not move", "not moving", "stays still", "stands still", "no movement", "frozen", "freezes", "freeze", "won't move", "wont move", "barely moves", "stays static", "remains static", "idle", "does nothing"],
-      "checks": ["idle-segments", "stuck-actuator"]
+      "keywords": [
+        "doesn't move",
+        "does not move",
+        "not moving",
+        "stays still",
+        "stands still",
+        "no movement",
+        "frozen",
+        "freezes",
+        "freeze",
+        "won't move",
+        "wont move",
+        "barely moves",
+        "stays static",
+        "remains static",
+        "idle",
+        "does nothing"
+      ],
+      "checks": [
+        "idle-segments",
+        "stuck-actuator"
+      ]
     },
     "metadata-integrity": {
-      "keywords": ["missing episodes", "fewer episodes", "episodes not loading", "episodes vanish", "episodes disappear", "episode not found", "dataset loads fewer", "empty episode batch", "missing video", "video not found", "video fails to load", "no video for some episodes"],
-      "checks": ["episode-file-pointers", "video-file-pointers"]
+      "keywords": [
+        "missing episodes",
+        "fewer episodes",
+        "episodes not loading",
+        "episodes vanish",
+        "episodes disappear",
+        "episode not found",
+        "dataset loads fewer",
+        "empty episode batch",
+        "missing video",
+        "video not found",
+        "video fails to load",
+        "no video for some episodes"
+      ],
+      "checks": [
+        "episode-file-pointers",
+        "video-file-pointers"
+      ]
     }
   },
   "rlds-integrity": {
-   "keywords": [
-    "rlds",
-    "tfrecord",
-    "tfds",
-    "open x",
-    "gcs",
-    "shard inventory",
-    "episode count",
-    "feature spec",
-    "is_first",
-    "is_last"
-   ],
-   "checks": [
-    "rlds-episode-counts",
-    "rlds-feature-spec",
-    "rlds-shard-inventory",
-    "rlds-step-structure"
-   ]
+    "keywords": [
+      "rlds",
+      "tfrecord",
+      "tfds",
+      "open x",
+      "gcs",
+      "shard inventory",
+      "episode count",
+      "feature spec",
+      "is_first",
+      "is_last"
+    ],
+    "checks": [
+      "rlds-episode-counts",
+      "rlds-feature-spec",
+      "rlds-shard-inventory",
+      "rlds-step-structure"
+    ]
   },
   "causes": [
     {
       "id": "stored-stats-drift",
       "cluster": "normalization",
       "title": "Stored normalization stats disagree with the data",
-      "indicates": {"check_id": "stats-drift", "min_severity": "WARN"},
-      "confidence": {"FAIL": "high", "WARN": "medium"},
+      "indicates": {
+        "check_id": "stats-drift",
+        "min_severity": "WARN"
+      },
+      "confidence": {
+        "FAIL": "high",
+        "WARN": "medium"
+      },
       "explanation": "A pipeline that normalizes from the dataset's stored stats trains and infers with these numbers. When they drift from the data, the policy trains on wrong-scaled inputs and fails with a clean loss curve - the openpi #906 pattern, the top community diagnosis for 'low loss, failed robot' on {policy}.",
       "docs_section": "stats-drift",
       "next_step": "Recompute meta/stats.json from the data (LeRobot aggregation, or openpi's compute_norm_stats.py for openpi training) and retrain; if the stats came from a converter, fix the converter."
@@ -49,8 +110,14 @@
       "id": "missing-quantile-stats",
       "cluster": "normalization",
       "title": "The policy normalizes with q01/q99 but the stats have none",
-      "indicates": {"check_id": "deployment-readiness", "min_severity": "WARN", "message_contains": "q01/q99"},
-      "confidence": {"WARN": "medium"},
+      "indicates": {
+        "check_id": "deployment-readiness",
+        "min_severity": "WARN",
+        "message_contains": "q01/q99"
+      },
+      "confidence": {
+        "WARN": "medium"
+      },
       "explanation": "{policy} normalizes with q01/q99 quantiles. If your training pipeline normalizes from the dataset's stats, missing quantiles mean the run either fails on the missing keys or normalizes with quantiles computed elsewhere, by different code - inputs land in a different range than training assumed. Pipelines that compute their own norm stats at train time do not read these, and for them this finding does not explain the failure.",
       "docs_section": "deployment-readiness",
       "next_step": "Check where your training pipeline gets its norm stats. If from the dataset, recompute meta/stats.json with q01/q99 and retrain; if it computes its own at train time, this finding does not apply - look at the other causes."
@@ -59,8 +126,14 @@
       "id": "missing-stats",
       "cluster": "normalization",
       "title": "No normalization stats at all",
-      "indicates": {"check_id": "deployment-readiness", "min_severity": "FAIL", "message_contains": "no normalization stats"},
-      "confidence": {"FAIL": "high"},
+      "indicates": {
+        "check_id": "deployment-readiness",
+        "min_severity": "FAIL",
+        "message_contains": "no normalization stats"
+      },
+      "confidence": {
+        "FAIL": "high"
+      },
       "explanation": "There are no stats to normalize {policy}'s inputs or outputs with. Training may still run (some pipelines compute their own), but inference without the same stats produces garbage actions.",
       "docs_section": "deployment-readiness",
       "next_step": "Generate meta/stats.json for the dataset and make sure the training run and the deployment load the same stats."
@@ -69,8 +142,14 @@
       "id": "zero-variance-dims",
       "cluster": "normalization",
       "title": "Constant or near-constant dims break normalization",
-      "indicates": {"check_id": "nan-and-normalization", "min_severity": "WARN", "message_contains": "std"},
-      "confidence": {"WARN": "medium"},
+      "indicates": {
+        "check_id": "nan-and-normalization",
+        "min_severity": "WARN",
+        "message_contains": "std"
+      },
+      "confidence": {
+        "WARN": "medium"
+      },
       "explanation": "A zero-variance dim divides by ~0 during normalization (Inf/NaN batches) or amplifies sensor noise into a full-scale signal the policy wastes capacity fitting.",
       "docs_section": "nan-and-normalization",
       "next_step": "Drop constant dims from the features (and the policy's input dims), or fix the recording so those dims carry signal; then recompute stats."
@@ -79,8 +158,14 @@
       "id": "nan-values",
       "cluster": "normalization",
       "title": "NaN or Inf values in the data",
-      "indicates": {"check_id": "nan-and-normalization", "min_severity": "FAIL", "message_contains": "NaN"},
-      "confidence": {"FAIL": "high"},
+      "indicates": {
+        "check_id": "nan-and-normalization",
+        "min_severity": "FAIL",
+        "message_contains": "NaN"
+      },
+      "confidence": {
+        "FAIL": "high"
+      },
       "explanation": "NaN/Inf frames poison the batch statistics and the loss; training can appear to converge on the surviving batches while the policy learns corrupted input statistics.",
       "docs_section": "nan-and-normalization",
       "next_step": "Find the source in recording or conversion, drop the affected episodes (or repair the frames), recompute stats, and retrain."
@@ -89,8 +174,14 @@
       "id": "chunk-too-short",
       "cluster": "normalization",
       "title": "Episodes shorter than the policy's action chunk",
-      "indicates": {"check_id": "deployment-readiness", "min_severity": "WARN", "message_contains": "action chunk"},
-      "confidence": {"WARN": "medium"},
+      "indicates": {
+        "check_id": "deployment-readiness",
+        "min_severity": "WARN",
+        "message_contains": "action chunk"
+      },
+      "confidence": {
+        "WARN": "medium"
+      },
       "explanation": "{policy} predicts action chunks; episodes shorter than the chunk train on padded or truncated actions, teaching the policy boundary artifacts instead of task behavior.",
       "docs_section": "deployment-readiness",
       "next_step": "Drop or merge the short episodes, or train with a smaller action horizon (pass it back as a policy override here to re-check)."
@@ -99,8 +190,14 @@
       "id": "shape-mismatch",
       "cluster": "normalization",
       "title": "info.json shapes disagree with the data",
-      "indicates": {"check_id": "deployment-readiness", "min_severity": "FAIL", "message_contains": "declares shape"},
-      "confidence": {"FAIL": "high"},
+      "indicates": {
+        "check_id": "deployment-readiness",
+        "min_severity": "FAIL",
+        "message_contains": "declares shape"
+      },
+      "confidence": {
+        "FAIL": "high"
+      },
       "explanation": "The declared feature shapes are what the policy builds its input/output layers from; a mismatch means the policy sees a different layout than the metadata promises - training against the metadata fails or silently truncates dims.",
       "docs_section": "deployment-readiness",
       "next_step": "Fix meta/info.json to the actual array shapes (or fix the conversion that wrote it) before training."
@@ -109,8 +206,13 @@
       "id": "idle-heavy-episodes",
       "cluster": "idle",
       "title": "Long idle segments teach the policy to do nothing",
-      "indicates": {"check_id": "idle-segments", "min_severity": "WARN"},
-      "confidence": {"WARN": "medium"},
+      "indicates": {
+        "check_id": "idle-segments",
+        "min_severity": "WARN"
+      },
+      "confidence": {
+        "WARN": "medium"
+      },
       "explanation": "Episodes with long stretches where no joint moves teach {policy} that doing nothing is a good action - the classic 'robot stays still at inference' postmortem. Idle at the end of episodes is worse: it teaches stopping early.",
       "docs_section": "idle-segments",
       "next_step": "Trim the idle segments (or the worst episodes) and retrain; if the idling is an artifact of how demonstrations start/end, fix the recording flow."
@@ -119,8 +221,13 @@
       "id": "stuck-or-unused-joint",
       "cluster": "idle",
       "title": "A joint barely moves - or never moves",
-      "indicates": {"check_id": "stuck-actuator", "min_severity": "WARN"},
-      "confidence": {"WARN": "medium"},
+      "indicates": {
+        "check_id": "stuck-actuator",
+        "min_severity": "WARN"
+      },
+      "confidence": {
+        "WARN": "medium"
+      },
       "explanation": "A joint that never moves teaches {policy} to ignore that degree of freedom; a gripper that never actuates in pick/place episodes means the demonstrations never show the grasp the task needs.",
       "docs_section": "stuck-actuator",
       "next_step": "Check whether the joint/gripper is an unused DOF (fine - consider dropping the dim) or a recording/hardware failure (re-record); a commanded joint whose follower never moves points at a dead or blocked motor."
@@ -129,8 +236,14 @@
       "id": "stale-episode-file-pointers",
       "cluster": "metadata-integrity",
       "title": "v3 episode metadata points at the wrong parquet shard (converter rollover bug)",
-      "indicates": {"check_id": "episode-file-pointers", "min_severity": "WARN", "message_contains": "silently drops out of training"},
-      "confidence": {"WARN": "medium"},
+      "indicates": {
+        "check_id": "episode-file-pointers",
+        "min_severity": "WARN",
+        "message_contains": "silently drops out of training"
+      },
+      "confidence": {
+        "WARN": "medium"
+      },
       "explanation": "The v2.1-to-v3.0 converter wrote the file-rollover boundary episode into the new shard but left its meta/episodes pointer aimed at the previous one (huggingface/lerobot#2401). LeRobot loads only the metadata-named file, so those episodes silently vanish from training while the dataset looks complete on disk - the run just sees less data.",
       "docs_section": "episode-file-pointers",
       "next_step": "Re-convert from the v2.1 source with a lerobot build that carries the #2401 fix (or re-export the dataset), then re-run kinema check; until then the flagged episodes never reach training."
@@ -139,11 +252,32 @@
       "id": "missing-video-files",
       "cluster": "metadata-integrity",
       "title": "Metadata points at video files the repo does not contain",
-      "indicates": {"check_id": "video-file-pointers", "min_severity": "WARN"},
-      "confidence": {"FAIL": "high", "WARN": "medium"},
+      "indicates": {
+        "check_id": "video-file-pointers",
+        "min_severity": "WARN"
+      },
+      "confidence": {
+        "FAIL": "high",
+        "WARN": "medium"
+      },
       "explanation": "The episode metadata records video shards that are not in the repo. The episode rows all load - the dataset looks complete - but {policy} training that decodes video for those episodes fails on the missing file, or trains with the camera dropped for them.",
       "docs_section": "video-file-pointers",
       "next_step": "Re-export or restore the missing video files the check names; until then, exclude the affected episodes (the finding lists them) from any training that reads video."
+    },
+    {
+      "id": "converter-f32-accumulation",
+      "cluster": "normalization",
+      "title": "Stored stats are converter float32 accumulation, not data statistics",
+      "indicates": {
+        "check_id": "stats-f32-fingerprint",
+        "min_severity": "INFO"
+      },
+      "confidence": {
+        "INFO": "high"
+      },
+      "explanation": "The per-episode stats reproduce a naive float32 accumulation bitwise while disagreeing with the data in float64: the converter computed stats in f32 and its rounding error is stored as if it were data statistics. On constant channels this fabricates a nonzero std and DC-offsets the mean, so a pipeline normalizing from these stats feeds {policy} the converter's rounding error. The data itself is fine.",
+      "docs_section": "stats-f32-fingerprint",
+      "next_step": "Recompute the stats from the data in float64 (LeRobot aggregation or the converter's stats step with an f64 accumulator) and retrain; the episodes themselves need no repair."
     }
   ],
   "blind_spots": [
