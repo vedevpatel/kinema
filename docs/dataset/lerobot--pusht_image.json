@@ -6,9 +6,9 @@
   "fps": 10.0,
   "truncated": false,
   "video_audited": 5,
-  "score": 92,
+  "score": 100,
   "score_model": "tiered-v2",
-  "verdict": "WARN",
+  "verdict": "INFO",
   "checks": [
     {
       "id": "stats-drift",
@@ -1871,7 +1871,7 @@
     {
       "id": "reward-done",
       "title": "Reward / done fields",
-      "verdict": "WARN",
+      "verdict": "INFO",
       "weight": 8,
       "weight_basis": "placeholder",
       "summary": "reward and done present",
@@ -1880,8 +1880,8 @@
       "details": {},
       "findings": [
         {
-          "severity": "WARN",
-          "message": "done is True before the last frame in 206 episodes (0, 1, 2, 3, 4, 5, 6, 7 ...) - the trajectory continues after termination",
+          "severity": "INFO",
+          "message": "done is True on the final 2 frame(s) in 206 episodes (0, 1, 2, 3, 4, 5, 6, 7 ...) - a terminal-flag padding convention; segmentation on the first done still works",
           "episode_index": null,
           "details": {
             "episodes": [
@@ -2122,6 +2122,53 @@
       "details": {},
       "findings": [],
       "charge": 10
+    },
+    {
+      "id": "stats-f32-fingerprint",
+      "title": "Stats f32 accumulation fingerprint",
+      "verdict": "INFO",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "per-episode stats reproduce naive float32 accumulation bitwise (10 sampled episode(s), observation.state dims [0, 1], action dims [0, 1]): the converter's stats are accumulation-rounded, not data-exact; constant channels get a fabricated std and a DC-offset mean",
+          "episode_index": null,
+          "details": {
+            "episodes": {
+              "observation.state": [
+                0,
+                51,
+                102,
+                153,
+                205
+              ],
+              "action": [
+                0,
+                51,
+                102,
+                153,
+                205
+              ]
+            },
+            "dims": {
+              "observation.state": [
+                0,
+                1
+              ],
+              "action": [
+                0,
+                1
+              ]
+            }
+          }
+        }
+      ],
+      "charge": 8
     }
   ]
 }
