@@ -226,22 +226,12 @@ def probe_rlds_lane() -> list[dict]:
 
     out: list[dict] = []
     claimed: set[str] = set()
-    openx_names: set[str] = set()  # gdm's listing IS the Open X registry
     try:
         for bucket, base in RLDS_BUCKETS:
             client = GcsClient(bucket)
             prefixes, _ = client.list(prefix=base, delimiter="/")
-            names_here = {p.rstrip("/").split("/")[-1] for p in prefixes}
-            if bucket == RLDS_BUCKETS[0][0]:
-                openx_names = names_here
-            skipped_non_openx = 0
             for p in sorted(prefixes):
                 name = p.rstrip("/").split("/")[-1]
-                if bucket != RLDS_BUCKETS[0][0] and name not in openx_names:
-                    # not an Open X set (asimov_*, aloha_mobile, ...): held back
-                    # until the owner calls board/tag/exclude on non-Open-X sets
-                    skipped_non_openx += 1
-                    continue
                 if name in claimed:
                     continue  # a higher-precedence bucket already boards it
                 try:
@@ -259,9 +249,6 @@ def probe_rlds_lane() -> list[dict]:
                     print(f"rlds lane over {_RLDS_LANE_MAX_CALLS} API calls in "
                           f"{bucket} - boarding what we have", flush=True)
                     break
-            if skipped_non_openx:
-                print(f"rlds lane: {skipped_non_openx} non-Open-X prefix(es) in "
-                      f"{bucket} held back pending the scope decision", flush=True)
         return out
     except Exception as e:  # noqa: BLE001 - the lane dies quiet, the board lives
         print(f"rlds lane failed ({type(e).__name__}) - zero rlds rows this run "

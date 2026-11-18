@@ -618,11 +618,12 @@ def test_probe_rlds_lane_first_bucket_with_data_wins(monkeypatch):
         monkeypatch,
         listings={gdm: ["alpha", "beta", "gamma"], gresearch: ["alpha", "beta", "gamma", "delta"]},
         # beta and gamma are placeholder-only in gdm (probe fails) but real in
-        # gresearch; delta exists only in gresearch and is not an Open X name
+        # gresearch; delta is a non-Open-X set that boards too (approved scope)
         probes={gdm: ["alpha"], gresearch: ["alpha", "beta", "gamma", "delta"]},
     )
     rows = {r["id"]: r for r in lb.probe_rlds_lane()}
-    assert set(rows) == {"rlds/alpha", "rlds/beta", "rlds/gamma"}  # one row each
+    assert set(rows) == {"rlds/alpha", "rlds/beta", "rlds/gamma", "rlds/delta"}
+    assert rows["rlds/delta"]["rlds_bucket"] == gresearch
     assert rows["rlds/alpha"]["rlds_bucket"] == gdm  # mirrored: precedence wins
     assert rows["rlds/beta"]["rlds_bucket"] == gresearch  # placeholder falls through
     assert rows["rlds/gamma"]["rlds_bucket"] == gresearch
