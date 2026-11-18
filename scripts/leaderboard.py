@@ -711,13 +711,18 @@ def download_sample(repo_id: str, cap_bytes: int, dest: Path) -> tuple[Path, dic
     and the Hub's file-size map keyed by root-relative paths, so the caller
     can budget a video subsample without a second dataset_info call.
     """
-    from huggingface_hub import dataset_info
+    from huggingface_hub import list_repo_tree
 
     base, prefix = _split_subpath(repo_id)
     root = dest / prefix if prefix else dest
+    # list_repo_tree paginates past dataset_info's 100k-sibling cap: DROID,
+    # Bridge and Fractal blow through 100,000 files, and the truncated
+    # listing made video-file-pointers FAIL pointers the repo really holds
+    # (13 false FAILs on the 2026-11-18 board) and skewed shard sampling
     sib = [
-        (s.rfilename, s.size or 0)
-        for s in (dataset_info(base, files_metadata=True).siblings or [])
+        (f.path, f.size or 0)
+        for f in list_repo_tree(base, repo_type="dataset", recursive=True)
+        if hasattr(f, "size")  # RepoFile, not RepoFolder
     ]
     if prefix:
         sib = [(n[len(prefix) + 1:], sz) for n, sz in sib if n.startswith(prefix + "/")]
@@ -1167,11 +1172,33 @@ def write_harm_table(out: Path) -> bool:
     return True
 
 
+_DETAIL_LIST_CAP = 100
+
+
+def _cap_detail_lists(entries: list) -> None:
+    """Keep data.json under GitHub's 100 MB hard file limit: a finding that
+    implicates thousands of episodes or files lists the first 100 and
+    records the full count beside it. The board renders counts, not
+    rosters - episode lists were 52% of the compact payload (0.6 MB each
+    on the DROID-scale rows) and pretty-printing doubled the rest.
+    Mutates entries in place; the per-dataset pages inherit the cap."""
+    for e in entries:
+        for chk in (e.get("report") or {}).get("checks") or []:
+            dets = [chk.get("details") or {}]
+            dets += [f.get("details") or {} for f in chk.get("findings") or []]
+            for det in dets:
+                for k, v in list(det.items()):
+                    if isinstance(v, list) and len(v) > _DETAIL_LIST_CAP:
+                        det[k] = v[:_DETAIL_LIST_CAP]
+                        det[f"{k}_total"] = len(v)
+
+
 def _write(out: Path, entries: list, generated: str, max_episodes: int = 0) -> None:
     """Atomic writes so a kill mid-run never leaves a corrupt or missing site."""
+    _cap_detail_lists(entries)
     data = json.dumps(
         {"generated": generated, "score_model": SCORE_MODEL, "datasets": entries},
-        indent=2, default=str,
+        separators=(",", ":"), default=str,
     )
     idx = render_index(entries, generated, harm_table=write_harm_table(out), max_episodes=max_episodes)
     for name, text in (("data.json", data), ("index.html", idx)):
@@ -1210,7 +1237,7 @@ def rewrite_dataset_pages(out: Path, entries: list[dict]) -> None:
             raise RuntimeError(f"{e['id']}: round-tripped score {rep.score} != stored "
                                f"{e['report']['score']}")
         for name, text in (
-            (f"{e['slug']}.json", json.dumps(e["report"], indent=2, default=str)),
+            (f"{e['slug']}.json", json.dumps(e["report"], separators=(",", ":"), default=str)),
             (f"{e['slug']}.html", render_dataset_page(rep, audited=m.group(1) if m else "unknown",
                                                        rlds_ref=(e.get("rlds_bucket", RLDS_BUCKETS[0][0]),
                                                                  e.get("rlds_prefix", ""))

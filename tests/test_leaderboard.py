@@ -398,8 +398,9 @@ def test_download_sample_skips_dual_layout_leftovers(monkeypatch, tmp_path):
         types.SimpleNamespace(rfilename="data/chunk-000/episode_000001.parquet", size=100),
         types.SimpleNamespace(rfilename="data/chunk-000/file-000.parquet", size=100),
     ]
-    monkeypatch.setattr("huggingface_hub.dataset_info",
-                        lambda *a, **k: types.SimpleNamespace(siblings=sib))
+    tree = [types.SimpleNamespace(path=f.rfilename, size=f.size) for f in sib]
+    monkeypatch.setattr("huggingface_hub.list_repo_tree",
+                        lambda *a, **k: iter(tree))
     downloaded = []
 
     def fake_dl(rid, name, dest):
@@ -553,8 +554,9 @@ def test_download_sample_nested_filters_siblings_and_prefixes_fetches(monkeypatc
         types.SimpleNamespace(rfilename="task_a/videos/chunk-000/file-000.mp4", size=100),
         types.SimpleNamespace(rfilename="unrelated/file.txt", size=1),
     ]
-    monkeypatch.setattr("huggingface_hub.dataset_info",
-                        lambda *a, **k: types.SimpleNamespace(siblings=sib))
+    tree = [types.SimpleNamespace(path=f.rfilename, size=f.size) for f in sib]
+    monkeypatch.setattr("huggingface_hub.list_repo_tree",
+                        lambda *a, **k: iter(tree))
     downloaded = []
 
     def fake_dl(rid, name, dest):
