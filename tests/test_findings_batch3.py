@@ -308,7 +308,12 @@ def _set_episode_tasks(root, updates: dict[int, list[str]]):
 def test_task_strings_empty(tmp_path):
     root = make_dataset(tmp_path / "ds", episodes=24)
     _set_episode_tasks(root, {3: [""]})
-    res = run("task-strings", load_dataset(str(root)))
+    ctx = load_dataset(str(root))
+    recovered = run("task-strings", ctx)
+    assert not any("empty task string" in f.message for f in recovered.findings)
+    ctx.task_index = ctx.task_index.copy()
+    ctx.task_index[ctx.rows_for(3)] = 999  # task is genuinely unrecoverable
+    res = run("task-strings", ctx)
     assert any(f.details.get("episodes") == [3] and f.severity == Severity.INFO
                for f in res.findings)
 
@@ -491,3 +496,34 @@ def test_spike_in_a_velocity_command_still_flags(tmp_path):
     assert any(f.episode_index == 10 and f.severity == Severity.WARN
                and "velocity_spike" in f.details.get("metrics", [])
                for f in res.findings), [f.message for f in res.findings]
+
+
+def test_missing_frame_and_timestamp_columns_do_not_invent_defects(tmp_path):
+    root = make_dataset(tmp_path / "no-clock", episodes=4)
+    def remove(t):
+        t.pop("frame_index")
+        t.pop("timestamp")
+        return t
+    _rewrite_data(root, remove)
+    ctx = load_dataset(str(root))
+    assert "frame_index" not in ctx.present_columns
+    result = run("dropped-frames", ctx)
+    assert not any("duplicated frame_index" in f.message for f in result.findings)
+    assert "unavailable" in result.summary
+    assert run("timestamp-grid", ctx).skipped
+    ctx.episodes[0].length += 10
+    result = run("dropped-frames", ctx)
+    assert any(f.severity == Severity.FAIL and "metadata says" in f.message for f in result.findings)
+
+
+def test_present_zero_frame_and_timestamp_columns_still_flag(tmp_path):
+    root = make_dataset(tmp_path / "bad-clock", episodes=4)
+    def zero(t):
+        t["frame_index"] = [0] * len(t["frame_index"])
+        t["timestamp"] = [0.0] * len(t["timestamp"])
+        return t
+    _rewrite_data(root, zero)
+    ctx = load_dataset(str(root))
+    assert "frame_index" in ctx.present_columns
+    assert any("duplicated frame_index" in f.message for f in run("dropped-frames", ctx).findings)
+    assert run("timestamp-grid", ctx).verdict == Severity.FAIL

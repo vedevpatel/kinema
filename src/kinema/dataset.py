@@ -188,6 +188,9 @@ class DatasetContext:
     feature_keys: dict = field(default_factory=dict)
     # episode index -> times catalogued, when the metadata lists it > once
     duplicate_episode_ids: dict = field(default_factory=dict)
+    # None for manually constructed contexts; loader records actual parquet
+    # columns so checks distinguish missing fields from present zero arrays.
+    present_columns: frozenset[str] | None = None
     unreadable_files: list = field(default_factory=list)  # [(relpath, error)]
     # v3: episode -> camera -> (chunk_index, file_index, from_s, to_s)
     video_segments: dict = field(default_factory=dict, repr=False)
@@ -991,6 +994,7 @@ def load_dataset(
         feature_keys=keys,
         duplicate_episode_ids=duplicate_ids,
         video_segments=_load_video_segments(root),
+        present_columns=frozenset(seen),
         unreadable_files=unreadable,
         state_names=feature_names(info, keys[STATE_KEY]),
         action_names=feature_names(info, keys[ACTION_KEY]),

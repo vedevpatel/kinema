@@ -26,6 +26,8 @@ class TimestampGridCheck(Check):
 
     def run(self, ctx, cfg: CheckConfig) -> CheckResult:
         res = CheckResult(self.id, self.title)
+        if ctx.present_columns is not None and "timestamp" not in ctx.present_columns:
+            return self.skip("timestamp column missing; the time grid cannot be verified")
         if not ctx.fps:
             return self.skip("fps missing from meta/info.json")
         fps = ctx.fps
@@ -117,6 +119,12 @@ class DroppedFramesCheck(Check):
     def run(self, ctx, cfg: CheckConfig) -> CheckResult:
         res = CheckResult(self.id, self.title)
         n_gap = n_meta_mismatch = n_dup = 0
+        has_frame_index = ctx.present_columns is None or "frame_index" in ctx.present_columns
+        if not has_frame_index:
+            res.findings.append(Finding(
+                self.id, Severity.INFO,
+                "frame_index column missing: gap/duplicate-index checks not evaluated; "
+                "metadata length and video evidence are still checked"))
         if ctx.unreadable_files:
             ex = "; ".join(f"{name} ({err})" for name, err in ctx.unreadable_files[:3])
             res.findings.append(
@@ -145,7 +153,7 @@ class DroppedFramesCheck(Check):
             rows = ctx.rows_for(ep)
             fi = ctx.frame_index[rows]
             meta = ctx.meta_for(ep)
-            if len(fi) > 1:
+            if has_frame_index and len(fi) > 1:
                 gaps = int((np.diff(fi) > 1).sum())
                 dups = int((np.diff(fi) == 0).sum())
             else:
@@ -225,7 +233,8 @@ class DroppedFramesCheck(Check):
             ))
         if n_gap == n_meta_mismatch == n_dup == n_vid_bad == 0 and not ctx.duplicate_episode_ids \
                 and not ctx.unreadable_files:
-            res.summary = "frame_index contiguous; episode lengths" + (
+            res.summary = ("frame_index contiguous; episode lengths" if has_frame_index
+                           else "frame_index unavailable; episode lengths") + (
                 " and video segments" if ctx.video_segments else "") + " match the data"
         else:
             res.summary = (

@@ -371,8 +371,20 @@ class TaskStringsCheck(Check):
 
     def run(self, ctx, cfg: CheckConfig) -> CheckResult:
         res = CheckResult(self.id, self.title)
-        empty = [e.index for e in ctx.episodes
-                 if not e.tasks or all(not str(t).strip() for t in e.tasks)]
+        table = _task_table(ctx)
+
+        def has_task(e) -> bool:
+            if e.tasks and any(str(t).strip() for t in e.tasks):
+                return True
+            if table and ctx.task_index is not None:
+                rows = ctx.rows_for(e.index)
+                values = np.asarray(ctx.task_index)[rows]
+                if len(values) and np.isfinite(values).all():
+                    return all(float(v).is_integer() and str(table.get(int(v), "")).strip()
+                               for v in values)
+            return False
+
+        empty = [e.index for e in ctx.episodes if not has_task(e)]
         if empty:
             share = len(empty) / max(len(ctx.episodes), 1)
             sev = Severity.WARN if share >= _EMPTY_TASK_WARN_SHARE else Severity.INFO
@@ -384,7 +396,6 @@ class TaskStringsCheck(Check):
                 details={"episodes": empty},
             ))
 
-        table = _task_table(ctx)
         if table:
             # episode metadata names a task the table does not hold
             known = set(table.values())

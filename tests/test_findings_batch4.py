@@ -118,13 +118,13 @@ def test_sampled_load_without_episode_stats_clean_data_stays_quiet(tmp_path):
 
 # --- finding #14: calibration on delta commands -------------------------------
 
-def test_delta_scale_mismatch_is_caught(tmp_path):
-    # conversion-units bug: actions stored at 3x the real steps (measured
-    # steps regress on commands with slope 1/3)
+def test_delta_scale_without_unit_contract_is_informational(tmp_path):
+    # The same action/state ratio can be normalization or a conversion bug.
+    # Without a common-unit contract, preserve the evidence but don't gate.
     root = make_dataset(tmp_path / "d", episodes=24, action_mode="delta", delta_scale=3.0)
     res = run("calibration-drift", load_dataset(str(root)))
     hits = [f for f in res.findings
-            if f.details.get("kind") == "delta_scale" and f.severity >= Severity.WARN]
+            if f.details.get("kind") == "delta_scale" and f.severity == Severity.INFO]
     assert hits, [f.message for f in res.findings]
     assert abs(hits[0].details["step_ratio"] - 1 / 3) < 0.05
 

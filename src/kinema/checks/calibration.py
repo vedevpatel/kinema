@@ -272,18 +272,12 @@ class CalibrationDriftCheck(Check):
         if r2 < cfg.calib_delta_min_r2:
             return [], info  # steps track too loosely for a scale verdict
         dev = abs(float(b1) - 1.0)
-        if dev >= cfg.calib_delta_scale_warn:
-            return [(Severity.WARN,
-                     f"delta command {j}{name}: the measured steps of its state dim are "
-                     f"{b1:.2f}x the commanded steps (R^2 {r2:.2f}) - action and state "
-                     "disagree on scale: a conversion-units bug, or commands the robot "
-                     "cannot follow; anything comparing commands to measured motion "
-                     "inherits the mismatch", info)], info
         if dev >= cfg.calib_delta_scale_info:
             return [(Severity.INFO,
-                     f"delta command {j}{name}: measured steps run at {b1:.2f}x the "
-                     f"commanded ones (R^2 {r2:.2f}) - mild scale disagreement between "
-                     "action and state", info)], info
+                     f"delta command {j}{name}: measured state steps are {b1:.2f}x the "
+                     f"stored commands (R^2 {r2:.2f}) - normalization or controller scaling "
+                     "may be intentional; no common-unit contract is established, so this "
+                     "ratio alone is not a conversion-error verdict", info)], info
         return [], info
 
     def run(self, ctx, cfg: CheckConfig) -> CheckResult:
