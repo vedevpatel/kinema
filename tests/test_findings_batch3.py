@@ -510,7 +510,14 @@ def test_missing_frame_and_timestamp_columns_do_not_invent_defects(tmp_path):
     result = run("dropped-frames", ctx)
     assert not any("duplicated frame_index" in f.message for f in result.findings)
     assert "unavailable" in result.summary
-    assert run("timestamp-grid", ctx).skipped
+    # one dataset-level finding per missing column, never invented per-episode
+    # defects: a missing frame_index WARNs, a missing timestamp FAILs (LeRobot
+    # reads it for delta_timestamps and video lookup)
+    assert [f.severity for f in result.findings if "frame_index column missing" in f.message] \
+        == [Severity.WARN]
+    ts = run("timestamp-grid", ctx)
+    assert [f.severity for f in ts.findings] == [Severity.FAIL]
+    assert "timestamp column missing" in ts.findings[0].message
     ctx.episodes[0].length += 10
     result = run("dropped-frames", ctx)
     assert any(f.severity == Severity.FAIL and "metadata says" in f.message for f in result.findings)

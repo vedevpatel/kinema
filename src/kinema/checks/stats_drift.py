@@ -25,6 +25,21 @@ from kinema.dataset import ACTION_KEY, STATE_KEY
 from kinema.stats import aggregate, as_stat_dict, data_stats
 
 
+# A dim is inert for normalization when it does not move IN THE DATA at its
+# own magnitude: whatever the stored mean/std, a constant input normalizes
+# to a constant. Judged from the data side only - the stored std is exactly
+# the number under test, so it cannot decide flatness. Relative to |mean|
+# because float32 resolution is (a constant channel at 4096 accumulates
+# ~1e-9 of f32 noise, and its converter-written stored std can reach 0.5:
+# the RoboCOIN case). A joint at ~1000 with real motion (std 0.9, i.e.
+# 9e-4 of its magnitude) is far above the line and stays compared.
+_FLAT_REL = 1e-6
+
+
+def flat_in_data(actual: dict) -> np.ndarray:
+    return actual["std"] <= _FLAT_REL * np.maximum(1.0, np.abs(actual["mean"]))
+
+
 def _errors(actual: dict, ref: dict) -> tuple[dict[str, np.ndarray], np.ndarray]:
     """Per-stat, per-dim error in normalization-relevant units.
 
@@ -36,16 +51,7 @@ def _errors(actual: dict, ref: dict) -> tuple[dict[str, np.ndarray], np.ndarray]
     rng = np.maximum(ref["max"] - ref["min"], actual["max"] - actual["min"])
     rng_floor = np.maximum(rng, 1e-8)
     sigma = np.maximum.reduce([ref["std"], actual["std"], 1e-3 * rng, np.full_like(rng, 1e-8)])
-    # std ratio; dims with (near-)zero variance on both sides are check 8's job
-    # (a std of 1e-3 vs 1e-7 on a constant dim is not drift that matters)
-    # Converters often floor std (e.g. at 1e-3) for dead dims; a floor over
-    # a dim that does not move in the data is not drift that matters.
-    # Absolute position offset is not a scale for variance. A joint centered
-    # at 1000 can still have meaningful motion of 0.1 about that center.
-    scale = 1.0
-    both_flat = (np.maximum(ref["std"], actual["std"]) < 1e-3 * scale) | (
-        (actual["std"] < 1e-4 * scale) & (ref["std"] <= 1e-2 * scale)
-    )
+    both_flat = flat_in_data(actual)
     raw_mean = np.abs(actual["mean"] - ref["mean"]) / sigma
     out = {
         # the mean comparison gets the same floor as std: on a dim that does
@@ -157,7 +163,12 @@ class StatsDriftCheck(Check):
     def run(self, ctx, cfg: CheckConfig) -> CheckResult:
         res = CheckResult(self.id, self.title)
         worst = 0.0
-        loaded = ctx.episode_ids()
+        # only episodes that actually hold frames: a catalogued episode with no
+        # rows (dropped-frames' finding) must not enter the reference, or
+        # correct per-episode stats get blamed for the missing data. With such
+        # episodes the data is a subset of what stats.json describes.
+        loaded = [e for e in ctx.episode_ids() if len(ctx.rows_for(e))]
+        subset = ctx.truncated or len(loaded) < len(ctx.episode_ids())
         mode = "full"
         episode_stats_ok = False
         for feat, arr in ((STATE_KEY, ctx.state), (ACTION_KEY, ctx.action)):
@@ -178,7 +189,7 @@ class StatsDriftCheck(Check):
             if actual is None:
                 continue
 
-            if not ctx.truncated:
+            if not subset:
                 worst = max(worst, self._compare(res, feat, actual, stored, ctx.stats_source, cfg, "data"))
             else:
                 per_ep = [ctx.episode_stats[e][feat] for e in loaded
@@ -189,7 +200,7 @@ class StatsDriftCheck(Check):
                     before = len(res.findings)
                     worst = max(worst, self._compare(
                         res, feat, actual, sub_ref, "per-episode stats", cfg,
-                        f"data ({len(loaded)} loaded episodes)"))
+                        f"data ({len(loaded)} loaded episodes with frames)"))
                     episode_stats_ok = not any(
                         f.severity >= Severity.WARN for f in res.findings[before:])
                     if ctx.stats_source == "meta/stats.json":
@@ -216,6 +227,7 @@ class StatsDriftCheck(Check):
                                                     ("mean", shift, cfg.stats_sample_mean_sigma, "{:.1f} std devs")):
                             d = int(np.argmax(garr))
                             if garr[d] > lim:
+                                worst = max(worst, float(garr[d]) / lim)
                                 res.findings.append(Finding(
                                     self.id, Severity.WARN,
                                     f"{feat}.{kind}: the sampled data is off the stored stats by "
@@ -276,26 +288,42 @@ class StatsDriftCheck(Check):
                         qlo, qhi = cfg.stats_sample_alpha / 2, 1 - cfg.stats_sample_alpha / 2
                         m_lo, m_hi = np.quantile(pm, [qlo, qhi], axis=0)
                         s_lo, s_hi = np.quantile(ps, [qlo, qhi], axis=0)
-                        for kind, st, lo, hi in (("mean", stored["mean"], m_lo, m_hi),
-                                                 ("std", stored["std"], s_lo, s_hi)):
-                            out = np.maximum(lo - st, st - hi) / np.maximum((hi - lo) / 2, 1e-12)
-                            d = int(np.argmax(out))
-                            if out[d] > 0:
-                                res.findings.append(Finding(
-                                    self.id, Severity.INFO,
-                                    f"{feat}.{kind}: the stored {kind} is inconsistent with the "
-                                    f"loaded sample on dim {d} (stored {st[d]:.6g}, outside the "
-                                    f"sample's {100 * (1 - cfg.stats_sample_alpha):.1f}% bootstrap "
-                                    f"interval [{lo[d]:.6g}, {hi[d]:.6g}] over {E} episodes) - the "
-                                    "sample is deterministic, not random: this interval is descriptive "
-                                    "and does not establish incorrect stored stats; load the full "
-                                    "dataset to confirm",
-
-                                    details={"feature": feat, "stat": kind, "dim": d,
-                                             "reference": "bootstrap", "episodes": E,
-                                             "stored": float(st[d]),
-                                             "interval": [float(lo[d]), float(hi[d])]},
-                                ))
+                        # outside the interval is not enough on its own (tiny
+                        # gaps over many dims tested at once fire on clean data);
+                        # the stored value must ALSO sit beyond the interval by
+                        # at least the full-load WARN tolerance, in the same
+                        # units. Dims constant in the data are inert (f32 noise).
+                        live_d = ~flat_in_data(actual)
+                        sd_norm = np.maximum(np.maximum(stored["std"], actual["std"]), 1e-12)
+                        for kind, st, lo, hi, warn_tol, fail_tol, denom in (
+                                ("mean", stored["mean"], m_lo, m_hi, cfg.stats_mean_warn_sigma,
+                                 cfg.stats_mean_fail_sigma, sd_norm),
+                                ("std", stored["std"], s_lo, s_hi, cfg.stats_std_warn,
+                                 cfg.stats_std_fail, np.maximum(stored["std"], 1e-12))):
+                            gap = np.maximum(np.maximum(lo - st, st - hi), 0.0) / denom
+                            gap = np.where(live_d & np.isfinite(gap), gap, 0.0)
+                            d = int(np.argmax(gap))
+                            if gap[d] <= 0:
+                                continue
+                            material = gap[d] >= warn_tol
+                            if material:
+                                worst = max(worst, float(gap[d]) / fail_tol)
+                            res.findings.append(Finding(
+                                self.id, Severity.WARN if material else Severity.INFO,
+                                f"{feat}.{kind}: the stored {kind} sits outside the loaded "
+                                f"sample's {100 * (1 - cfg.stats_sample_alpha):.1f}% bootstrap "
+                                f"interval on dim {d} (stored {st[d]:.6g}, interval "
+                                f"[{lo[d]:.6g}, {hi[d]:.6g}] over {E} episodes"
+                                + (f", {_fmt(kind, float(gap[d]))} beyond it) - the stored stats "
+                                   "look wrong; a sampled audit cannot prove it, load the full "
+                                   "dataset to confirm"
+                                   if material else
+                                   ") - a gap below the WARN tolerance: descriptive only"),
+                                details={"feature": feat, "stat": kind, "dim": d,
+                                         "reference": "bootstrap", "episodes": E,
+                                         "stored": float(st[d]), "gap": float(gap[d]),
+                                         "interval": [float(lo[d]), float(hi[d])]},
+                            ))
 
             # stats.json vs the per-episode stats it should be aggregated from:
             # conclusive on any download, since meta is always complete
@@ -307,7 +335,7 @@ class StatsDriftCheck(Check):
                 # only conclusive when the per-episode stats themselves agree
                 # with the loaded data; otherwise they are the broken side
                 if (agg_all is not None and js and len(per_all) >= len(ctx.episode_stats)
-                        and ctx.truncated and mode == "per-episode" and episode_stats_ok):
+                        and subset and mode == "per-episode" and episode_stats_ok):
                     worst = max(worst, self._compare(
                         res, feat, agg_all, js, "meta/stats.json", cfg,
                         f"aggregated per-episode stats ({len(per_all)} episodes)"))
@@ -332,5 +360,7 @@ class StatsDriftCheck(Check):
                    "containment": "stored range"}[mode]
             res.summary = f"data matches {ref} (worst {worst:.0%} of the FAIL threshold)"
         else:
-            res.summary = f"worst error {worst:.1f}x the FAIL threshold"
+            n_gated = sum(1 for f in res.findings if f.severity >= Severity.WARN)
+            res.summary = (f"worst error {worst:.1f}x the FAIL threshold" if worst > 0
+                           else f"{n_gated} gated finding(s) without a threshold ratio")
         return res

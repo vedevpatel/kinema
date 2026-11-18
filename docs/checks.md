@@ -133,19 +133,35 @@ all per-episode stats, the way LeRobot builds it. A sampled load without
 per-episode stats gets a bootstrap reference once enough episodes are
 loaded (>= 8): the sampling distribution of the pooled mean/std, resampling
 episodes (frames within one are autocorrelated, so the episode is the
-unit). Stored stats outside the 99.9% interval are INFO only: deterministic
-spread samples do not justify random-sample significance claims. With too
-few episodes only the gross backstop applies (std off >= 3x, mean off
->= 2 sigma); a full load stays the conclusive audit.
+unit). A stored value outside the 99.9% interval WARNs only when it also sits
+beyond the interval by at least the full-load WARN tolerance (0.10 std devs
+for the mean, 5% for the std) - tiny gaps across many dims fire on clean
+data, so a smaller gap is an INFO note. Sampled findings never FAIL: a
+deterministic spread sample cannot prove the stats wrong, only flag them.
+With too few episodes only the gross backstop applies (std off >= 3x, mean
+off >= 2 sigma); a full load stays the conclusive audit.
+
+Catalogued episodes with no frames are not part of the reference: the data
+is then compared like a subset, so correct stats are never blamed for rows
+that are missing (dropped-frames reports those). A dim that does not move in
+the data at its own magnitude (std <= 1e-6 x max(1, |mean|)) is inert for
+normalization whatever its stored mean/std - judged from the data alone, so
+converter float32 noise in the stored stats of a constant channel (stored
+std ~0.5 on a channel constant at 4096) is an INFO, while an offset joint
+with real motion stays compared.
 
 Knobs: `stats_mean_warn_sigma` (0.10), `stats_mean_fail_sigma` (0.50),
 `stats_std_warn` (0.05), `stats_std_fail` (0.25), `stats_std_oversize_fail`
 (3.0), `stats_range_warn` (0.01), `stats_range_fail` (0.10),
-`stats_sample_std_ratio` (3.0), `stats_sample_mean_sigma` (2.0).
+`stats_sample_std_ratio` (3.0), `stats_sample_mean_sigma` (2.0),
+`stats_sample_min_episodes`, `stats_sample_bootstrap`, `stats_sample_alpha`.
 
 ## timestamp-grid
 
-Timestamps off the 1/fps sampling grid, and non-monotonic runs.
+Timestamps off the 1/fps sampling grid, and non-monotonic runs. A frame table
+with no `timestamp` column at all is one dataset-level FAIL (LeRobot reads it
+for `delta_timestamps` windows and video lookup); a missing `frame_index`
+column is one dropped-frames WARN - never invented per-episode defects.
 `delta_timestamps` sampling returns misaligned windows when the grid slips.
 Off-grid episodes are one aggregated finding listing them all; non-monotonic
 runs stay per-episode FAILs.

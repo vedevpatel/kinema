@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 
 import numpy as np
+import pyarrow as pa
 import pyarrow.parquet as pq
 
 from kinema.checks import ALL_CHECKS, CheckConfig, Severity
@@ -104,8 +105,11 @@ def test_sampled_load_without_episode_stats_catches_shifted_stored_mean(tmp_path
     ctx = load_dataset(str(root), max_episodes=24)
     assert ctx.truncated and not ctx.episode_stats
     res = run("stats-drift", ctx)
-    assert any(f.severity == Severity.INFO and f.details.get("reference") == "bootstrap"
+    # gates again (regression N1): outside the interval AND beyond it by more
+    # than the full-load WARN tolerance; the summary must not contradict it
+    assert any(f.severity == Severity.WARN and f.details.get("reference") == "bootstrap"
                for f in res.findings), [f.message for f in res.findings]
+    assert "matches" not in res.summary
 
 
 def test_sampled_load_without_episode_stats_clean_data_stays_quiet(tmp_path):
@@ -136,3 +140,73 @@ def test_clean_delta_actions_get_a_clean_scale_verdict(tmp_path):
     assert res.details["compared_joints"] == []
     assert len(res.details["compared_deltas"]) >= 4
     assert gated(res) == [], [f.message for f in res.findings]
+
+
+# --- audit regressions N1-N4 (a8b3512) -----------------------------------------
+
+def test_sampled_bootstrap_gates_across_material_shifts_and_stays_quiet_when_clean(tmp_path):
+    # N1: 1-1.9 sigma stored-mean errors on a sampled load gate (WARN), clean stays ungated
+    for sigma in (0.0, 1.0, 1.9):
+        root = make_dataset(tmp_path / f"b{sigma}", episodes=40)
+        _strip_episode_stats(root)
+        if sigma:
+            _shift_stored_mean(root, sigma)
+        res = run("stats-drift", load_dataset(str(root), max_episodes=24))
+        gated = [f for f in res.findings if f.severity >= Severity.WARN]
+        assert bool(gated) == bool(sigma), (sigma, [f.message for f in res.findings])
+
+
+def _constant_dim_with_f32_stats(root, value):
+    """Dim 3 constant at `value` in the data, stored stats from a naive float32 sum."""
+    from kinema.checks.stats_provenance import _naive_f32_stats
+    f = root / "data" / "chunk-000" / "file-000.parquet"
+    t = pq.read_table(f).to_pydict()
+    for k in ("observation.state", "action"):
+        t[k] = [r[:3] + [value] + r[4:] for r in t[k]]
+    pq.write_table(pa.table(t), f)
+    p = root / "meta" / "stats.json"
+    stats = json.loads(p.read_text())
+    n = len(t["action"])
+    m, s = _naive_f32_stats(np.full((n, 1), value))
+    for k in ("observation.state", "action"):
+        stats[k]["mean"][3] = float(m[0])
+        stats[k]["std"][3] = float(s[0])
+        stats[k]["min"][3] = value
+        stats[k]["max"][3] = value
+    p.write_text(json.dumps(stats))
+    mf = root / "meta" / "episodes" / "chunk-000" / "file-000.parquet"
+    mt = pq.read_table(mf)
+    pq.write_table(mt.select([c for c in mt.column_names if not c.startswith("stats/")]), mf)
+
+
+def test_constant_large_offset_dim_with_f32_stats_is_inert(tmp_path):
+    # N3: RoboCOIN-shaped channel at 4096.7 whose converter-written stored std
+    # is ~0.5 of float32 noise: inert (INFO), not a FAIL
+    root = make_dataset(tmp_path / "c", episodes=24)
+    _constant_dim_with_f32_stats(root, 4096.7)
+    res = run("stats-drift", load_dataset(str(root)))
+    assert not any(f.severity >= Severity.WARN for f in res.findings), [f.message for f in res.findings]
+
+
+def test_offset_dim_with_real_motion_still_compared():
+    # the bug the |mean| floor once caused (audit #7) must stay fixed
+    from kinema.checks.stats_drift import _errors
+    actual = {"mean": np.array([1000.0]), "std": np.array([0.9]),
+              "min": np.array([997.0]), "max": np.array([1003.0])}
+    ref = {**actual, "std": np.array([0.09])}  # stored std 10x too small
+    errs, _ = _errors(actual, ref)
+    assert errs["std"][0] > 1.0
+
+
+def test_zero_row_episodes_do_not_blame_correct_episode_stats(tmp_path):
+    # N2: rows of 8 of 24 episodes deleted; stats.json and per-episode stats correct
+    root = make_dataset(tmp_path / "z", episodes=24)
+    f = root / "data" / "chunk-000" / "file-000.parquet"
+    t = pq.read_table(f)
+    import pyarrow.compute as pc
+    t = t.filter(pc.invert(pc.is_in(t["episode_index"], value_set=pa.array(list(range(0, 24, 3)), pa.int64()))))
+    pq.write_table(t, f)
+    ctx = load_dataset(str(root))
+    res = run("stats-drift", ctx)
+    assert not any(f.severity >= Severity.WARN for f in res.findings), [f.message for f in res.findings]
+    assert run("dropped-frames", ctx).verdict == Severity.FAIL  # the missing rows still fail

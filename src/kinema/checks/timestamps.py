@@ -27,7 +27,16 @@ class TimestampGridCheck(Check):
     def run(self, ctx, cfg: CheckConfig) -> CheckResult:
         res = CheckResult(self.id, self.title)
         if ctx.present_columns is not None and "timestamp" not in ctx.present_columns:
-            return self.skip("timestamp column missing; the time grid cannot be verified")
+            # a required LeRobot feature: delta_timestamps windows and video
+            # frame lookup both read it, so the dataset does not load for
+            # training. One dataset-level finding, not invented per-episode ones.
+            res.findings.append(Finding(
+                self.id, Severity.FAIL,
+                "timestamp column missing from the frame data - LeRobot needs it for "
+                "delta_timestamps windows and video frame lookup; the time grid "
+                "cannot be verified"))
+            res.summary = "timestamp column missing"
+            return res
         if not ctx.fps:
             return self.skip("fps missing from meta/info.json")
         fps = ctx.fps
@@ -122,9 +131,10 @@ class DroppedFramesCheck(Check):
         has_frame_index = ctx.present_columns is None or "frame_index" in ctx.present_columns
         if not has_frame_index:
             res.findings.append(Finding(
-                self.id, Severity.INFO,
-                "frame_index column missing: gap/duplicate-index checks not evaluated; "
-                "metadata length and video evidence are still checked"))
+                self.id, Severity.WARN,
+                "frame_index column missing from the frame data - a default LeRobot "
+                "feature that loaders and tools expect; gap/duplicate-index checks not "
+                "evaluated (metadata length and video evidence are still checked)"))
         if ctx.unreadable_files:
             ex = "; ".join(f"{name} ({err})" for name, err in ctx.unreadable_files[:3])
             res.findings.append(

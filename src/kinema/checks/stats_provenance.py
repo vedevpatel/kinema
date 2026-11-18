@@ -50,9 +50,9 @@ class StatsF32FingerprintCheck(Check):
         res = CheckResult(check_id=self.id, title=self.title)
         if not ctx.episode_stats:
             return self.skip("no per-episode stats")
-        loaded = ctx.episode_ids()
+        loaded = [e for e in ctx.episode_ids() if len(ctx.rows_for(e))]
         if not loaded:
-            return self.skip("no episodes loaded")
+            return self.skip("no episodes with frames loaded")
         picks = [loaded[i] for i in np.linspace(0, len(loaded) - 1,
                                                 min(_SAMPLE_CAP, len(loaded))).astype(int)]
         picked: dict[str, list[int]] = {}
