@@ -81,8 +81,8 @@ ERR_INVALID_PARAMS = -32602
 ERR_INTERNAL = -32603
 ERR_NOT_INITIALIZED = -32002  # implementation-defined server error range
 
-# run_checks returns a summary sized for MCP client output limits (Claude
-# Code warns at 10k output tokens); the full JSON report goes to a file
+# run_checks returns a summary sized for MCP client output limits (some
+# clients warn at 10k output tokens); the full JSON report goes to a file
 _TOP_FINDINGS = 25
 
 

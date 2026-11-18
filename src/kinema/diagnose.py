@@ -345,7 +345,7 @@ def run_checks(
 
 def summarize_report(report: DatasetReport, top: int = 25) -> dict:
     """The capped run_checks payload: sized for MCP client output limits
-    (Claude Code warns at 10k output tokens). FAIL/WARN findings first."""
+    (some clients warn at 10k output tokens). FAIL/WARN findings first."""
     counts = report.counts()
     findings = []
     for r in report.results:
