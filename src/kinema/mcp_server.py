@@ -46,6 +46,7 @@ import json
 import os
 import queue
 import re
+import stat
 import sys
 import threading
 import traceback
@@ -292,6 +293,12 @@ def _dataset_problem(dataset: str) -> str | None:
     to a Hub download of repo a/b, auditing a different dataset."""
     src = dataset.strip()
     if src.startswith("hf://"):
+        from kinema.dataset import _hub_address
+
+        try:
+            _hub_address(src[len("hf://"):])
+        except DatasetError as exc:
+            return str(exc)
         return None
     p = Path(src).expanduser()
     if p.is_absolute():
@@ -311,30 +318,103 @@ def _dataset_problem(dataset: str) -> str | None:
     )
 
 
+def _report_document(d: Any) -> bool:
+    """Recognize the report structure we write, not arbitrary two-key JSON."""
+    if not isinstance(d, dict):
+        return False
+    for key in ("source", "format_version", "score_model", "verdict"):
+        if not isinstance(d.get(key), str):
+            return False
+    for key in ("episodes", "frames", "score"):
+        if type(d.get(key)) is not int or d[key] < 0:
+            return False
+    marks = {"PASS", "INFO", "WARN", "FAIL", "SKIP"}
+    if d["score"] > 100 or d["verdict"] not in marks or not isinstance(d.get("checks"), list):
+        return False
+    for c in d["checks"]:
+        if not isinstance(c, dict):
+            return False
+        if any(not isinstance(c.get(k), str) for k in ("id", "title", "summary")):
+            return False
+        if (not isinstance(c.get("verdict"), str) or c["verdict"] not in marks
+                or not isinstance(c.get("findings"), list)):
+            return False
+        for f in c["findings"]:
+            if (not isinstance(f, dict) or not isinstance(f.get("severity"), str)
+                    or f["severity"] not in marks
+                    or not isinstance(f.get("message"), str)
+                    or not isinstance(f.get("details"), dict)):
+                return False
+    return True
+
+
 def _is_kinema_report(path: Path) -> bool:
     try:
-        d = json.loads(path.read_text())
+        if path.is_symlink() or not path.is_file() or path.stat().st_nlink != 1:
+            return False
+        return _report_document(json.loads(path.read_text()))
     except (OSError, ValueError):
         return False
-    return isinstance(d, dict) and "source" in d and isinstance(d.get("checks"), list)
 
 
 def _report_path_problem(raw: str) -> str | None:
-    """Checked BEFORE the run: report_path is model-chosen, so it may only
-    create a .json file or replace an earlier kinema report."""
+    """Early user feedback only. The writer repeats enforcement on open FDs."""
     p = Path(raw).expanduser()
     if not p.is_absolute():
-        return (
-            f"report_path {raw!r} must be an absolute path (the server's working "
-            f"directory, {os.getcwd()}, is not yours)"
-        )
+        return (f"report_path {raw!r} must be an absolute path (the server's working "
+                f"directory, {os.getcwd()}, is not yours)")
     if p.suffix.lower() != ".json":
         return f"report_path {raw!r} must end in .json"
-    if p.exists() and not (p.is_file() and _is_kinema_report(p)):
+    if p.is_symlink() or any(parent.is_symlink() for parent in p.parents):
+        return f"refusing symbolic link in report_path {p}"
+    if p.exists() and not _is_kinema_report(p):
         return f"refusing to overwrite {p}: it exists and is not a kinema report"
     if not p.parent.is_dir():
         return f"report_path directory {p.parent} does not exist"
     return None
+
+
+_REPORT_WRITE_LOCK = threading.Lock()
+
+
+def _write_requested_report(text: str, p: Path) -> None:
+    """Anchor parent traversal and content validation to no-follow FDs.
+
+    No truncation occurs until the opened single-link regular file is
+    validated. Exclusive creation closes the nonexistent-path race.
+    """
+    directory = os.open(p.anchor, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        for part in p.parts[1:-1]:
+            next_dir = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                               dir_fd=directory)
+            os.close(directory)
+            directory = next_dir
+        flags = os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK
+        try:
+            fd = os.open(p.name, flags | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=directory)
+            created = True
+        except FileExistsError:
+            fd = os.open(p.name, flags, dir_fd=directory)
+            created = False
+        with os.fdopen(fd, "r+", encoding="utf-8") as out:
+            st = os.fstat(out.fileno())
+            if not stat.S_ISREG(st.st_mode) or st.st_nlink != 1:
+                raise OSError(f"refusing non-regular or multiply-linked report_path {p}")
+            if not created:
+                try:
+                    valid = _report_document(json.load(out))
+                except (ValueError, UnicodeError):
+                    valid = False
+                if not valid:
+                    raise OSError(f"refusing to overwrite {p}: not a kinema report at write time")
+            out.seek(0)
+            out.write(text)
+            out.truncate()
+            out.flush()
+            os.fsync(out.fileno())
+    finally:
+        os.close(directory)
 
 
 def _reports_cache_dir() -> Path:
@@ -347,11 +427,12 @@ def _default_report_paths(dataset: str) -> list[Path]:
     dataset, then the user cache dir. Timestamped, never overwriting."""
     stamp = datetime.now().strftime("%Y%m%dT%H%M%S%f")
     src = dataset.strip()
-    if src.startswith("hf://"):
+    forced_hub = src.startswith("hf://")
+    if forced_hub:
         src = src[len("hf://"):]
     local = Path(src).expanduser()
     out: list[Path] = []
-    if local.is_absolute() and local.exists():
+    if not forced_hub and local.is_absolute() and local.exists():
         name = local.stem if local.suffix == ".zip" else local.name
         out.append(local.parent / f"{name}.kinema-report-{stamp}.json")
     else:
@@ -367,7 +448,11 @@ def _write_report(text: str, requested: str | None, dataset: str) -> tuple[str |
     if requested:
         p = Path(requested).expanduser()
         try:
-            p.write_text(text)
+            with _REPORT_WRITE_LOCK:
+                problem = _report_path_problem(requested)
+                if problem:
+                    return None, problem
+                _write_requested_report(text, p)
             return str(p), None
         except OSError as e:
             return None, f"could not write {p}: {e}"

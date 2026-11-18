@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import tempfile
 import weakref
@@ -368,15 +369,31 @@ def _target_video_files(root: Path, max_episodes: int) -> list[str] | None:
     return None
 
 
+def _hub_address(src: str) -> tuple[str, str | None, str]:
+    """Validate and split owner/name[//subpath][@revision], never a disk path."""
+    revision = None
+    if "@" in src:
+        src, revision = src.rsplit("@", 1)
+        if not revision or any(c.isspace() for c in revision):
+            raise DatasetError("invalid Hub revision")
+    base, _, subpath = src.partition("//")
+    if not re.fullmatch(r"[A-Za-z0-9][\w.-]*/[A-Za-z0-9][\w.-]*", base):
+        raise DatasetError("Hub source must be owner/name, optionally //subpath and @revision")
+    if "//" in src and (not subpath or any(seg in ("", ".", "..") for seg in subpath.split("/"))):
+        raise DatasetError("invalid nested Hub dataset path")
+    return base, revision, subpath
+
+
 def _resolve_source(
     source: str, video: bool = False, max_episodes: int | None = None
 ) -> tuple[Path, str | None, str | None]:
     """Return (local_root, repo_id, revision). Downloads from the Hub when needed."""
     src = source.strip()
-    if src.startswith("hf://"):
+    forced_hub = src.startswith("hf://")
+    if forced_hub:
         src = src[len("hf://"):]
     p = Path(src).expanduser()
-    if p.exists():
+    if not forced_hub and p.exists():
         if p.suffix == ".zip":
             return _extract_zip(p), None, None
         return p, None, None
@@ -387,19 +404,8 @@ def _resolve_source(
         )
     from huggingface_hub import snapshot_download
 
-    # owner/name@revision pins a branch, tag or commit (reproducible audits)
-    revision = None
-    if "@" in src:
-        src, revision = src.rsplit("@", 1)
-    # owner/name//sub/path addresses a dataset nested inside a larger repo - a
-    # LeRobot root is any directory holding meta/info.json. "//" cannot appear
-    # in a Hub repo id, so the address is unambiguous.
-    subpath = ""
-    if "//" in src:
-        src, subpath = src.split("//", 1)
-        subpath = subpath.strip("/")
-        if not subpath or any(seg in ("", ".", "..") for seg in subpath.split("/")):
-            raise DatasetError(f"{source!r}: bad nested-dataset address (subpath {subpath!r})")
+    # Parse after deciding local-vs-Hub: hf:// must never consult local paths.
+    src, revision, subpath = _hub_address(src)
     patterns = ["meta/**", "*.json", "*.jsonl"]
     if video and max_episodes is None:
         patterns.append("videos/**")

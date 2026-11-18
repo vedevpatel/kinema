@@ -573,3 +573,94 @@ def test_a_failing_input_stream_still_ends_the_session():
     t.join(15)
     assert not t.is_alive()
     assert s.replies() == [{"jsonrpc": "2.0", "id": 1, "result": {}}]
+
+
+@pytest.mark.parametrize("dangling", [True, False])
+def test_report_write_refuses_symlink_targets(tmp_path, dangling):
+    target = tmp_path / "target.txt"
+    if not dangling:
+        target.write_text("precious")
+    link = tmp_path / "report.json"
+    link.symlink_to(target)
+    assert mcp._report_path_problem(str(link))
+    path, error = mcp._write_report("{}", str(link), "org/data")
+    assert path is None and error
+    assert (not target.exists()) if dangling else target.read_text() == "precious"
+
+
+def test_report_write_rechecks_after_run(tmp_path):
+    dest = tmp_path / "report.json"
+    assert mcp._report_path_problem(str(dest)) is None
+    dest.write_text("not a report")  # appeared while the checks ran
+    path, error = mcp._write_report("{}", str(dest), "org/data")
+    assert path is None and error and dest.read_text() == "not a report"
+
+
+def test_report_write_race_between_preflight_and_open(tmp_path, monkeypatch):
+    dest = tmp_path / "report.json"
+    target = tmp_path / "precious"
+    target.write_text("untouched")
+    original = mcp._report_path_problem
+
+    def swap_after_check(raw):
+        result = original(raw)
+        dest.symlink_to(target)
+        return result
+
+    monkeypatch.setattr(mcp, "_report_path_problem", swap_after_check)
+    path, error = mcp._write_report("{}", str(dest), "org/data")
+    assert path is None and error
+    assert target.read_text() == "untouched"
+
+
+def test_report_write_refuses_parent_symlink_and_hardlink(tmp_path):
+    parent = tmp_path / "real"
+    parent.mkdir()
+    alias = tmp_path / "alias"
+    alias.symlink_to(parent, target_is_directory=True)
+    assert mcp._write_report("{}", str(alias / "r.json"), "a/b")[1]
+    assert not (parent / "r.json").exists()
+    target = tmp_path / "original.json"
+    target.write_text("precious")
+    linked = tmp_path / "linked.json"
+    os.link(target, linked)
+    assert mcp._write_report("{}", str(linked), "a/b")[1]
+    assert target.read_text() == "precious"
+
+
+def test_report_sniff_requires_full_structure(tmp_path):
+    target = tmp_path / "two-keys.json"
+    target.write_text(json.dumps({"source": "x", "checks": []}))
+    assert not mcp._is_kinema_report(target)
+    assert mcp._write_report("{}", str(target), "a/b")[1]
+    root = make_dataset(tmp_path / "ds", episodes=2)
+    report, _ = mcp.run_checks(dataset=str(root), checks=["stats-drift"])
+    good = json.loads(mcp.render_json(report))
+    assert mcp._report_document(good)
+    good["checks"][0]["verdict"] = []
+    assert not mcp._report_document(good)
+
+
+@pytest.mark.parametrize("bad", ["hf:///tmp/data", "hf://../data", "hf://owner/name//../data", "hf://"])
+def test_forced_hub_rejects_disk_paths(bad):
+    assert mcp._dataset_problem(bad)
+
+
+def test_forced_hub_cannot_load_shadow_local_directory(tmp_path, monkeypatch):
+    from kinema.dataset import _resolve_source
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "owner/name").mkdir(parents=True)
+    cache = tmp_path / "hub-cache"
+    cache.mkdir()
+    calls = []
+
+    def download(**kwargs):
+        calls.append(kwargs)
+        return str(cache)
+
+    monkeypatch.setattr("huggingface_hub.snapshot_download", download)
+    root, repo, revision = _resolve_source("hf://owner/name@pinned")
+    assert root == cache and repo == "owner/name" and revision == "pinned"
+    assert calls[0]["repo_id"] == "owner/name" and calls[0]["revision"] == "pinned"
+    assert _resolve_source(str(tmp_path / "owner/name"))[1] is None
