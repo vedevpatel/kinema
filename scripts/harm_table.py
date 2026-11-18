@@ -696,6 +696,19 @@ def validate_table(doc: Any) -> list[str]:
             if (_num(d) and _num(c) and c > 0 and i < len(values) and _num(values[i])
                     and abs(100 * (d - c) / c - values[i]) > 0.0011):
                 errs.append(f"{row.get('defect')}: delta does not match raw same-seed runs for {seed}")
+            ds, cs = defect.get("success_pct"), clean.get("success_pct")
+            succ = (row.get("success_delta_pts") or {}).get("per_seed") or []
+            if (_num(ds) and _num(cs) and i < len(succ) and _num(succ[i])
+                    and abs(ds - cs - succ[i]) > 0.0011):
+                errs.append(f"{row.get('defect')}: success delta does not match raw runs for {seed}")
+            pairs = row.get("accelerator_pairs")
+            if isinstance(pairs, list) and i < len(pairs):
+                expected = {"seed": seed, "defect_gpu": defect.get("gpu"),
+                            "clean_gpu": clean.get("gpu"),
+                            "same_gpu": (defect.get("gpu") is not None and
+                                         defect.get("gpu") == clean.get("gpu"))}
+                if pairs[i] != expected:
+                    errs.append(f"{row.get('defect')}: accelerator pair does not match raw runs for {seed}")
     if len(json.dumps(doc).encode()) >= MAX_TABLE_BYTES:
         errs.append(f"document is >= {MAX_TABLE_BYTES} bytes")
     return errs

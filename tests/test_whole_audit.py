@@ -133,3 +133,18 @@ def test_zero_row_catalogued_episode_is_not_discarded(tmp_path):
     assert 3 in ctx.episode_ids()
     assert any(f.episode_index == 3 and f.severity == Severity.FAIL
                for f in run('dropped-frames', ctx).findings)
+
+
+def test_nested_hub_load_scopes_file_inventory(tmp_path, monkeypatch):
+    import kinema.dataset as ds
+    import huggingface_hub
+    root = make_dataset(tmp_path / 'd', episodes=4)
+    monkeypatch.setattr(ds, '_resolve_source', lambda *a, **kw: (root, 'org/name//LeRobot/task', 'sha'))
+    calls = []
+    def listing(*args, **kwargs):
+        calls.append(kwargs)
+        return []
+    monkeypatch.setattr(huggingface_hub, 'list_repo_tree', listing)
+    ds.load_dataset('hf://org/name//LeRobot/task', max_episodes=3)
+    assert calls[0]['path_in_repo'] == 'LeRobot/task'
+    assert calls[0]['revision'] == 'sha'

@@ -659,7 +659,7 @@ def load_dataset(
 
             repo_files = sorted(
                 (f.path[len(sub) + 1:] if sub else f.path)
-                for f in list_repo_tree(base, repo_type="dataset",
+                for f in list_repo_tree(base, repo_type="dataset", path_in_repo=sub or None,
                                         revision=revision, recursive=True)
                 if hasattr(f, "size") and (not sub or f.path.startswith(sub + "/"))
             )
