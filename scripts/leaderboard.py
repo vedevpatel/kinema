@@ -348,7 +348,11 @@ def _probe_dataset(api, repo_id: str, downloads: int, likes: int,
 # seats per org onboards their top datasets without flooding the board with
 # one publisher's per-task sets (RoboCOIN alone has 810, which would evict
 # most of the ecosystem under a pure download ranking)
-FLAGSHIP_ORG_SEATS = {"RoboCOIN": 25, "unitreerobotics": 15}
+# physical-intelligence (pi0/pi0.5: libero 51k downloads) and yaak-ai
+# (L2D 87k) ship LeRobot format but never surface under the "lerobot"
+# search either - 2026-11-18 recon
+FLAGSHIP_ORG_SEATS = {"RoboCOIN": 25, "unitreerobotics": 15,
+                      "physical-intelligence": 2, "yaak-ai": 2}
 # individual flagship datasets the search misses for the same reason
 FLAGSHIP_SEEDS = ("GT-111/agibotworld_alpha_v3_eef",)
 # datasets nested inside a larger repo - a LeRobot root below the repo top,

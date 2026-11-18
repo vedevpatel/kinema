@@ -308,10 +308,10 @@ def test_hub_listing_kwargs_match_installed_api(monkeypatch):
             return iter([])
 
     monkeypatch.setattr("huggingface_hub.HfApi", lambda: _FakeApi())
-    monkeypatch.setattr(lb, "probe_rlds_lane", lambda: [])  # no live GCS in a kwargs test
+    monkeypatch.setattr(lb, "probe_rlds_lane", lambda workers=8: [])  # no live GCS in a kwargs test
     lb.find_lerobot_datasets(2, 2)
 
-    assert len(calls) == 4  # top lane + newest lane + flagship org queries
+    assert len(calls) == 6  # top lane + newest lane + 4 flagship org queries
     assert sum('author' in c for c in calls) == len(lb.FLAGSHIP_ORG_SEATS)
     params = inspect.signature(HfApi.list_datasets).parameters
     for kwargs in calls:
@@ -374,7 +374,7 @@ def test_flagship_probe_skips_gated_repos(monkeypatch):
                 downloads=10, likes=0)
 
     monkeypatch.setattr("huggingface_hub.HfApi", lambda: _FakeApi())
-    monkeypatch.setattr(lb, "probe_rlds_lane", lambda: [])  # no live GCS in a flagship test
+    monkeypatch.setattr(lb, "probe_rlds_lane", lambda workers=8: [])  # no live GCS in a flagship test
     out = lb.find_lerobot_datasets(2, 0)
     flag = [d["id"] for d in out if d["lane"] == "flagship"]
     assert flag == ["RoboCOIN/open_b", "RoboCOIN/open_d"]
