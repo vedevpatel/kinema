@@ -951,6 +951,11 @@ def load_dataset(
         reward=reward,
         done=done,
         truncated=truncated,
+        # a Hub source whose videos were not fully fetched holds an
+        # incomplete local tree: disk-based camera coverage and video pointer
+        # existence must not read absence as defect. _resolve_source only
+        # fetches videos/** when video=True and no episode cap applies.
+        video_partial=repo_id is not None and not (video and max_episodes is None),
         episode_stats=episode_stats,
         stats_json=stats_json,
         stats_source=stats_source,

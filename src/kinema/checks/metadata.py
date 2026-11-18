@@ -450,15 +450,48 @@ class RewardDoneCheck(Check):
                     "anything segmenting on done falls off the end",
                 ))
             else:
-                # a done flag with frames after it inside the same episode
+                # classify each episode's done pattern. A contiguous terminal
+                # suffix longer than one frame is a padding convention (pusht
+                # marks its last two frames), not a continuation; a True with
+                # frames after it inside the same episode is the real defect.
+                padding: list[tuple[int, int]] = []
                 continued = []
+                all_true: list[int] = []
                 for ep in ctx.episode_ids():
                     rows = ctx.rows_for(ep)
                     if len(rows) < 2:
                         continue
                     flags = d[rows]
-                    if flags[:-1].any():
+                    if not flags.any():
+                        continue
+                    first = int(flags.argmax())
+                    if flags[first:].all():
+                        if first == 0:
+                            all_true.append(ep)
+                        elif first < len(flags) - 1:
+                            padding.append((ep, len(flags) - first))
+                        # a single final-frame True is the normal convention
+                    else:
                         continued.append(ep)
+                if all_true:
+                    ex = ", ".join(map(str, all_true[:8])) + (" ..." if len(all_true) > 8 else "")
+                    res.findings.append(Finding(
+                        self.id, Severity.WARN,
+                        f"done is True on every frame in {len(all_true)} episodes ({ex}) - "
+                        "episodes terminate at birth; anything segmenting on done gets nothing",
+                        details={"episodes": all_true},
+                    ))
+                if padding:
+                    eps = [ep for ep, _ in padding]
+                    ks = sorted({k for _, k in padding})
+                    ex = ", ".join(map(str, eps[:8])) + (" ..." if len(eps) > 8 else "")
+                    res.findings.append(Finding(
+                        self.id, Severity.INFO,
+                        f"done is True on the final {'/'.join(map(str, ks))} frame(s) in "
+                        f"{len(eps)} episodes ({ex}) - a terminal-flag padding convention; "
+                        "segmentation on the first done still works",
+                        details={"episodes": eps},
+                    ))
                 if continued:
                     ex = ", ".join(map(str, continued[:8])) + (" ..." if len(continued) > 8 else "")
                     res.findings.append(Finding(

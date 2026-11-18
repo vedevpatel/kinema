@@ -91,6 +91,41 @@ def test_partial_video_fetch_skips_without_a_listing(tmp_path):
     assert res.skipped and "partially fetched" in res.skip_reason
 
 
+def _as_hub(monkeypatch, root):
+    """Resolve any source to this root as if it were a Hub fetch."""
+    monkeypatch.setattr("kinema.dataset._resolve_source",
+                        lambda source, video=False, max_episodes=None: (Path(root), "owner/name"))
+
+
+def test_hub_load_without_video_marks_partial_and_skips(monkeypatch, tmp_path):
+    # regression pin for the no-video false FAIL: a Hub audit that fetched no
+    # videos must not let the pointer check read an empty disk as defects
+    root = make_dataset(tmp_path / "hubish", episodes=10,
+                        cameras=["cam_high"], defects=["missing-video-file"])
+    _as_hub(monkeypatch, root)
+    ctx = load_dataset("owner/name")
+    assert ctx.video_partial is True
+    res = CHECK.run(ctx, CheckConfig())
+    assert res.skipped and "partially fetched" in res.skip_reason
+
+
+def test_hub_sampled_load_marks_partial_even_with_video(monkeypatch, tmp_path):
+    root = make_dataset(tmp_path / "hubsample", episodes=10,
+                        cameras=["cam_high"], defects=["missing-video-file"])
+    _as_hub(monkeypatch, root)
+    ctx = load_dataset("owner/name", video=True, max_episodes=5)
+    assert ctx.video_partial is True
+
+
+def test_hub_full_video_load_stays_disk_based(monkeypatch, tmp_path):
+    root = make_dataset(tmp_path / "hubfull", episodes=10, cameras=["cam_high"])
+    _as_hub(monkeypatch, root)
+    ctx = load_dataset("owner/name", video=True)
+    assert ctx.video_partial is False
+    res = CHECK.run(ctx, CheckConfig())
+    assert res.verdict == Severity.OK, res.summary
+
+
 def test_no_cameras_skips(tmp_path):
     res = _run(make_dataset(tmp_path / "novideo", episodes=8))
     assert res.skipped and "no video cameras" in res.skip_reason

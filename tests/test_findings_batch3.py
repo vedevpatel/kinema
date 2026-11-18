@@ -390,6 +390,34 @@ def test_reward_done_termination_mid_episode(tmp_path):
                for f in res.findings)
 
 
+def test_reward_done_terminal_padding_is_info(tmp_path):
+    # pusht's convention: done True on the final TWO frames of every episode -
+    # a padding suffix, not a continuation, so INFO rather than WARN
+    root = make_dataset(tmp_path / "ds", episodes=24)
+    t = pq.read_table(root / "data" / "chunk-000" / "file-000.parquet").to_pydict()
+    n = len(t["episode_index"])
+    done = np.zeros(n, dtype=bool)
+    fi = np.asarray(t["frame_index"])
+    done[(fi == fi.max() - 1) | (fi == fi.max())] = True
+    _add_reward_done(root, (0.5 + np.random.default_rng(0).standard_normal(n) * 0.1).tolist(),
+                     done.tolist())
+    res = run("reward-done", load_dataset(str(root)))
+    assert not any(f.severity == Severity.WARN for f in res.findings), [f.message for f in res.findings]
+    assert any("padding convention" in f.message and f.severity == Severity.INFO
+               for f in res.findings)
+
+
+def test_reward_done_done_everywhere_still_warns(tmp_path):
+    root = make_dataset(tmp_path / "ds", episodes=24)
+    t = pq.read_table(root / "data" / "chunk-000" / "file-000.parquet").to_pydict()
+    n = len(t["episode_index"])
+    _add_reward_done(root, (0.5 + np.random.default_rng(0).standard_normal(n) * 0.1).tolist(),
+                     [True] * n)
+    res = run("reward-done", load_dataset(str(root)))
+    assert any("terminate at birth" in f.message and f.severity == Severity.WARN
+               for f in res.findings)
+
+
 def test_reward_done_skips_without_fields(tmp_path):
     root = make_dataset(tmp_path / "ds", episodes=24)
     res = run("reward-done", load_dataset(str(root)))

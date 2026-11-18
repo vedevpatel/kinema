@@ -467,8 +467,9 @@ No knobs.
 ## reward-done
 
 Constant or NaN reward, `done` never True, `done` True mid-episode with
-frames after it. RL and reward-conditioned training get labels with no
-signal.
+frames after it, `done` True on every frame. A `done` suffix longer than the
+final frame (pusht marks its last two) is a padding convention and notes at
+INFO. RL and reward-conditioned training get labels with no signal.
 
 No knobs.
 
