@@ -263,7 +263,8 @@ def audit_rlds(entry: dict) -> DatasetReport:
 
     client = GcsClient(entry.get("rlds_bucket", RLDS_BUCKETS[0][0]))
     ds = RldsDataset.probe(client, entry["rlds_prefix"])
-    results = run_rlds_checks(ds, client)
+    mirror, mirror_bucket = _probe_rlds_mirror(entry)
+    results = run_rlds_checks(ds, client, mirror=mirror, mirror_bucket=mirror_bucket)
     return DatasetReport(
         source=entry["id"],
         format_version=f"rlds-{ds.version}",
@@ -273,6 +274,24 @@ def audit_rlds(entry: dict) -> DatasetReport:
         results=results,
         video_audited=VIDEO_AUDIT_MARK,
     )
+
+
+def _probe_rlds_mirror(entry: dict):
+    """The same dataset in the OTHER rlds bucket, for the drift check - or
+    (None, "") when it has no copy there or the probe fails: a mirror hiccup
+    must never fail the audit of the row's own bucket."""
+    from kinema.rlds import GcsClient, RldsDataset
+
+    name = entry["id"].removeprefix("rlds/")
+    own = entry.get("rlds_bucket", RLDS_BUCKETS[0][0])
+    for bucket, base in RLDS_BUCKETS:
+        if bucket == own:
+            continue
+        try:
+            return RldsDataset.probe(GcsClient(bucket), f"{base}{name}/"), bucket
+        except Exception:  # noqa: BLE001 - no copy (or a hiccup): no drift signal
+            return None, ""
+    return None, ""
 
 
 def _probe_dataset(api, repo_id: str, downloads: int, likes: int,

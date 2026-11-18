@@ -12,8 +12,8 @@ from kinema.rlds import (
 )
 from kinema.checks.base import Severity
 from kinema.checks.rlds_checks import (
-    RldsCheckConfig, rlds_episode_counts, rlds_feature_spec, rlds_shard_inventory,
-    rlds_step_structure, run_rlds_checks,
+    RldsCheckConfig, rlds_episode_counts, rlds_feature_spec, rlds_mirror_drift,
+    rlds_shard_inventory, rlds_step_structure, run_rlds_checks,
 )
 
 FIX = Path(__file__).parent / "fixtures" / "rlds" / "austin_buds" / "0.1.0"
@@ -241,3 +241,35 @@ def test_array_record_shards_inventory_parse_and_sample_skip():
     assert rlds_episode_counts(ds).verdict == Severity.OK
     res = rlds_step_structure(ds, _StubClient(files), RldsCheckConfig(sample=True))
     assert res.skipped and "ArrayRecord" in res.skip_reason  # no garbage decode
+
+
+def test_mirror_drift_agree_info_warn():
+    ds = _dataset()
+    # identical copies: silent
+    same = _dataset()
+    res = rlds_mirror_drift(ds, same, "gresearch")
+    assert not res.findings and res.verdict == Severity.OK
+    # agent_aware_affordances-shaped: one extra shard, ~2% bytes, same
+    # version and episodes -> INFO (transparency, not an alarm)
+    drifted = _dataset(shards=ds.shards + [("prefix/x-train.tfrecord-00001-of-00002",
+                                            int(ds.shards[0][1] * 0.02))])
+    res = rlds_mirror_drift(ds, drifted, "gresearch")
+    assert res.verdict == Severity.INFO and res.findings[0].details["mirror_shards"] == 2
+    # version mismatch -> WARN
+    res = rlds_mirror_drift(ds, _dataset(version="9.9.9"), "gresearch")
+    assert res.verdict == Severity.WARN
+    # episode-count mismatch -> WARN
+    other_info = {"splits": [{"name": "train", "shardLengths": ["999"]}]}
+    res = rlds_mirror_drift(ds, _dataset(info=other_info), "gresearch")
+    assert res.verdict == Severity.WARN
+    # same version and episodes but bytes drifted past 5% -> WARN
+    fat = _dataset(shards=[(ds.shards[0][0], ds.shards[0][1] * 2)])
+    res = rlds_mirror_drift(ds, fat, "gresearch")
+    assert res.verdict == Severity.WARN
+    # never FAILs an audit: transparency only
+    assert all(r.verdict <= Severity.WARN for r in
+               [rlds_mirror_drift(ds, m, "gresearch") for m in (same, drifted, fat)])
+    # run_rlds_checks appends the drift check only when a mirror was probed
+    with_mirror = run_rlds_checks(ds, mirror=same, mirror_bucket="gresearch")
+    assert [r.check_id for r in with_mirror][-1] == "rlds-mirror-drift"
+    assert [r.check_id for r in run_rlds_checks(ds)][-1] != "rlds-mirror-drift"

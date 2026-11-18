@@ -256,8 +256,53 @@ def rlds_step_structure(ds: RldsDataset, client: GcsClient,
 
 
 def run_rlds_checks(ds: RldsDataset, client: GcsClient | None = None,
-                    cfg: RldsCheckConfig | None = None) -> list[CheckResult]:
-    """The metadata-only set, plus the sampled check when a client is given."""
+                    cfg: RldsCheckConfig | None = None,
+                    mirror: RldsDataset | None = None,
+                    mirror_bucket: str = "") -> list[CheckResult]:
+    """The metadata-only set, plus the sampled check when a client is given,
+    plus the mirror-drift check when a second-bucket copy was probed."""
     out = [rlds_episode_counts(ds), rlds_feature_spec(ds), rlds_shard_inventory(ds)]
     out.append(rlds_step_structure(ds, client or GcsClient(""), cfg))
+    if mirror is not None:
+        out.append(rlds_mirror_drift(ds, mirror, mirror_bucket))
     return out
+
+
+MIRROR_BYTES_WARN = 0.05  # copies drifting further than this look stale, not just rebuilt
+
+
+def rlds_mirror_drift(ds: RldsDataset, mirror: RldsDataset, mirror_bucket: str) -> CheckResult:
+    """Same dataset in a second bucket: do the two copies agree?
+
+    The corpus lives in both gdm-robotics-open-x-embodiment and
+    gresearch/robotics, and the copies DIVERGE (agent_aware_affordances: 63
+    shards / 18.1 GB in gdm vs 64 / 18.5 GB in gresearch at the same
+    version). A row audits one bucket's copy; this check surfaces the other
+    copy's disagreement instead of leaving it silent. Transparency only: it
+    never FAILs an audit - INFO when the copies drift at the same version
+    and episode count, WARN when they disagree on version or episodes or
+    drift far in bytes.
+    """
+    res = CheckResult(check_id="rlds-mirror-drift",
+                      title="RLDS mirror drift (second-bucket copy)")
+    my_bytes, their_bytes = ds.data_bytes, mirror.data_bytes
+    drift = abs(my_bytes - their_bytes) / max(my_bytes, their_bytes, 1)
+    if (ds.version == mirror.version and ds.episodes == mirror.episodes
+            and len(ds.shards) == len(mirror.shards) and drift == 0):
+        return res
+    sev = (Severity.WARN
+           if (ds.version != mirror.version or ds.episodes != mirror.episodes
+               or drift > MIRROR_BYTES_WARN)
+           else Severity.INFO)
+    res.findings.append(Finding(
+        "rlds-mirror-drift", sev,
+        f"{mirror_bucket} copy diverges: v{mirror.version} vs v{ds.version}, "
+        f"{mirror.episodes} vs {ds.episodes} episodes, {len(mirror.shards)} vs "
+        f"{len(ds.shards)} shards, {their_bytes / 1024**3:.1f} vs "
+        f"{my_bytes / 1024**3:.1f} GB ({drift:.1%} apart)",
+        details={"mirror_bucket": mirror_bucket, "version": ds.version,
+                 "mirror_version": mirror.version, "episodes": ds.episodes,
+                 "mirror_episodes": mirror.episodes, "shards": len(ds.shards),
+                 "mirror_shards": len(mirror.shards), "bytes": my_bytes,
+                 "mirror_bytes": their_bytes}))
+    return res
