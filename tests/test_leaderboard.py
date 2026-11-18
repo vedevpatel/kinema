@@ -585,6 +585,7 @@ class _FakeRldsDs:
         self.version = "1.0.0"
         self.data_bytes = 10
         self.episodes = 1
+        self.shards = [("ds-train.tfrecord-00000-of-00001", 10)]
 
 
 def _patch_rlds(monkeypatch, listings, probes, fail_listing=None):
@@ -908,3 +909,21 @@ def test_nested_sample_lists_only_target_prefix(monkeypatch, tmp_path):
     assert observed[0]["path_in_repo"] == "task"
     assert observed[0]["recursive"] is True
     assert "data/file-0.parquet" in sizes
+
+
+def test_metadata_only_bucket_does_not_claim_data_bearing_mirror(monkeypatch):
+    import kinema.rlds as rlds
+
+    lb = _load_leaderboard()
+    first, second = lb.RLDS_BUCKETS[0][0], lb.RLDS_BUCKETS[1][0]
+    _patch_rlds(monkeypatch, {first: ["alpha"], second: ["alpha"]},
+                {first: ["alpha"], second: ["alpha"]})
+    def probe(cls, client, prefix):
+        ds = _FakeRldsDs()
+        if client.bucket == first:
+            ds.shards = []
+            ds.data_bytes = 0
+        return ds
+    monkeypatch.setattr(rlds.RldsDataset, "probe", classmethod(probe))
+    rows = lb.probe_rlds_lane()
+    assert len(rows) == 1 and rows[0]["rlds_bucket"] == second

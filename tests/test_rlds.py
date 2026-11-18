@@ -161,12 +161,13 @@ def test_probe_skips_placeholder_only_prefixes_fast():
 
 def test_episode_counts_ok_and_mismatch():
     assert rlds_episode_counts(_dataset()).verdict == Severity.OK
-    extra = _dataset(shards=_dataset().shards
+    extra = _dataset(info={"splits": [{"name": "train", "shardLengths": ["1", "1"]}]},
+                     shards=_dataset().shards
                      + [("prefix/austin_buds_dataset_converted_externally_to_rlds"
                          "-train.tfrecord-00001-of-00002", 100)])
     res = rlds_episode_counts(extra)
     assert res.verdict == Severity.FAIL
-    assert any("declares 1 shards" in f.message for f in res.findings)
+    assert any("declares 2 shards" in f.message for f in res.findings)
     noinfo = _dataset(info={"splits": []}, shards=[])
     assert rlds_episode_counts(noinfo).verdict == Severity.WARN
     # shards on the bucket with no dataset_info entry is a FAIL, not a WARN
@@ -251,7 +252,7 @@ def test_mirror_drift_agree_info_warn():
     assert not res.findings and res.verdict == Severity.OK
     # agent_aware_affordances-shaped: one extra shard, ~2% bytes, same
     # version and episodes -> INFO (transparency, not an alarm)
-    drifted = _dataset(shards=ds.shards + [("prefix/x-train.tfrecord-00001-of-00002",
+    drifted = _dataset(shards=ds.shards + [(ds.shards[0][0].replace("00000-of", "00001-of"),
                                             int(ds.shards[0][1] * 0.02))])
     res = rlds_mirror_drift(ds, drifted, "gresearch")
     assert res.verdict == Severity.INFO and res.findings[0].details["mirror_shards"] == 2
@@ -273,3 +274,55 @@ def test_mirror_drift_agree_info_warn():
     with_mirror = run_rlds_checks(ds, mirror=same, mirror_bucket="gresearch")
     assert [r.check_id for r in with_mirror][-1] == "rlds-mirror-drift"
     assert [r.check_id for r in run_rlds_checks(ds)][-1] != "rlds-mirror-drift"
+
+
+def test_unsuffixed_shard_names_are_counted_and_gaps_still_fail():
+    info = {"splits": [{"name": "train", "shardLengths": ["1", "1", "1"],
+                        "filepathTemplate": "{DATASET}-{SPLIT}.{FILEFORMAT}-{SHARD_INDEX}"}]}
+    shards = [(f"prefix/ds-train.tfrecord-{i:05d}", 10) for i in range(3)]
+    ds = _dataset(info=info, shards=shards)
+    assert rlds_episode_counts(ds).verdict == Severity.OK
+    assert rlds_shard_inventory(ds).verdict == Severity.OK
+    missing = _dataset(info=info, shards=[shards[0], shards[2]])
+    assert rlds_episode_counts(missing).verdict == Severity.FAIL
+    assert rlds_shard_inventory(missing).verdict == Severity.FAIL
+
+
+def test_declared_shard_generation_selected_without_union():
+    info = {"splits": [{"name": "train", "shardLengths": ["1", "1"]}]}
+    shards = [(f"prefix/ds-train.tfrecord-{i:05d}-of-00002", 10) for i in range(2)]
+    shards += [(f"prefix/ds-train.tfrecord-{i:05d}-of-00003", 20) for i in range(3)]
+    ds = _dataset(info=info, shards=shards)
+    assert len(ds.shards) == 2 and len(ds.ignored_shards) == 3
+    assert ds.data_bytes == 20
+    assert rlds_episode_counts(ds).verdict == Severity.OK
+    assert rlds_shard_inventory(ds).verdict == Severity.OK
+    missing = _dataset(info=info, shards=shards[1:])
+    assert rlds_episode_counts(missing).verdict == Severity.FAIL
+
+
+def test_ambiguous_generations_skip_instead_of_unioning():
+    info = {"splits": [{"name": "train", "shardLengths": ["1"]}]}
+    ds = _dataset(info=info, shards=[("p/a-train.tfrecord-00000-of-00001", 1),
+                                    ("p/b-train.tfrecord-00000-of-00001", 1)])
+    assert ds.ambiguous_splits == ["train"]
+    assert rlds_episode_counts(ds).skipped
+    assert rlds_shard_inventory(ds).skipped
+
+
+def test_legacy_feature_schema_and_nontrajectory_applicability():
+    def legacy(node):
+        cls = node.get("pythonClassName", "")
+        if "featuresDict" in node:
+            return {"type": "tf.FeaturesDict", "content": {
+                k: legacy(v) for k, v in node["featuresDict"]["features"].items()}}
+        if "sequence" in node:
+            return {"type": "tf.Dataset", "content": {"feature": legacy(node["sequence"]["feature"])}}
+        return {"type": cls, "content": {}}
+    modern = _dataset()
+    old = _dataset(features=legacy(modern.features))
+    assert rlds_feature_spec(old).verdict == Severity.OK
+    flat = _dataset(features={"featuresDict": {"features": {"question": {"text": {}}}}})
+    assert rlds_feature_spec(flat).skipped
+    assert rlds_step_structure(flat, GcsClient("unused"), RldsCheckConfig(sample=True)).skipped
+    assert rlds_feature_spec(_dataset(features={})).verdict == Severity.FAIL

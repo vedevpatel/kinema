@@ -11,6 +11,7 @@ no auth headers are ever sent.
 from __future__ import annotations
 
 import json
+import re
 import struct
 import time
 import urllib.parse
@@ -247,6 +248,70 @@ class GcsClient:
 
 # --- dataset probe ----------------------------------------------------------
 
+SHARD_RE = re.compile(
+    r"^(?P<prefix>.+)-(?P<split>[A-Za-z0-9_]+)\.(?P<format>tfrecord|array_record)-"
+    r"(?P<idx>\d+)(?:-of-(?P<total>\d+))?$")
+
+
+def _select_shard_generation(shards: list[tuple[str, int]], info: dict
+                             ) -> tuple[list[tuple[str, int]], list[str]]:
+    """Select per-split filename generations using declared metadata.
+
+    Never union generations by index. When metadata cannot disambiguate,
+    preserve the raw inventory and mark affected count checks inconclusive.
+    """
+    groups: dict[str, dict[tuple, list[tuple[str, int]]]] = {}
+    unknown = []
+    for path, size in shards:
+        m = SHARD_RE.search(path.rsplit("/", 1)[-1])
+        if not m:
+            unknown.append((path, size))
+            continue
+        key = (path.rsplit("/", 1)[0], m["prefix"], m["format"], m["total"])
+        groups.setdefault(m["split"], {}).setdefault(key, []).append((path, size))
+    declared = {s.get("name", ""): s for s in info.get("splits", [])}
+    selected = list(unknown)
+    ambiguous = []
+    for split, generations in groups.items():
+        decl = declared.get(split, {})
+        template = decl.get("filepathTemplate", "")
+        expected = len(decl.get("shardLengths", []))
+        candidates = list(generations)
+        if "SHARD_INDEX" in template:
+            candidates = [k for k in candidates if k[3] is None]
+        elif expected:
+            exact = [k for k in candidates if k[3] is not None and int(k[3]) == expected]
+            if exact:
+                candidates = exact
+        if len(candidates) != 1:
+            ambiguous.append(split)
+            selected.extend(item for group in generations.values() for item in group)
+        else:
+            selected.extend(generations[candidates[0]])
+    return selected, ambiguous
+
+
+def normalize_features(node: dict) -> dict:
+    """Translate recognized TFDS legacy type/content trees, not arbitrary JSON."""
+    if not isinstance(node, dict):
+        return {}
+    cls = node.get("type", "")
+    content = node.get("content")
+    if isinstance(cls, str) and isinstance(content, dict):
+        if cls.endswith(".FeaturesDict"):
+            return {"pythonClassName": cls, "featuresDict": {
+                "features": {k: normalize_features(v) for k, v in content.items()}}}
+        if cls.endswith((".Dataset", ".Sequence")):
+            feature = content.get("feature")
+            if isinstance(feature, dict):
+                return {"pythonClassName": cls, "sequence": {"feature": normalize_features(feature)}}
+        return {"pythonClassName": cls, "legacy_content": content}
+    return {k: ({kk: normalize_features(vv) for kk, vv in v.items()}
+                if k == "features" and isinstance(v, dict)
+                else normalize_features(v) if isinstance(v, dict) else v)
+            for k, v in node.items()}
+
+
 class RldsDataset:
     """One probed RLDS dataset: metadata + shard inventory, no payloads."""
 
@@ -255,8 +320,11 @@ class RldsDataset:
         self.name = name
         self.version = version
         self.info = info
-        self.features = features
-        self.shards = shards  # [(object name, size)]
+        self.features = normalize_features(features)
+        self.raw_shards = shards
+        self.shards, self.ambiguous_splits = _select_shard_generation(shards, info)
+        selected_names = {path for path, _ in self.shards}
+        self.ignored_shards = [item for item in shards if item[0] not in selected_names]
 
     @property
     def data_bytes(self) -> int:

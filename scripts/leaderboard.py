@@ -247,6 +247,8 @@ def probe_rlds_lane(workers: int = 8) -> list[dict]:
                 name = p.rstrip("/").split("/")[-1]
                 try:
                     ds = RldsDataset.probe(task_client, p)
+                    if not ds.shards:
+                        return None, task_client.calls  # metadata-only cannot claim a mirror seat
                 except Exception as e:  # noqa: BLE001 - one dataset must not stall the lane
                     print(f"rlds/{name}: probe failed in {_bucket} "
                           f"({type(e).__name__}) - skipping", flush=True)

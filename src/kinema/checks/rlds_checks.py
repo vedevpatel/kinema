@@ -10,15 +10,11 @@ the two small JSON metadata files.
 
 from __future__ import annotations
 
-import re
 import struct
 from dataclasses import dataclass
 
 from kinema.checks.base import CheckResult, Finding, Severity
-from kinema.rlds import RldsDataset, RldsError, GcsClient, decode_example, iter_records
-
-SHARD_RE = re.compile(
-    r"-(?P<split>[A-Za-z0-9_]+)\.(?:tfrecord|array_record)-(?P<idx>\d{5})-of-(?P<total>\d{5})$")
+from kinema.rlds import RldsDataset, RldsError, GcsClient, SHARD_RE, decode_example, iter_records
 SINGLE_SHARD_WARN_BYTES = 2 * 1024**3  # one corrupt object kills everything
 DEFAULT_SAMPLE_CAP = 64 * 1024**2  # skip episodes whose record is bigger
 
@@ -36,7 +32,8 @@ def _shard_parts(ds: RldsDataset) -> dict[str, dict[int, int]]:
         base = name.rsplit("/", 1)[-1]
         m = SHARD_RE.search(base)
         if not m:
-            out.setdefault("", {})[-1] = size
+            unknown = out.setdefault("", {})
+            unknown[-len(unknown) - 1] = size
             continue
         out.setdefault(m.group("split"), {})[int(m.group("idx"))] = size
     return out
@@ -46,6 +43,10 @@ def rlds_episode_counts(ds: RldsDataset) -> CheckResult:
     """Declared shard/episode counts vs what the bucket actually holds."""
     res = CheckResult(check_id="rlds-episode-counts", title="RLDS episode counts")
     shards = _shard_parts(ds)
+    if ds.ambiguous_splits or "" in shards:
+        res.skipped = True
+        res.skip_reason = "shard inventory cannot be assigned unambiguously to declared splits"
+        return res
     declared = ds.shard_lengths
     if not declared:
         res.findings.append(Finding(
@@ -89,6 +90,10 @@ def rlds_feature_spec(ds: RldsDataset) -> CheckResult:
             "rlds-feature-spec", Severity.FAIL,
             "features.json has no featuresDict.features tree"))
         res.summary = "feature tree missing"
+        return res
+    if "steps" not in tree:
+        res.skipped = True
+        res.skip_reason = "non-trajectory TFDS dataset: no steps feature (RLDS spec not applicable)"
         return res
     steps = tree.get("steps", {})
     step_feats = (steps.get("sequence", {}).get("feature", {})
@@ -137,6 +142,10 @@ def rlds_feature_spec(ds: RldsDataset) -> CheckResult:
 def rlds_shard_inventory(ds: RldsDataset) -> CheckResult:
     """Shard files: parseable names, contiguous numbering, non-zero, sized."""
     res = CheckResult(check_id="rlds-shard-inventory", title="RLDS shard inventory")
+    if ds.ambiguous_splits:
+        res.skipped = True
+        res.skip_reason = "multiple shard generations; metadata does not select one unambiguously"
+        return res
     shards = _shard_parts(ds)
     if "" in shards:
         res.findings.append(Finding(
@@ -149,7 +158,7 @@ def rlds_shard_inventory(ds: RldsDataset) -> CheckResult:
         for name, _ in ds.shards:
             m = SHARD_RE.search(name.rsplit("/", 1)[-1])
             if m and m.group("split") == split:
-                declared_total = int(m.group("total"))
+                declared_total = int(m.group("total")) if m.group("total") else None
                 break
         idxs = sorted(idx_map)
         missing = [i for i in range(idxs[-1] + 1) if i not in idx_map] if idxs else []
@@ -194,6 +203,10 @@ def rlds_step_structure(ds: RldsDataset, client: GcsClient,
         res.skipped = True
         res.skip_reason = "sample mode off"
         return res
+    if ds.ambiguous_splits:
+        res.skipped = True
+        res.skip_reason = "ambiguous shard generation"
+        return res
     if not ds.shards:
         res.skipped = True
         res.skip_reason = "no shards"
@@ -205,6 +218,10 @@ def rlds_step_structure(ds: RldsDataset, client: GcsClient,
         # still ran
         res.skipped = True
         res.skip_reason = "ArrayRecord shards: payload sampling not supported"
+        return res
+    if not ds.features.get("featuresDict", {}).get("features", {}).get("steps"):
+        res.skipped = True
+        res.skip_reason = "non-trajectory TFDS dataset: payload sampling not applicable"
         return res
     try:
         head = client.get(name, (0, 11))
@@ -285,6 +302,10 @@ def rlds_mirror_drift(ds: RldsDataset, mirror: RldsDataset, mirror_bucket: str) 
     """
     res = CheckResult(check_id="rlds-mirror-drift",
                       title="RLDS mirror drift (second-bucket copy)")
+    if ds.ambiguous_splits or mirror.ambiguous_splits:
+        res.skipped = True
+        res.skip_reason = "mirror comparison needs an unambiguous shard generation on both copies"
+        return res
     my_bytes, their_bytes = ds.data_bytes, mirror.data_bytes
     drift = abs(my_bytes - their_bytes) / max(my_bytes, their_bytes, 1)
     if (ds.version == mirror.version and ds.episodes == mirror.episodes
