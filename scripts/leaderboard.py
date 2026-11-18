@@ -1018,8 +1018,53 @@ def audit_stale(entry: dict, engine: str, max_episodes: int) -> bool:
     return bool(rep.get("truncated")) and int(rep.get("episodes") or 0) < max_episodes
 
 
+def invalidate_capped_video_results(entries: list[dict], capped_ids: set[str],
+                                    corrected_at: str) -> list[str]:
+    """Invalidate every finding severity backed by a known-capped listing.
+
+    capped_ids must come from a verified inventory check, never a name or
+    dataset-size guess. Existing verified PASS and pending SKIP stay intact.
+    """
+    changed = []
+    for entry in entries:
+        if entry["id"] not in capped_ids or not entry.get("report"):
+            continue
+        rep = entry["report"]
+        for check in rep.get("checks", []):
+            if check["id"] != "video-file-pointers" or not check.get("findings"):
+                continue
+            reason = ("Previous video-pointer result invalidated: the Hub file listing was "
+                      "truncated at 100,000 entries. Complete-listing verification is pending "
+                      "re-audit; missing files are not established.")
+            check.update(verdict="SKIP", skipped=True, skip_reason=reason,
+                         summary=reason, findings=[],
+                         details={"invalidated": "truncated-hub-listing", "pending_reaudit": True})
+            entry["video_pointer_correction"] = {
+                "at": corrected_at, "scope": "video-file-pointers only",
+                "status": "invalidated-pending-reaudit"}
+            rescore_report_dict(rep)
+            verdict = report_from_dict(rep).verdict
+            rep["verdict"] = "PASS" if verdict == Severity.OK else verdict.name
+            changed.append(entry["id"])
+    return changed
+
+
+def _correction_summary(entries: list[dict]) -> tuple[str, int, int]:
+    corrections = [e["video_pointer_correction"] for e in entries
+                   if e.get("video_pointer_correction")]
+    return (max((c["at"] for c in corrections), default=""),
+            sum(c["status"] == "verified" for c in corrections),
+            sum(c["status"] == "invalidated-pending-reaudit" for c in corrections))
+
+
 def render_index(entries: list[dict], generated: str, harm_table: bool = False, max_episodes: int = 0) -> str:
     engine = engine_version()
+    corrected_at, verified, pending = _correction_summary(entries)
+    correction_note = (
+        f". Targeted video-pointer corrections through {esc(corrected_at)}: "
+        f"{verified} verified, {pending} pending complete re-audit"
+        if corrected_at else ""
+    )
     rows = []
     n_stale = 0
     entries = sorted(
@@ -1058,7 +1103,7 @@ def render_index(entries: list[dict], generated: str, harm_table: bool = False, 
             if stale:
                 why = ("audited by older check logic" if e.get("engine") != engine
                        else f"audited at {r.get('episodes')} episodes - deepening to {max_episodes} queued")
-                checks += f' <span class=dim title="{why}">(stale - re-audit queued)</span>'
+                checks += f' <span class=dim title="{why}">(stale - re-audit needed)</span>'
         else:
             link = esc(e["id"])
             score = '<span class=dim>-</span>'
@@ -1075,8 +1120,10 @@ def render_index(entries: list[dict], generated: str, harm_table: bool = False, 
         "<h1>LeRobot dataset health leaderboard</h1>"
         f"<p class=dim>The most-downloaded LeRobot datasets on Hugging Face, audited nightly by "
         "<a href='https://github.com/vedevpatel/kinema'>kinema</a>. "
-        f"Generated {esc(generated)} by engine <code>{esc(engine)}</code>"
-        + (f"; {n_stale} result(s) are queued for re-audit" if n_stale else "")
+        f"Stored audit snapshot: {esc(generated)}. Current checker engine "
+        f"<code>{esc(engine)}</code>; per-result engine stamps are retained"
+        + correction_note
+        + (f"; {n_stale} result(s) need re-audit (not a running-job status)" if n_stale else "")
         + f". Scores use model <code>{esc(SCORE_MODEL)}</code>: 100 minus 25 per failing "
         "check and a per-check weight for each warning check (10 / 6 / 2 by measured "
         "training harm where the harm table has measured it, hand-tuned otherwise; "
@@ -1085,9 +1132,9 @@ def render_index(entries: list[dict], generated: str, harm_table: bool = False, 
         + ("; <a href='harm-table.html'>harm table</a>" if harm_table else "")
         + "). Ranked by health score; downloads break ties. Rows marked (nested) live "
         "inside a larger repo; their download counts are repo-level. Scores are not "
-        "comparable across score models. Video checks are not run "
-        "here (MP4s are hundreds of MB per camera); run <code>kinema check --video</code> "
-        "locally.</p>"
+        "comparable across score models. Video-pointer checks use repo listings; decoded-video "
+        "coverage varies by result. See individual checks, or run "
+        "<code>kinema check --video</code> locally.</p>"
         "<p id=pager><button onclick=pg(-1)>&larr; Prev</button> "
         "<span id=pglabel></span> "
         "<button onclick=pg(1)>Next &rarr;</button></p>"
@@ -1221,8 +1268,8 @@ def _cap_detail_lists(entries: list) -> list:
 def _write(out: Path, entries: list, generated: str, max_episodes: int = 0) -> None:
     """Atomic writes so a kill mid-run never leaves a corrupt or missing site."""
     data = json.dumps(
-        {"generated": generated, "score_model": SCORE_MODEL,
-         "datasets": _cap_detail_lists(entries)},
+        {"generated": generated, "corrections_updated_at": _correction_summary(entries)[0] or None,
+         "score_model": SCORE_MODEL, "datasets": _cap_detail_lists(entries)},
         separators=(",", ":"), default=str,
     )
     idx = render_index(entries, generated, harm_table=write_harm_table(out), max_episodes=max_episodes)

@@ -253,7 +253,7 @@ def test_index_marks_depth_stale_only_with_flag():
     entries = [_depth_entry(eng)]
     html = lb.render_index(entries, "now", max_episodes=250)
     assert "deepening to 250 queued" in html
-    assert "queued for re-audit" in html
+    assert "need re-audit (not a running-job status)" in html
     html = lb.render_index(entries, "now")  # no flag: nothing queued, nothing marked
     assert "stale - re-audit queued" not in html
 

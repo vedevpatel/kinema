@@ -839,3 +839,30 @@ def test_cap_preserves_waiver_evidence_and_input():
     assert report_from_dict(capped[0]["report"]).score == rep["score"]
     rescore_report_dict(capped[0]["report"])
     assert capped[0]["report"]["score"] == rep["score"]
+
+
+@pytest.mark.parametrize("severity", ["INFO", "WARN", "FAIL"])
+def test_invalidate_capped_video_findings_all_severities(severity):
+    import copy
+
+    lb = _load_leaderboard()
+    report = {"source": "org/capped", "checks": [
+        {"id": "video-file-pointers", "title": "video", "verdict": severity,
+         "findings": [{"severity": severity, "message": "missing", "details": {}}]}]}
+    entries = [{"id": "org/capped", "report": report},
+               {"id": "org/real", "report": copy.deepcopy(report)}]
+    untouched = copy.deepcopy(entries[1])
+    assert lb.invalidate_capped_video_results(entries, {"org/capped"}, "2026-11-18T20:00:00Z") == ["org/capped"]
+    assert report["checks"][0]["verdict"] == "SKIP"
+    assert entries[1] == untouched
+    assert not lb.invalidate_capped_video_results(entries, {"org/capped"}, "later")
+    assert lb._correction_summary(entries) == ("2026-11-18T20:00:00Z", 0, 1)
+
+
+def test_index_labels_snapshot_and_targeted_corrections_separately():
+    lb = _load_leaderboard()
+    entries = [{"id": "org/a", "downloads": 0, "status": "gated", "video_pointer_correction": {
+        "at": "2026-11-18T20:00:00Z", "status": "invalidated-pending-reaudit"}}]
+    html = lb.render_index(entries, "2026-11-18 02:27 UTC")
+    assert "Stored audit snapshot: 2026-11-18 02:27 UTC" in html
+    assert "corrections through 2026-11-18T20:00:00Z: 0 verified, 1 pending" in html
