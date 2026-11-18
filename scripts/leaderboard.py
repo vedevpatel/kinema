@@ -203,7 +203,8 @@ RLDS_BUCKETS = [  # precedence order: the first bucket holding REAL data wins
     ("gdm-robotics-open-x-embodiment", ""),  # Open-X-official corpus
     ("gresearch", "robotics/"),  # Google Research mirror + extra robot sets
 ]
-_RLDS_LANE_MAX_CALLS = 600  # GCS JSON-API calls per bucket
+_RLDS_LANE_MAX_CALLS = 2500  # GCS JSON-API calls per bucket (gresearch's shard
+# listings paginate: ~17 calls/dataset; 600 starved the pass at the d's)
 
 
 def probe_rlds_lane() -> list[dict]:

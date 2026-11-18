@@ -678,3 +678,37 @@ def test_audit_rlds_uses_the_rows_bucket(monkeypatch, tmp_path):
     except ValueError:
         pass
     assert seen == [gresearch, gdm]
+
+
+def test_probe_rlds_lane_budget_breaks_mid_pass(monkeypatch):
+    # shard listings paginate, so a fat bucket burns calls per dataset; the
+    # lane must stop at the budget and board what it has (2026-11-17: 600
+    # starved gresearch at the d's - 43 datasets never boarded)
+    lb = _load_leaderboard()
+    gdm, gresearch = lb.RLDS_BUCKETS[0][0], lb.RLDS_BUCKETS[1][0]
+    import kinema.rlds as rlds_mod
+
+    class FatClient:
+        def __init__(self, bucket):
+            self.bucket = bucket
+            self.calls = 0
+
+        def list(self, prefix="", delimiter=""):
+            self.calls += 1
+            if self.bucket == gdm:
+                return ([prefix + "alpha/"] if not delimiter else [prefix + "alpha/"]), []
+            return [prefix + n + "/" for n in ["g%02d" % i for i in range(50)]], []
+
+    class FatProbe:
+        @classmethod
+        def probe(cls, client, p):
+            client.calls += 200  # paginated shard listing
+            return _FakeRldsDs()
+
+    monkeypatch.setattr(rlds_mod, "GcsClient", FatClient)
+    monkeypatch.setattr(rlds_mod, "RldsDataset", FatProbe)
+    rows = lb.probe_rlds_lane()
+    gre = [r for r in rows if r["rlds_bucket"] == gresearch]
+    assert 0 < len(gre) < 50  # stopped at the budget, kept what it probed
+    assert len(gre) == 13  # 1 + 200*13 = 2601 > 2500; the tripping row boards
+    assert [r["id"] for r in rows if r["rlds_bucket"] == gdm] == ["rlds/alpha"]
