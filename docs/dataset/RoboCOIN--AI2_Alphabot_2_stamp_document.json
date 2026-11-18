@@ -6,45 +6,37 @@
   "fps": 30.0,
   "truncated": true,
   "video_audited": 5,
-  "score": 80,
+  "score": 90,
   "score_model": "tiered-v2",
   "verdict": "WARN",
   "checks": [
     {
       "id": "stats-drift",
       "title": "Stats drift (stored normalization stats vs actual data)",
-      "verdict": "WARN",
+      "verdict": "INFO",
       "weight": 10,
       "weight_basis": "placeholder",
-      "summary": "worst error 0.5x the FAIL threshold",
+      "summary": "data matches per-episode stats of the loaded episodes (worst 0% of the FAIL threshold)",
       "skipped": false,
       "skip_reason": "",
       "details": {},
       "findings": [
         {
-          "severity": "WARN",
-          "message": "observation.state.mean: per-episode stats is off by 0.24 std devs on dim 10 (stored -1.72736, data (40 loaded episodes) -1.72736). Normalization at training and inference will disagree.",
+          "severity": "INFO",
+          "message": "observation.state: 2 near-constant dim(s) whose stored stats disagree with the data at their own tiny scale - converter f32 noise, inert for normalization (not scored)",
           "episode_index": null,
           "details": {
             "feature": "observation.state",
-            "stat": "mean",
-            "dim": 10,
-            "error": 0.24264514853622038,
-            "unit": "std devs",
-            "reference": "per-episode stats"
+            "dims": 2
           }
         },
         {
-          "severity": "WARN",
-          "message": "action.mean: per-episode stats is off by 0.24 std devs on dim 10 (stored -1.72736, data (40 loaded episodes) -1.72736). Normalization at training and inference will disagree.",
+          "severity": "INFO",
+          "message": "action: 2 near-constant dim(s) whose stored stats disagree with the data at their own tiny scale - converter f32 noise, inert for normalization (not scored)",
           "episode_index": null,
           "details": {
             "feature": "action",
-            "stat": "mean",
-            "dim": 10,
-            "error": 0.24264514853622038,
-            "unit": "std devs",
-            "reference": "per-episode stats"
+            "dims": 2
           }
         }
       ],
@@ -107,7 +99,7 @@
             "offset_fraction": -0.00013550468539174078,
             "scale_error": 1.7789582866400465e-05,
             "r2": 3.2467082455855945e-06,
-            "line_vs_step": 0.9982898879282536,
+            "line_vs_step": 0.9982917819205722,
             "still_frames": 6296
           },
           "15": {
@@ -123,7 +115,7 @@
             "offset_fraction": 0.0002510003569217901,
             "scale_error": 0.0007862529185749871,
             "r2": 0.006028240027464382,
-            "line_vs_step": 0.9947847402068558,
+            "line_vs_step": 0.994784740206856,
             "still_frames": 6276
           },
           "17": {
@@ -139,7 +131,7 @@
             "offset_fraction": 0.00031098883903240735,
             "scale_error": -0.00029457392050556686,
             "r2": 0.000796208799842324,
-            "line_vs_step": 0.9973475776189469,
+            "line_vs_step": 0.9973445575354137,
             "still_frames": 6285
           },
           "19": {
@@ -155,7 +147,7 @@
             "offset_fraction": -0.0006266104297883494,
             "scale_error": 0.0002471978980487956,
             "r2": 0.0001274173393485123,
-            "line_vs_step": 0.9930538889305449,
+            "line_vs_step": 0.993055656621855,
             "still_frames": 6271
           },
           "21": {
@@ -171,7 +163,7 @@
             "offset_fraction": 5.011554542223477e-05,
             "scale_error": -0.00018916591776726985,
             "r2": 0.00015460890170393427,
-            "line_vs_step": 0.9987980848224779,
+            "line_vs_step": 0.998798084822478,
             "still_frames": 6273
           },
           "23": {
@@ -179,7 +171,7 @@
             "offset_fraction": -0.00039330529153741535,
             "scale_error": -8.864606943655514e-05,
             "r2": 2.8996931492275557e-05,
-            "line_vs_step": 0.9985769299961008,
+            "line_vs_step": 0.9985712423662857,
             "still_frames": 6291
           },
           "24": {
@@ -187,7 +179,7 @@
             "offset_fraction": -7.479669957744398e-05,
             "scale_error": -0.00039519787379635745,
             "r2": 0.00039534159822884885,
-            "line_vs_step": 0.9980313440669834,
+            "line_vs_step": 0.9980450160535156,
             "still_frames": 6303
           },
           "25": {
@@ -211,7 +203,7 @@
             "offset_fraction": 3.512397284316375e-08,
             "scale_error": -3.828831767310732e-09,
             "r2": 2.7741685504345526e-08,
-            "line_vs_step": 0.9992842616174618,
+            "line_vs_step": 0.9992835158726927,
             "still_frames": 12766
           },
           "30": {
@@ -243,7 +235,7 @@
             "offset_fraction": -2.280774629322387e-05,
             "scale_error": -0.007299732784697161,
             "r2": 0.002985950867506193,
-            "line_vs_step": 1.0025332706779486,
+            "line_vs_step": 1.002533127916732,
             "still_frames": 11154
           },
           "26": {
@@ -950,6 +942,22 @@
       "skipped": true,
       "skip_reason": "v2.x layout: one parquet per episode, no shard pointers to check",
       "details": {},
+      "findings": [],
+      "charge": 8
+    },
+    {
+      "id": "video-file-pointers",
+      "title": "Video file pointers (metadata vs repo contents)",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "all 3948 metadata-referenced video files exist (the repo file listing)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "referenced": 3948,
+        "missing": 0
+      },
       "findings": [],
       "charge": 8
     },
