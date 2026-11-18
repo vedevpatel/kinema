@@ -866,3 +866,45 @@ def test_index_labels_snapshot_and_targeted_corrections_separately():
     html = lb.render_index(entries, "2026-11-18 02:27 UTC")
     assert "Stored audit snapshot: 2026-11-18 02:27 UTC" in html
     assert "corrections through 2026-11-18T20:00:00Z: 0 verified, 1 pending" in html
+
+
+def test_time_budget_includes_discovery_before_first_submission(tmp_path, monkeypatch):
+    import time
+
+    lb = _load_leaderboard()
+    clock = [0.0]
+    monkeypatch.setattr(time, "monotonic", lambda: clock[0])
+
+    def discover(*args, **kwargs):
+        clock[0] = 11.0
+        return [_d(1)]
+
+    monkeypatch.setattr(lb, "find_lerobot_datasets", discover)
+    calls = []
+    monkeypatch.setattr(lb, "audit_one", lambda *a, **k: calls.append(a))
+    monkeypatch.setattr(sys, "argv", ["leaderboard", "--out", str(tmp_path), "--time-budget", "10"])
+    assert lb.main() == 0
+    assert calls == []
+
+
+def test_nested_sample_lists_only_target_prefix(monkeypatch, tmp_path):
+    import types
+
+    lb = _load_leaderboard()
+    observed = []
+
+    def tree(*a, **k):
+        observed.append(k)
+        return iter([types.SimpleNamespace(path="task/meta/info.json", size=1),
+                     types.SimpleNamespace(path="task/data/file-0.parquet", size=1)])
+
+    monkeypatch.setattr("huggingface_hub.list_repo_tree", tree)
+    def download(rid, name, dest):
+        p = dest / name
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("{}")
+    monkeypatch.setattr(lb, "_hub_download", download)
+    _, sizes = lb.download_sample("org/huge//task", 100, tmp_path)
+    assert observed[0]["path_in_repo"] == "task"
+    assert observed[0]["recursive"] is True
+    assert "data/file-0.parquet" in sizes

@@ -735,7 +735,8 @@ def download_sample(repo_id: str, cap_bytes: int, dest: Path) -> tuple[Path, dic
     # (13 false FAILs on the 2026-11-18 board) and skewed shard sampling
     sib = [
         (f.path, f.size or 0)
-        for f in list_repo_tree(base, repo_type="dataset", recursive=True)
+        for f in list_repo_tree(base, repo_type="dataset", recursive=True,
+                                path_in_repo=prefix or None)
         if hasattr(f, "size")  # RepoFile, not RepoFolder
     ]
     if prefix:
@@ -1337,7 +1338,9 @@ def rescore_site(out: Path) -> int:
 
 def main() -> int:
     import socket
+    import time
 
+    started = time.monotonic()  # total soft budget includes discovery and resume
     socket.setdefaulttimeout(150)  # no download op may hang the whole run
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=50)
@@ -1429,7 +1432,6 @@ def main() -> int:
             print(f"rescored stored results under {SCORE_MODEL}: {n_moved} score(s) changed")
     stale_ids = {e["id"] for e in entries if e["id"] not in done_ids}
 
-    import time
     from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 
     def process(d):
@@ -1457,7 +1459,6 @@ def main() -> int:
             entry["status"] = _classify_reason(entry["reason"])
         return entry
 
-    started = time.monotonic()
     todo = [d for d in datasets if d["id"] not in done_ids]
     todo.sort(key=lambda d: d["id"] not in stale_ids)  # stale results first
     max_pending = max(1, args.workers) * 2
@@ -1479,6 +1480,8 @@ def main() -> int:
         it = iter(todo)
 
         def submit_next() -> bool:
+            if args.time_budget and time.monotonic() - started >= args.time_budget:
+                return False
             try:
                 d = next(it)
             except StopIteration:
@@ -1487,7 +1490,8 @@ def main() -> int:
             return True
 
         for _ in range(min(len(todo), max_pending)):
-            submit_next()
+            if not submit_next():
+                break
         while pending:
             if args.time_budget and time.monotonic() - started > args.time_budget:
                 print("time budget reached; letting in-flight audits finish", flush=True)
