@@ -29,7 +29,7 @@ Works on LeRobot **v3.0 and v2.1** layouts, local directories, `.zip`s, and Hub 
 `kinema check lerobot/pusht --policy smolvla`:
 
 ```
-lerobot/pusht  health score 79/100
+lerobot/pusht  health score 90/100
 format v3.0 | 206 episodes | 25650 frames | fps 10.0
 
  check                 verdict  summary
@@ -42,16 +42,16 @@ format v3.0 | 206 episodes | 25650 frames | fps 10.0
  action-saturation     PASS     no continuous action dim pinned at a limit above 5% (2 dims checked)
  nan-and-normalization PASS     no NaN/Inf; all dims have usable variance
  duplicate-and-leakage PASS     no exact, partial or near duplicates
- outlier-episodes      WARN     2 episode(s) to review, 23 mild, of 206; worst: [107, 159, 15, 97, ...]
+ outlier-episodes      INFO     0 episode(s) to review, 25 mild, of 206; worst: [15, 97, 107, 116, 159, ...]
  embedded-images       PASS     no image features declared
  camera-coverage       PASS     1 camera(s) over 206 episodes; 0 missing segments
  episode-file-pointers PASS     every shard pointer matches its file's contents (206 episodes, 1 shard(s))
  task-strings          PASS     206 episodes, 1 tasks in meta/tasks; 0 finding(s)
- reward-done           WARN     done is True before the last frame in 206 episodes - the trajectory continues after termination
+ reward-done           INFO     reward and done present
  visual-quality        SKIP     pass --video to run (downloads MP4s; needs the video extra)
  deployment-readiness  WARN     0 blocker(s), 1 warning(s) for smolvla
 
-verdict: WARN (0 fail, 4 warn, 23 info)
+verdict: WARN (0 fail, 1 warn, 27 info)
 ```
 
 Exit code is `1` on any FAIL (`--fail-on warn` to also gate on warnings), so it drops
@@ -124,8 +124,8 @@ layer on top of the same checks. Point your MCP client at it:
 }
 ```
 
-(The plain `uvx kinema mcp` form works once the package is on PyPI - a planned
-milestone, not done yet. Until then a `pip install -e .` checkout works too:
+(The plain `uvx kinema mcp` form works with the published PyPI package. A
+`pip install -e .` checkout works too:
 `"command": "kinema", "args": ["mcp"]`.)
 
 Three tools:
@@ -201,8 +201,8 @@ camera-coverage reads per-episode video segments from the metadata where the
 format records them (v3); on v2.1 datasets it skips on the board rather than
 count videos a sampled audit did not fetch as missing - a full local
 `kinema check` still measures coverage from disk.
-Sampled and full scans can score differently - for example pusht scores 89 on the
-board and 79 on a full local scan, because a 50-episode sample's recomputed stats
+Sampled and full scans can score differently - for example pusht scores 86 on the
+board and 100 on a full local scan, because a 50-episode sample's recomputed stats
 are compared against stats.json values computed over all 206 episodes.
 
 ## Try it on the demo dataset
