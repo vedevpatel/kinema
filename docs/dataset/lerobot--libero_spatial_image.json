@@ -1,1 +1,538 @@
-{"source":"lerobot/libero_spatial_image","format_version":"v3.0","episodes":14,"frames":1617,"fps":10.0,"truncated":true,"video_audited":5,"score":94,"score_model":"tiered-v3","verdict":"WARN","checks":[{"id":"stats-drift","title":"Stats drift (stored normalization stats vs actual data)","verdict":"PASS","weight":6,"weight_basis":"measured","summary":"data matches per-episode stats of the loaded episodes (worst 0% of the FAIL threshold)","skipped":false,"skip_reason":"","details":{},"findings":[],"charge":0},{"id":"timestamp-grid","title":"Timestamp grid (spacing, monotonic, start at 0)","verdict":"PASS","weight":10,"weight_basis":"placeholder","summary":"evenly spaced at 10 fps and monotonic","skipped":false,"skip_reason":"","details":{},"findings":[],"charge":0},{"id":"dropped-frames","title":"Dropped / duplicated frames","verdict":"INFO","weight":2,"weight_basis":"measured","summary":"frame_index contiguous; episode lengths match the data","skipped":false,"skip_reason":"","details":{},"findings":[{"severity":"INFO","message":"no per-episode video segments in the metadata (v2.x or no videos): video frame counts not cross-checked","episode_index":null,"details":{}}],"charge":0},{"id":"calibration-drift","title":"Calibration drift (action vs state on still frames)","verdict":"INFO","weight":10,"weight_basis":"measured","summary":"no position-command dims to compare; not compared: 1 gripper in different units; 3 delta-command dim(s) checked for scale agreement","skipped":false,"skip_reason":"","details":{"per_joint":{"0":{"joint":0,"kind":"delta_scale","step_ratio":0.010579356432162896,"r2":0.8877265553305084,"frames":1603},"1":{"joint":1,"kind":"delta_scale","step_ratio":0.012362443552659924,"r2":0.9443372503973746,"frames":1603},"2":{"joint":2,"kind":"delta_scale","step_ratio":0.011077742983539671,"r2":0.9108316513550507,"frames":1603}},"compared_joints":[],"compared_grippers":[],"compared_deltas":[0,1,2],"excluded_joints":{"6":"gripper in different units"}},"findings":[{"severity":"INFO","message":"delta command 0 (x): measured state steps are 0.01x the stored commands (R^2 0.89) - normalization or controller scaling may be intentional; no common-unit contract is established, so this ratio alone is not a conversion-error verdict","episode_index":null,"details":{"joint":0,"kind":"delta_scale","step_ratio":0.010579356432162896,"r2":0.8877265553305084,"frames":1603}},{"severity":"INFO","message":"delta command 1 (y): measured state steps are 0.01x the stored commands (R^2 0.94) - normalization or controller scaling may be intentional; no common-unit contract is established, so this ratio alone is not a conversion-error verdict","episode_index":null,"details":{"joint":1,"kind":"delta_scale","step_ratio":0.012362443552659924,"r2":0.9443372503973746,"frames":1603}},{"severity":"INFO","message":"delta command 2 (z): measured state steps are 0.01x the stored commands (R^2 0.91) - normalization or controller scaling may be intentional; no common-unit contract is established, so this ratio alone is not a conversion-error verdict","episode_index":null,"details":{"joint":2,"kind":"delta_scale","step_ratio":0.011077742983539671,"r2":0.9108316513550507,"frames":1603}}],"charge":0},{"id":"idle-segments","title":"Idle segments (policy learns to do nothing)","verdict":"PASS","weight":6,"weight_basis":"measured","summary":"no episode starts idle or idles >= 30%","skipped":false,"skip_reason":"","details":{},"findings":[],"charge":0},{"id":"stuck-actuator","title":"Stuck actuators (joints that never move)","verdict":"PASS","weight":10,"weight_basis":"measured","summary":"every joint moves wherever the dataset uses it","skipped":false,"skip_reason":"","details":{},"findings":[],"charge":0},{"id":"action-saturation","title":"Action saturation (commands clipped at the limits)","verdict":"WARN","weight":6,"weight_basis":"measured","summary":"2 dim(s) saturated","skipped":false,"skip_reason":"","details":{},"findings":[{"severity":"WARN","message":"action dim 0 (x): 6.8% of commands during motion are pinned at exactly its max (0.9375) - clipped commands the policy will imitate","episode_index":null,"details":{"dim":0,"saturated_fraction":0.06762680025046963,"side":"max"}},{"severity":"WARN","message":"action dim 2 (z): 7.5% of commands during motion are pinned at exactly its min (-0.9375) - clipped commands the policy will imitate","episode_index":null,"details":{"dim":2,"saturated_fraction":0.07451471509079524,"side":"min"}}],"charge":6},{"id":"nan-and-normalization","title":"NaN / Inf and normalization hazards","verdict":"PASS","weight":10,"weight_basis":"placeholder","summary":"no NaN/Inf; all dims have usable variance","skipped":false,"skip_reason":"","details":{},"findings":[],"charge":0},{"id":"duplicate-and-leakage","title":"Duplicate episodes / train-eval leakage","verdict":"PASS","weight":2,"weight_basis":"measured","summary":"no exact, partial or near duplicates","skipped":false,"skip_reason":"","details":{},"findings":[],"charge":0},{"id":"outlier-episodes","title":"Outlier episodes (duration, jerk, velocity, static, end-pose)","verdict":"INFO","weight":6,"weight_basis":"measured","summary":"0 episode(s) to review, 1 mild, of 14; worst: [14]; duration/end pose skipped for 14 episodes whose task has < 5 episodes","skipped":false,"skip_reason":"","details":{"metrics":{"duration_s":{"0":null,"1":null,"2":null,"3":null,"4":null,"5":null,"6":null,"14":null,"15":null,"16":null,"17":null,"18":null,"19":null,"20":null},"p95_jerk":{"0":null,"1":null,"2":null,"3":null,"4":null,"5":null,"6":null,"14":null,"15":null,"16":null,"17":null,"18":null,"19":null,"20":null},"peak_velocity":{"0":null,"1":null,"2":null,"3":null,"4":null,"5":null,"6":null,"14":null,"15":null,"16":null,"17":null,"18":null,"19":null,"20":null},"velocity_spike":{"0":1.0620791597933934,"1":0.88930933774864,"2":1.6204505680284615,"3":1.137538912578411,"4":1.7222222383191557,"5":1.164205047691674,"6":1.286462055090756,"14":2.1720242835322847,"15":1.2116678676151602,"16":1.5258038211702951,"17":1.0425715654715841,"18":1.2306102724000605,"19":1.2116677427886944,"20":1.0051992957307858},"static_fraction":{"0":0.009174311926605505,"1":0.0,"2":0.0,"3":0.0,"4":0.0,"5":0.0,"6":0.016260162601626018,"14":0.007874015748031496,"15":0.0,"16":0.0,"17":0.01,"18":0.0,"19":0.0,"20":0.009009009009009009},"end_pose_deviation":{"0":null,"1":null,"2":null,"3":null,"4":null,"5":null,"6":null,"14":null,"15":null,"16":null,"17":null,"18":null,"19":null,"20":null}},"flagged":{"14":["velocity_spike"]}},"findings":[{"severity":"INFO","message":"episode 14: IQR outlier on velocity_spike","episode_index":14,"details":{"metrics":["velocity_spike"],"far_out":false}}],"charge":0},{"id":"embedded-images","title":"Embedded images in the parquet shards","verdict":"INFO","weight":8,"weight_basis":"placeholder","summary":"2 embedded image feature(s)","skipped":false,"skip_reason":"","details":{},"findings":[{"severity":"INFO","message":"2 image feature(s) embedded in the parquet shards (observation.images.image, observation.images.wrist_image): shards are big and every frame decodes on read - the video layout (dtype \"video\", MP4 chunks) streams far better for training","episode_index":null,"details":{"features":["observation.images.image","observation.images.wrist_image"]}}],"charge":0},{"id":"camera-coverage","title":"Per-episode camera coverage","verdict":"SKIP","weight":8,"weight_basis":"placeholder","summary":"","skipped":true,"skip_reason":"no video cameras declared","details":{},"findings":[],"charge":0},{"id":"episode-file-pointers","title":"Episode file pointers (v3 shard metadata)","verdict":"PASS","weight":8,"weight_basis":"placeholder","summary":"every shard pointer matches its file's contents (checked 14 of 432 catalogued episodes against 2 local shard(s))","skipped":false,"skip_reason":"","details":{"broken":[],"judged":14,"catalogued":432,"local_shards":2},"findings":[],"charge":0},{"id":"video-file-pointers","title":"Video file pointers (metadata vs repo contents)","verdict":"SKIP","weight":8,"weight_basis":"placeholder","summary":"","skipped":true,"skip_reason":"no video cameras declared","details":{},"findings":[],"charge":0},{"id":"task-strings","title":"Task strings","verdict":"PASS","weight":8,"weight_basis":"placeholder","summary":"14 episodes, 10 tasks in meta/tasks; 0 finding(s)","skipped":false,"skip_reason":"","details":{},"findings":[],"charge":0},{"id":"reward-done","title":"Reward / done fields","verdict":"SKIP","weight":8,"weight_basis":"placeholder","summary":"","skipped":true,"skip_reason":"no reward/done fields (position-control datasets rarely have them)","details":{},"findings":[],"charge":0},{"id":"visual-quality","title":"Visual quality (blur, lighting)","verdict":"SKIP","weight":6,"weight_basis":"placeholder","summary":"","skipped":true,"skip_reason":"pass --video to run (downloads MP4s; needs the video extra)","details":{},"findings":[],"charge":0},{"id":"deployment-readiness","title":"Deployment readiness (would this dataset serve a policy?)","verdict":"PASS","weight":10,"weight_basis":"placeholder","summary":"no deployment blockers found","skipped":false,"skip_reason":"","details":{},"findings":[],"charge":0},{"id":"stats-f32-fingerprint","title":"Stats f32 accumulation fingerprint","verdict":"INFO","weight":8,"weight_basis":"placeholder","summary":"per-episode stats carry naive float32 accumulation (10 episode(s))","skipped":false,"skip_reason":"","details":{},"findings":[{"severity":"INFO","message":"per-episode stats reproduce naive float32 accumulation bitwise (10 sampled episode(s), observation.state dims [0, 1, 2, 3, 4]..., action dims [0, 1, 2, 3, 4]...): the converter's stats are accumulation-rounded, not data-exact; constant channels get a fabricated std and a DC-offset mean","episode_index":null,"details":{"episodes":{"observation.state":[0,3,6,16,20],"action":[0,3,6,16,20]},"dims":{"observation.state":[0,1,2,3,4,5,6,7],"action":[0,1,2,3,4,5,6]}}}],"charge":0}]}
+{
+  "source": "lerobot/libero_spatial_image",
+  "format_version": "v3.0",
+  "episodes": 14,
+  "frames": 1617,
+  "fps": 10.0,
+  "truncated": true,
+  "video_audited": 5,
+  "score": 94,
+  "score_model": "tiered-v3",
+  "verdict": "WARN",
+  "checks": [
+    {
+      "id": "stats-drift",
+      "title": "Stats drift (stored normalization stats vs actual data)",
+      "verdict": "PASS",
+      "weight": 6,
+      "weight_basis": "measured",
+      "summary": "data matches per-episode stats of the loaded episodes (worst 0% of the FAIL threshold)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "timestamp-grid",
+      "title": "Timestamp grid (spacing, monotonic, start at 0)",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "evenly spaced at 10 fps and monotonic",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "dropped-frames",
+      "title": "Dropped / duplicated frames",
+      "verdict": "INFO",
+      "weight": 2,
+      "weight_basis": "measured",
+      "summary": "frame_index contiguous; episode lengths match the data",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "no per-episode video segments in the metadata (v2.x or no videos): video frame counts not cross-checked",
+          "episode_index": null,
+          "details": {}
+        }
+      ],
+      "charge": 0
+    },
+    {
+      "id": "calibration-drift",
+      "title": "Calibration drift (action vs state on still frames)",
+      "verdict": "INFO",
+      "weight": 10,
+      "weight_basis": "measured",
+      "summary": "no position-command dims to compare; not compared: 1 gripper in different units; 3 delta-command dim(s) checked for scale agreement",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "per_joint": {
+          "0": {
+            "joint": 0,
+            "kind": "delta_scale",
+            "step_ratio": 0.010579356432162896,
+            "r2": 0.8877265553305084,
+            "frames": 1603
+          },
+          "1": {
+            "joint": 1,
+            "kind": "delta_scale",
+            "step_ratio": 0.012362443552659924,
+            "r2": 0.9443372503973746,
+            "frames": 1603
+          },
+          "2": {
+            "joint": 2,
+            "kind": "delta_scale",
+            "step_ratio": 0.011077742983539671,
+            "r2": 0.9108316513550507,
+            "frames": 1603
+          }
+        },
+        "compared_joints": [],
+        "compared_grippers": [],
+        "compared_deltas": [
+          0,
+          1,
+          2
+        ],
+        "excluded_joints": {
+          "6": "gripper in different units"
+        }
+      },
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "delta command 0 (x): measured state steps are 0.01x the stored commands (R^2 0.89) - normalization or controller scaling may be intentional; no common-unit contract is established, so this ratio alone is not a conversion-error verdict",
+          "episode_index": null,
+          "details": {
+            "joint": 0,
+            "kind": "delta_scale",
+            "step_ratio": 0.010579356432162896,
+            "r2": 0.8877265553305084,
+            "frames": 1603
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "delta command 1 (y): measured state steps are 0.01x the stored commands (R^2 0.94) - normalization or controller scaling may be intentional; no common-unit contract is established, so this ratio alone is not a conversion-error verdict",
+          "episode_index": null,
+          "details": {
+            "joint": 1,
+            "kind": "delta_scale",
+            "step_ratio": 0.012362443552659924,
+            "r2": 0.9443372503973746,
+            "frames": 1603
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "delta command 2 (z): measured state steps are 0.01x the stored commands (R^2 0.91) - normalization or controller scaling may be intentional; no common-unit contract is established, so this ratio alone is not a conversion-error verdict",
+          "episode_index": null,
+          "details": {
+            "joint": 2,
+            "kind": "delta_scale",
+            "step_ratio": 0.011077742983539671,
+            "r2": 0.9108316513550507,
+            "frames": 1603
+          }
+        }
+      ],
+      "charge": 0
+    },
+    {
+      "id": "idle-segments",
+      "title": "Idle segments (policy learns to do nothing)",
+      "verdict": "PASS",
+      "weight": 6,
+      "weight_basis": "measured",
+      "summary": "no episode starts idle or idles >= 30%",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "stuck-actuator",
+      "title": "Stuck actuators (joints that never move)",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "measured",
+      "summary": "every joint moves wherever the dataset uses it",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "action-saturation",
+      "title": "Action saturation (commands clipped at the limits)",
+      "verdict": "WARN",
+      "weight": 6,
+      "weight_basis": "measured",
+      "summary": "2 dim(s) saturated",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "WARN",
+          "message": "action dim 0 (x): 6.8% of commands during motion are pinned at exactly its max (0.9375) - clipped commands the policy will imitate",
+          "episode_index": null,
+          "details": {
+            "dim": 0,
+            "saturated_fraction": 0.06762680025046963,
+            "side": "max"
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "action dim 2 (z): 7.5% of commands during motion are pinned at exactly its min (-0.9375) - clipped commands the policy will imitate",
+          "episode_index": null,
+          "details": {
+            "dim": 2,
+            "saturated_fraction": 0.07451471509079524,
+            "side": "min"
+          }
+        }
+      ],
+      "charge": 6
+    },
+    {
+      "id": "nan-and-normalization",
+      "title": "NaN / Inf and normalization hazards",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "no NaN/Inf; all dims have usable variance",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "duplicate-and-leakage",
+      "title": "Duplicate episodes / train-eval leakage",
+      "verdict": "PASS",
+      "weight": 2,
+      "weight_basis": "measured",
+      "summary": "no exact, partial or near duplicates",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "outlier-episodes",
+      "title": "Outlier episodes (duration, jerk, velocity, static, end-pose)",
+      "verdict": "INFO",
+      "weight": 6,
+      "weight_basis": "measured",
+      "summary": "0 episode(s) to review, 1 mild, of 14; worst: [14]; duration/end pose skipped for 14 episodes whose task has < 5 episodes",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "metrics": {
+          "duration_s": {
+            "0": null,
+            "1": null,
+            "2": null,
+            "3": null,
+            "4": null,
+            "5": null,
+            "6": null,
+            "14": null,
+            "15": null,
+            "16": null,
+            "17": null,
+            "18": null,
+            "19": null,
+            "20": null
+          },
+          "p95_jerk": {
+            "0": null,
+            "1": null,
+            "2": null,
+            "3": null,
+            "4": null,
+            "5": null,
+            "6": null,
+            "14": null,
+            "15": null,
+            "16": null,
+            "17": null,
+            "18": null,
+            "19": null,
+            "20": null
+          },
+          "peak_velocity": {
+            "0": null,
+            "1": null,
+            "2": null,
+            "3": null,
+            "4": null,
+            "5": null,
+            "6": null,
+            "14": null,
+            "15": null,
+            "16": null,
+            "17": null,
+            "18": null,
+            "19": null,
+            "20": null
+          },
+          "velocity_spike": {
+            "0": 1.0620791597933934,
+            "1": 0.88930933774864,
+            "2": 1.6204505680284615,
+            "3": 1.137538912578411,
+            "4": 1.7222222383191557,
+            "5": 1.164205047691674,
+            "6": 1.286462055090756,
+            "14": 2.1720242835322847,
+            "15": 1.2116678676151602,
+            "16": 1.5258038211702951,
+            "17": 1.0425715654715841,
+            "18": 1.2306102724000605,
+            "19": 1.2116677427886944,
+            "20": 1.0051992957307858
+          },
+          "static_fraction": {
+            "0": 0.009174311926605505,
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0,
+            "4": 0.0,
+            "5": 0.0,
+            "6": 0.016260162601626018,
+            "14": 0.007874015748031496,
+            "15": 0.0,
+            "16": 0.0,
+            "17": 0.01,
+            "18": 0.0,
+            "19": 0.0,
+            "20": 0.009009009009009009
+          },
+          "end_pose_deviation": {
+            "0": null,
+            "1": null,
+            "2": null,
+            "3": null,
+            "4": null,
+            "5": null,
+            "6": null,
+            "14": null,
+            "15": null,
+            "16": null,
+            "17": null,
+            "18": null,
+            "19": null,
+            "20": null
+          }
+        },
+        "flagged": {
+          "14": [
+            "velocity_spike"
+          ]
+        }
+      },
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "episode 14: IQR outlier on velocity_spike",
+          "episode_index": 14,
+          "details": {
+            "metrics": [
+              "velocity_spike"
+            ],
+            "far_out": false
+          }
+        }
+      ],
+      "charge": 0
+    },
+    {
+      "id": "embedded-images",
+      "title": "Embedded images in the parquet shards",
+      "verdict": "INFO",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "2 embedded image feature(s)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "2 image feature(s) embedded in the parquet shards (observation.images.image, observation.images.wrist_image): shards are big and every frame decodes on read - the video layout (dtype \"video\", MP4 chunks) streams far better for training",
+          "episode_index": null,
+          "details": {
+            "features": [
+              "observation.images.image",
+              "observation.images.wrist_image"
+            ]
+          }
+        }
+      ],
+      "charge": 0
+    },
+    {
+      "id": "camera-coverage",
+      "title": "Per-episode camera coverage",
+      "verdict": "SKIP",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "no video cameras declared",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "episode-file-pointers",
+      "title": "Episode file pointers (v3 shard metadata)",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "every shard pointer matches its file's contents (checked 14 of 432 catalogued episodes against 2 local shard(s))",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "broken": [],
+        "judged": 14,
+        "catalogued": 432,
+        "local_shards": 2
+      },
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "video-file-pointers",
+      "title": "Video file pointers (metadata vs repo contents)",
+      "verdict": "SKIP",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "no video cameras declared",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "task-strings",
+      "title": "Task strings",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "14 episodes, 10 tasks in meta/tasks; 0 finding(s)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "reward-done",
+      "title": "Reward / done fields",
+      "verdict": "SKIP",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "no reward/done fields (position-control datasets rarely have them)",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "visual-quality",
+      "title": "Visual quality (blur, lighting)",
+      "verdict": "SKIP",
+      "weight": 6,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "pass --video to run (downloads MP4s; needs the video extra)",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "deployment-readiness",
+      "title": "Deployment readiness (would this dataset serve a policy?)",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "no deployment blockers found",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "stats-f32-fingerprint",
+      "title": "Stats f32 accumulation fingerprint",
+      "verdict": "INFO",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "per-episode stats carry naive float32 accumulation (10 episode(s))",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "per-episode stats reproduce naive float32 accumulation bitwise (10 sampled episode(s), observation.state dims [0, 1, 2, 3, 4]..., action dims [0, 1, 2, 3, 4]...): the converter's stats are accumulation-rounded, not data-exact; constant channels get a fabricated std and a DC-offset mean",
+          "episode_index": null,
+          "details": {
+            "episodes": {
+              "observation.state": [
+                0,
+                3,
+                6,
+                16,
+                20
+              ],
+              "action": [
+                0,
+                3,
+                6,
+                16,
+                20
+              ]
+            },
+            "dims": {
+              "observation.state": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ],
+              "action": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6
+              ]
+            }
+          }
+        }
+      ],
+      "charge": 0
+    }
+  ]
+}
