@@ -210,3 +210,51 @@ def test_zero_row_episodes_do_not_blame_correct_episode_stats(tmp_path):
     res = run("stats-drift", ctx)
     assert not any(f.severity >= Severity.WARN for f in res.findings), [f.message for f in res.findings]
     assert run("dropped-frames", ctx).verdict == Severity.FAIL  # the missing rows still fail
+
+
+# --- board re-audit regressions (run 44449956247) ---------------------------
+
+def _set_true_stats(root, fn):
+    f = root / "data" / "chunk-000" / "file-000.parquet"
+    t = pq.read_table(f).to_pydict()
+    ep = np.asarray(t["episode_index"])
+    a = fn(np.asarray(t["action"]), ep)
+    t["action"] = a.tolist()
+    pq.write_table(pa.table(t), f)
+    p = root / "meta" / "stats.json"
+    stats = json.loads(p.read_text())
+    stats["action"].update(mean=a.mean(0).tolist(), std=a.std(0).tolist(),
+                           min=a.min(0).tolist(), max=a.max(0).tolist())
+    p.write_text(json.dumps(stats))
+
+
+def test_small_sample_that_missed_rare_excursions_is_not_wrong_stats(tmp_path):
+    # GR00T-sim shaped: a few episodes hold a dim's excursions; correct stored
+    # stats; a 6-episode sample misses them and sees a far smaller std
+    root = make_dataset(tmp_path / "r", episodes=40)
+    rare = (5, 13, 27)
+
+    def excursion(a, ep):
+        a = a.copy()
+        a[np.isin(ep, rare), 0] += 50.0
+        return a
+    _set_true_stats(root, excursion)
+    _strip_episode_stats(root)
+    ctx = load_dataset(str(root), max_episodes=6)
+    assert not set(rare) & set(ctx.episode_ids())
+    res = run("stats-drift", ctx)
+    assert gated(res) == [], [f.message for f in res.findings]
+    assert any(f.details.get("range_coverage") is not None for f in res.findings)
+
+
+def test_small_sample_still_flags_a_gross_stored_std_error(tmp_path):
+    # the coverage guard must not excuse wrong stats the sample DID span
+    root = make_dataset(tmp_path / "g", episodes=40)
+    _strip_episode_stats(root)
+    p = root / "meta" / "stats.json"
+    stats = json.loads(p.read_text())
+    stats["action"]["std"] = (np.asarray(stats["action"]["std"]) * 10).tolist()
+    p.write_text(json.dumps(stats))
+    res = run("stats-drift", load_dataset(str(root), max_episodes=6))
+    assert any(f.severity == Severity.WARN and f.details.get("reference") == "sampled"
+               for f in res.findings), [f.message for f in res.findings]

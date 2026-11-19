@@ -139,12 +139,16 @@ for the mean, 5% for the std) - tiny gaps across many dims fire on clean
 data, so a smaller gap is an INFO note. Sampled findings never FAIL: a
 deterministic spread sample cannot prove the stats wrong, only flag them.
 With too few episodes only the gross backstop applies (std off >= 3x, mean
-off >= 2 sigma); a full load stays the conclusive audit.
+off >= 2 sigma), and only when the sample spans at least half of the stored
+[min, max]: a sample covering less has not seen the dataset's spread (a few
+episodes holding a joint's excursions move the mean and std by multiples),
+so the gap is an INFO naming the coverage. A full load stays the conclusive
+audit.
 
 Catalogued episodes with no frames are not part of the reference: the data
 is then compared like a subset, so correct stats are never blamed for rows
 that are missing (dropped-frames reports those). A dim that does not move in
-the data at its own magnitude (std <= 1e-6 x max(1, |mean|)) is inert for
+the data at its own magnitude (std <= 3e-5 x max(1, |mean|), ~250 float32 ulps) is inert for
 normalization whatever its stored mean/std - judged from the data alone, so
 converter float32 noise in the stored stats of a constant channel (stored
 std ~0.5 on a channel constant at 4096) is an INFO, while an offset joint
@@ -271,8 +275,12 @@ Knobs: `stuck_range_frac` (0.005), `stuck_warn_share` (0.25),
 Commands pinned at EXACTLY a limit while the robot is moving: clipping
 leaves a pile-up at the limit value. Sitting near an extreme is normal (rest
 poses, grippers fully open/shut), as are binary or constant dims, and most
-data AT the limit is a mode rather than a clipped tail (INFO). Unnamed
-grippers and detected on/off commands are reported but not gated.
+data AT the limit is a mode rather than a clipped tail (INFO) - unless the
+dim is named as a joint, where long pinning is worse clipping, not better.
+A command with >= 90% of all frames at exactly its min or max and >= 5% at
+each is two-level (a gripper or switch, whatever its name - OpenArm's
+`RJ8.pos`) and is INFO. Unnamed grippers and detected on/off commands are
+reported but not gated.
 
 Knobs: `saturation_warn_fraction` (0.05).
 

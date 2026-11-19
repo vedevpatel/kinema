@@ -8,6 +8,11 @@ from kinema.checks.base import Check, CheckConfig, CheckResult, Finding, Severit
 from kinema.dataset import ACTION_KEY, STATE_KEY
 from kinema.stats import action_gripper_dims, is_generic, toggle_dims, velocity_dims
 
+# a command with >= this share of ALL frames at exactly its min or max, and at
+# least _TWO_LEVEL_END at each, is two-level (gripper / switch), not clipped
+_TWO_LEVEL_DWELL = 0.9
+_TWO_LEVEL_END = 0.05
+
 
 class ActionSaturationCheck(Check):
     id = "action-saturation"
@@ -77,6 +82,24 @@ class ActionSaturationCheck(Check):
                 # dim could be one. A dim NAMED as a joint pinned 65% of the
                 # time is worse clipping than 25%, never better.
                 named_joint = names_ok and not is_generic([ctx.action_names[j]])
+                # ...unless the data says two-level whatever the name: nearly
+                # every frame sits at EXACTLY one limit or the other, each
+                # end held for real. Clipping piles up at one end of a
+                # continuous range; a command living at both exact ends is
+                # a gripper or on/off switch (OpenArm's "RJ8.pos"/"LJ8.pos"
+                # grippers: 98-100% of frames at the two limits, >=17% at
+                # each end; no other dim in those datasets passes 5% at either end).
+                d_lo, d_hi = float(at_lo.sum() / ok.sum()), float(at_hi.sum() / ok.sum())
+                if d_lo + d_hi >= _TWO_LEVEL_DWELL and min(d_lo, d_hi) >= _TWO_LEVEL_END:
+                    res.findings.append(Finding(
+                        self.id, Severity.INFO,
+                        f"action dim {j}{name}: {d_lo + d_hi:.0%} of commands sit at exactly its "
+                        f"min or max ({d_lo:.0%} / {d_hi:.0%}) - a two-level command (gripper or "
+                        "on/off), not clipping, so not gated",
+                        details={"dim": j, "saturated_fraction": f, "side": side,
+                                 "two_level": [d_lo, d_hi]},
+                    ))
+                    continue
                 if f > 0.5 and not named_joint:
                     # most of the data AT the limit is a mode, not a clipped tail:
                     # an unnamed gripper / binary-like command or a rest state

@@ -29,11 +29,19 @@ from kinema.stats import aggregate, as_stat_dict, data_stats
 # own magnitude: whatever the stored mean/std, a constant input normalizes
 # to a constant. Judged from the data side only - the stored std is exactly
 # the number under test, so it cannot decide flatness. Relative to |mean|
-# because float32 resolution is (a constant channel at 4096 accumulates
+# because float32 resolution is relative (a constant channel at 4096 accumulates
 # ~1e-9 of f32 noise, and its converter-written stored std can reach 0.5:
-# the RoboCOIN case). A joint at ~1000 with real motion (std 0.9, i.e.
-# 9e-4 of its magnitude) is far above the line and stays compared.
-_FLAT_REL = 1e-6
+# the RoboCOIN case). The line is in float32 ulps (2^-23 of |mean|): 3e-5
+# is ~250 ulps. 1e-6 (~8 ulps) was too tight - RoboCOIN Alphabot channels
+# at ~0.9 jitter by std 4e-6 (~70 ulps, far below any encoder tick) and
+# their stored stats carry the same converter noise: 4 board FAIL/WARNs at
+# 1e-6, all clean at 3e-5. A joint at 1000 with std 0.1 (~1600 ulps of real
+# motion) stays compared, as does one with std 0.9.
+_FLAT_REL = 3e-5
+
+# a sample spanning less than this share of the stored [min, max] has not seen
+# the dataset's spread, so sampled mean/std gaps cannot be called wrong stats
+_SAMPLE_MIN_COVER = 0.5
 
 
 def flat_in_data(actual: dict) -> np.ndarray:
@@ -235,10 +243,35 @@ class StatsDriftCheck(Check):
                         live = (sd_s > 1e-6) & (sd_a > 1e-6)
                         ratio = np.where(live, np.maximum(sd_s, sd_a) / np.maximum(np.minimum(sd_s, sd_a), 1e-12), 1.0)
                         shift = np.where(live, np.abs(actual["mean"] - stored["mean"]) / np.maximum(sd_s, 1e-12), 0.0)
+                        # ...unless the sample never saw the spread: a sample
+                        # covering a sliver of the stored [min, max] missed the
+                        # episodes that hold the rest, and those alone can move
+                        # the mean and std by multiples (GR00T sim: 3 of 200
+                        # episodes hold a joint's excursions to 0; a 6-episode
+                        # sample saw std 0.04 against a correct stored 12.3)
+                        cover = None
+                        if "min" in stored and "max" in stored and stored["min"].shape == actual["min"].shape:
+                            with np.errstate(invalid="ignore", divide="ignore"):
+                                cover = ((actual["max"] - actual["min"])
+                                         / np.maximum(stored["max"] - stored["min"], 1e-12))
                         for kind, garr, lim, fmt in (("std", ratio, cfg.stats_sample_std_ratio, "{:.1f}x"),
                                                     ("mean", shift, cfg.stats_sample_mean_sigma, "{:.1f} std devs")):
                             d = int(np.argmax(garr))
                             if garr[d] > lim:
+                                c = float(cover[d]) if cover is not None and np.isfinite(cover[d]) else 1.0
+                                narrow = c < _SAMPLE_MIN_COVER and (kind == "mean" or sd_a[d] < sd_s[d])
+                                if narrow:
+                                    res.findings.append(Finding(
+                                        self.id, Severity.INFO,
+                                        f"{feat}.{kind}: the sampled data is off the stored stats by "
+                                        f"{fmt.format(float(garr[d]))} on dim {d}, but the sample spans "
+                                        f"only {c:.1%} of the stored [min, max] - episodes it did not "
+                                        "load can explain the gap (load the full dataset to judge)",
+                                        details={"feature": feat, "stat": kind, "dim": d,
+                                                 "error": float(garr[d]), "reference": "sampled",
+                                                 "range_coverage": c},
+                                    ))
+                                    continue
                                 worst = max(worst, float(garr[d]) / lim)
                                 res.findings.append(Finding(
                                     self.id, Severity.WARN,

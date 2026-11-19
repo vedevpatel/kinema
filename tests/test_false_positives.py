@@ -801,3 +801,49 @@ def test_continuous_dim_in_odd_layout_still_warns_when_stuck(base):
     res = run("stuck-actuator", load_dataset(str(base)))
     assert any(f.severity == Severity.WARN and f.details.get("joint") == 1
                for f in res.findings)
+
+
+# --- re-audit regressions (board run 44449956247) ---------------------------
+
+def test_named_two_level_gripper_is_not_saturation(base):
+    # OpenArm-shaped: the grippers are named like joints ("RJ8.pos"), so the
+    # name and slot priors miss them - but nearly every frame sits at exactly
+    # one limit or the other, with continuous transitions between
+    names = [f"RJ{i}.pos" for i in range(1, 7)]
+    _set_names(base, names, names)
+
+    def grip(s, a, ep):
+        a = a.copy()
+        a[:, 5] = (np.clip(10 * np.sin(np.arange(len(a)) / 7), -1, 1) + 1) * 0.6
+        return s, a
+    _rewrite_data(base, grip)
+    res = run("action-saturation", load_dataset(str(base)))
+    assert not [f for f in gated(res) if f.details.get("dim") == 5], [f.message for f in res.findings]
+    assert any(f.details.get("dim") == 5 and "two-level" in f.message for f in res.findings)
+
+
+def test_named_joint_clipped_at_one_end_still_warns(base):
+    # the two-level rule must not blunt the named-joint rule: a joint pinned
+    # at ONE limit most of the time is clipping, however long it sits there
+    names = [f"joint_{i}.pos" for i in range(1, 7)]
+    _set_names(base, names, names)
+
+    def clip(s, a, ep):
+        a = a.copy()
+        a[:, 2] = np.minimum(a[:, 2], np.percentile(a[:, 2], 40))
+        return s, a
+    _rewrite_data(base, clip)
+    res = run("action-saturation", load_dataset(str(base)))
+    assert any(f.details.get("dim") == 2 for f in gated(res)), [f.message for f in res.findings]
+
+
+def test_jitter_only_dim_with_converter_noise_is_inert():
+    # RoboCOIN/AI2_Alphabot_2_package_fruit dim 12, real numbers: a channel at
+    # ~0.9 jittering by std 4e-6 (~40 f32 ulps); stored stats carry converter
+    # noise. It FAILed at the old 1e-6 flatness line.
+    from kinema.checks.stats_drift import _errors
+    actual = {"mean": np.array([-0.899624]), "std": np.array([4.06488e-06]),
+              "min": np.array([-0.89964]), "max": np.array([-0.89961])}
+    ref = {**actual, "mean": np.array([-0.899625]), "std": np.array([6.42644e-06])}
+    errs, _ = _errors(actual, ref)
+    assert errs["mean"][0] == 0.0 and errs["std"][0] == 0.0
