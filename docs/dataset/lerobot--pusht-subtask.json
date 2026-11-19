@@ -6,9 +6,9 @@
   "fps": 10.0,
   "truncated": false,
   "video_audited": 5,
-  "score": 86,
+  "score": 100,
   "score_model": "tiered-v2",
-  "verdict": "WARN",
+  "verdict": "INFO",
   "checks": [
     {
       "id": "stats-drift",
@@ -16,12 +16,12 @@
       "verdict": "PASS",
       "weight": 10,
       "weight_basis": "placeholder",
-      "summary": "data matches meta/stats.json (worst 0% of the FAIL threshold)",
+      "summary": "data matches the stored stats (worst 0% of the FAIL threshold)",
       "skipped": false,
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "timestamp-grid",
@@ -34,7 +34,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "dropped-frames",
@@ -47,7 +47,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "calibration-drift",
@@ -86,7 +86,7 @@
         "excluded_joints": {}
       },
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "idle-segments",
@@ -99,7 +99,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 6
+      "charge": 0
     },
     {
       "id": "stuck-actuator",
@@ -112,7 +112,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "action-saturation",
@@ -125,7 +125,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 6
+      "charge": 0
     },
     {
       "id": "nan-and-normalization",
@@ -138,7 +138,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "duplicate-and-leakage",
@@ -151,7 +151,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 2
+      "charge": 0
     },
     {
       "id": "outlier-episodes",
@@ -1778,7 +1778,7 @@
           }
         }
       ],
-      "charge": 3
+      "charge": 0
     },
     {
       "id": "embedded-images",
@@ -1791,7 +1791,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "camera-coverage",
@@ -1804,7 +1804,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "episode-file-pointers",
@@ -1822,7 +1822,7 @@
         "local_shards": 1
       },
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "video-file-pointers",
@@ -1838,7 +1838,7 @@
         "missing": 0
       },
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "task-strings",
@@ -1851,12 +1851,12 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "reward-done",
       "title": "Reward / done fields",
-      "verdict": "WARN",
+      "verdict": "INFO",
       "weight": 8,
       "weight_basis": "placeholder",
       "summary": "reward and done present",
@@ -1865,8 +1865,8 @@
       "details": {},
       "findings": [
         {
-          "severity": "WARN",
-          "message": "done is True before the last frame in 206 episodes (0, 1, 2, 3, 4, 5, 6, 7 ...) - the trajectory continues after termination",
+          "severity": "INFO",
+          "message": "done is True on the final 2 frame(s) in 206 episodes (0, 1, 2, 3, 4, 5, 6, 7 ...) - a terminal-flag padding convention; segmentation on the first done still works",
           "episode_index": null,
           "details": {
             "episodes": [
@@ -2080,12 +2080,12 @@
           }
         }
       ],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "visual-quality",
       "title": "Visual quality (blur, lighting)",
-      "verdict": "WARN",
+      "verdict": "INFO",
       "weight": 6,
       "weight_basis": "placeholder",
       "summary": "206 episodes x 1 camera(s) sampled; median blur observation.image 888",
@@ -2104,8 +2104,8 @@
       },
       "findings": [
         {
-          "severity": "WARN",
-          "message": "camera observation.image: overexposed in 206/206 episodes (saturated-pixel fraction > 0.25; worst [8, 116, 50, 94, 74, 163, 93, 189])",
+          "severity": "INFO",
+          "message": "camera observation.image: overexposed in 206/206 episodes (saturated-pixel fraction > 0.25; worst [8, 116, 50, 94, 74, 163, 93, 189]); 100% of the clipped pixels are the same fixed region in every frame - a static saturated background (sim canvas, fixed light), not an exposure problem",
           "episode_index": null,
           "details": {
             "camera": "observation.image",
@@ -2525,11 +2525,12 @@
               "203": 0.86474609375,
               "204": 0.86083984375,
               "205": 0.8630642361111112
-            }
+            },
+            "static_clip_share": 0.9983712819868074
           }
         }
       ],
-      "charge": 6
+      "charge": 0
     },
     {
       "id": "deployment-readiness",
@@ -2542,7 +2543,54 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
+    },
+    {
+      "id": "stats-f32-fingerprint",
+      "title": "Stats f32 accumulation fingerprint",
+      "verdict": "INFO",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "per-episode stats carry naive float32 accumulation (10 episode(s))",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "per-episode stats reproduce naive float32 accumulation bitwise (10 sampled episode(s), observation.state dims [0, 1], action dims [0, 1]): the converter's stats are accumulation-rounded, not data-exact; constant channels get a fabricated std and a DC-offset mean",
+          "episode_index": null,
+          "details": {
+            "episodes": {
+              "observation.state": [
+                0,
+                51,
+                102,
+                153,
+                205
+              ],
+              "action": [
+                0,
+                51,
+                102,
+                153,
+                205
+              ]
+            },
+            "dims": {
+              "observation.state": [
+                0,
+                1
+              ],
+              "action": [
+                0,
+                1
+              ]
+            }
+          }
+        }
+      ],
+      "charge": 0
     }
   ]
 }
