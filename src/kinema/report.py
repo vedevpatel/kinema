@@ -11,15 +11,17 @@ from typing import Any
 
 from kinema.checks.base import CheckResult, Severity
 
-# Health score, model "tiered-v2" (docs/checks.md, "Health score"): start
+# Health score, model "tiered-v3" (docs/checks.md, "Health score"): start
 # at 100, pay per failing/warning CHECK - never per finding, so correlated
 # findings and verbose checks do not double-bill one defect. Floor at 0.
-# tiered-v2 = tiered-v1.1 (tiers, FAIL cost, correlated-check waiver below)
-# with WARN weights re-anchored on harm table v1.1. Stored results without a
-# "score_model" field were scored by legacy-v0 (hand-tuned weights); the
-# score is derived from stored per-check verdicts and stored findings, so
-# any stored result can be rescored without re-running checks.
-SCORE_MODEL = "tiered-v2"
+# tiered-v3 = tiered-v2 (tiers, FAIL cost, correlated-check waiver below)
+# with WARN weights re-anchored on harm table v2 (8 measured defects;
+# stats-drift, dropped-frames, action-saturation and outlier-episodes move
+# from placeholder to measured; the last two capped at tier B, see _TIER_CAP). Stored
+# results without a "score_model" field were scored by legacy-v0; the score
+# is derived from stored per-check verdicts and stored findings, so any
+# stored result can be rescored without re-running checks.
+SCORE_MODEL = "tiered-v3"
 
 # Correlated-check waiver edges, (upstream, downstream). When the upstream
 # check is charged (WARN or FAIL) and the downstream check is WARN, the
@@ -50,27 +52,38 @@ WARN_TIERS: tuple[tuple[str, str, float, int], ...] = (
 )
 
 # measured harm per check: held-out MSE delta (%) of the defect it targets,
-# harm table v1.1 (diffusion pusht, 20k steps, 3 seeds, 50 eval episodes;
-# docs/harm-table.json)
+# harm table v2 (diffusion pusht, 20k steps, 3-5 paired seeds, 50 eval
+# episodes; docs/harm-table.json). Rows whose defect and clean arms ran on
+# different accelerators (outlier burst, stale stats) were re-checked against
+# same-accelerator clean runs (+120% / +24%): neither moves tier.
 _MEASURED_HARM_PCT = {
-    "calibration-drift": 1475.3,  # action scale 0.5x in 25% of episodes
-    "stuck-actuator": 697.8,  # one joint frozen in 30% of episodes
-    "idle-segments": 75.1,  # 30 idle frames prepended
-    "duplicate-and-leakage": -3.6,  # 20% duplicate episodes
+    "calibration-drift": 1475.3,  # actions x0.5 in ~25% of episodes
+    "action-saturation": 1183.2,  # every episode clipped to the central 30% of each dim
+    "stuck-actuator": 697.8,  # one action dim frozen in 30% of episodes
+    "outlier-episodes": 107.7,  # 6-frame +8-std action burst in 5% of episodes
+    "idle-segments": 75.1,  # 30 still frames prepended to every episode
+    "stats-drift": 16.9,  # stats from rows shifted +0.5 std (a stale stats.json)
+    "dropped-frames": 3.3,  # 10% of interior frames deleted in 25% of episodes
+    "duplicate-and-leakage": 1.5,  # 20% of episodes copied (5 seeds)
 }
+
+# a measured weight is capped below its tier when the injected defect is far
+# stronger than what usually trips the check, so tier A would overstate a
+# typical WARN until a milder arm is measured: the saturation arm clips
+# EVERY episode to the central 30% of each dim (the check WARNs at 5% of
+# commands pinned at a limit); the outlier arm bursts +8-std actions into 5%
+# of episodes (a board outlier WARN is often a review list of mildly unusual
+# episodes)
+_TIER_CAP = {"action-saturation": "B", "outlier-episodes": "B"}
 
 # hand-tuned until the harm study measures them: wrong normalization or
 # broken sampling corrupts every batch; behaviour issues skew what the
 # policy learns; outlier lists are "review these episodes"
 _PLACEHOLDER_COST = {
-    "stats-drift": 10,
     "nan-and-normalization": 10,
     "deployment-readiness": 10,
     "timestamp-grid": 10,
-    "dropped-frames": 8,
-    "action-saturation": 6,
     "visual-quality": 6,
-    "outlier-episodes": 3,
 }
 _WARN_COST_DEFAULT = 8  # any check without an entry (task-strings, reward-done, ...)
 
@@ -83,9 +96,17 @@ def harm_tier(mse_delta_pct: float) -> tuple[str, str, int]:
     return WARN_TIERS[-1][0], WARN_TIERS[-1][1], WARN_TIERS[-1][3]  # harmless/negative
 
 
+def _capped_weight(cid: str, pct: float) -> int:
+    tier, _, weight = harm_tier(pct)
+    cap = _TIER_CAP.get(cid)
+    if cap is not None and tier < cap:  # "A" < "B": the cap is the weaker tier
+        weight = next(w for t, _, _, w in WARN_TIERS if t == cap)
+    return weight
+
+
 _WARN_COST = {
     **_PLACEHOLDER_COST,
-    **{cid: harm_tier(pct)[2] for cid, pct in _MEASURED_HARM_PCT.items()},
+    **{cid: _capped_weight(cid, pct) for cid, pct in _MEASURED_HARM_PCT.items()},
 }
 
 

@@ -12,17 +12,18 @@ says why, and it is not a verdict on the data.
 
 ## Health score
 
-Score model `tiered-v2` (reports, report JSON `score_model`, and the
+Score model `tiered-v3` (reports, report JSON `score_model`, and the
 leaderboard all name it). Start at 100; each FAIL check costs 25; each WARN
 check costs its weight below, unless a correlated-check waiver (below) waives
 it; floor at 0. Billing is per check, never per finding: a check that lists
 40 flagged episodes costs the same as one that lists 5, and making a check
 more detailed never moves a score. The score is derived from stored per-check
 verdicts and stored findings, so any stored result can be rescored without
-re-running checks. `tiered-v2` is `tiered-v1.1` (same tiers, FAIL cost and
-waiver; `tiered-v1.1` was `tiered-v1` plus the waiver) with WARN weights
-re-anchored on historical harm table v1.1. These weights are frozen legacy
-policy, not automatically recomputed from the newer table. Results with no `score_model` field were scored by
+re-running checks. `tiered-v3` is `tiered-v2` (same tiers, FAIL cost and
+waiver) with WARN weights re-anchored on harm table v2, which measures 8
+defects; `tiered-v2` anchored 4 of them on harm table v1.1. Weights are a
+score-model decision, not automatic updates from the table: a new table
+needs a new model version. Results with no `score_model` field were scored by
 `legacy-v0` (hand-tuned weights); scores are not comparable across models.
 
 Correlated checks: one defect can trip two checks. A declared waiver edge
@@ -54,9 +55,9 @@ elsewhere, still pay both checks.
 
 A FAIL is a "data is not what it claims" blocker; its cost is trust, not
 measured training damage, so it is not harm-scaled. WARN weights come in
-three tiers anchored on the harm table v1.1 (`scripts/harm_table.py`:
-diffusion policy, pusht, 20k training steps, 3 seeds, 50 eval episodes,
-held-out action MSE delta vs clean):
+three tiers anchored on the harm table v2 (`scripts/harm_table.py`:
+diffusion policy, pusht, 20k training steps, 3-5 paired seeds, 50 eval
+episodes, held-out action MSE delta vs clean):
 
 | tier | meaning | held-out MSE delta | weight |
 | --- | --- | --- | --- |
@@ -65,29 +66,35 @@ held-out action MSE delta vs clean):
 | C | review list | < 10% | 2 |
 
 The band edges were re-anchored once for tiered-v2 and stay 100/10/0;
-re-anchoring moved memberships, not edges. Each check's weight carries
+re-anchoring moves memberships, not edges. A measured weight is capped below
+its tier when the injected defect is far stronger than what usually trips
+the check, so tier A would overstate a typical WARN until a milder arm is
+measured. Each check's weight carries
 its basis in report JSON (`weight`, `weight_basis`):
 
 | check | weight | basis |
 | --- | --- | --- |
 | calibration-drift | 10 | measured: +1475.3% (tier A) |
 | stuck-actuator | 10 | measured: +697.8% (tier A) |
+| action-saturation | 6 | measured: +1183.2% (tier A, capped at B: the arm clips every episode to the central 30% of each dim; the check WARNs at 5% of commands pinned) |
+| outlier-episodes | 6 | measured: +107.7% (tier A, capped at B: the arm bursts +8-std actions into 5% of episodes; a typical WARN is milder) |
 | idle-segments | 6 | measured: +75.1% (tier B; 3 seeds, wide spread) |
-| duplicate-and-leakage | 2 | measured: -3.6% (tier C) |
-| stats-drift, nan-and-normalization, deployment-readiness, timestamp-grid | 10 | placeholder |
-| dropped-frames | 8 | placeholder |
-| action-saturation, visual-quality | 6 | placeholder |
-| outlier-episodes | 3 | placeholder |
+| stats-drift | 6 | measured: +16.9% (tier B) |
+| dropped-frames | 2 | measured: +3.3% (tier C; seeds straddle zero) |
+| duplicate-and-leakage | 2 | measured: +1.5% (tier C; 5 seeds straddle zero) |
+| nan-and-normalization, deployment-readiness, timestamp-grid | 10 | placeholder |
+| visual-quality | 6 | placeholder |
 | any other check (task-strings, reward-done, ...) | 8 | placeholder |
 
-The newer [harm table](#harm-table) contains measurements for some placeholder
-checks. Existing placeholder costs remain historical policy, not current measured
-harm estimates. Re-anchoring needs a separate score-model decision, especially
-where newer rows confound accelerator and seed effects. The v1.1 re-anchor moved stuck-actuator from placeholder to
-measured.
+The outlier-burst and stale-stats arms ran their defect seeds on an L4 and
+their same-seed clean runs on an A100. Against the L4 clean runs instead
+(same accelerator, different seeds) they measure +120% and +24%: neither
+moves tier, so the accelerator confound does not change a weight. A tier C
+weight does not mean a defect is benign: its seeds straddle zero, so these
+runs cannot tell small harm from none.
 
-Placeholder weights are the hand-tuned legacy values; the paragraph above is
-why newer harm-table measurements have not replaced them yet. Limit: every measured number is a held-out MSE delta,
+Placeholder weights are the hand-tuned legacy values, kept where the harm
+table has no arm. Limit: every measured number is a held-out MSE delta,
 not rollout success; success floors for every arm in the v1.1 protocol
 (clean 2%/4%/2% at 20k steps), so MSE is the outcome metric and no
 success-rate re-check is pending.

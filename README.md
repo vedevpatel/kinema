@@ -52,7 +52,7 @@ visual-quality          SKIP    pass --video to run (downloads MP4s; needs the v
 deployment-readiness    WARN    0 blocker(s), 1 warning(s) for smolvla
 stats-f32-fingerprint   INFO
 
-verdict: WARN; score model tiered-v2
+verdict: WARN; score model tiered-v3
 ```
 
 Exit code is `1` on any FAIL (`--fail-on warn` to also gate on warnings), so it drops

@@ -184,7 +184,7 @@ TOOLS: list[dict[str, Any]] = [
         "description": "Datasets like yours: rank your report against every dataset audited on "
         "the kinema leaderboard (a labelled corpus of real robot data and its defects) and "
         "return the closest matches with shared warnings, the measured harm where the harm "
-        "table has it (historical v1.1 weights; many checks have none), and links to "
+        "table has it (harm table v2; some checks have none), and links to "
         "their full audits. Give either a dataset to audit or a report_path from an earlier "
         "run_checks call.",
         "inputSchema": _schema(
