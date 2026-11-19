@@ -171,9 +171,12 @@ class EpisodeFilePointersCheck(Check):
             if not p.exists():
                 continue
             try:
-                local[rel] = {int(e) for e in
-                              pq.read_table(p, columns=["episode_index"])
-                              .column("episode_index").to_pylist()}
+                raw = pq.read_table(p, columns=["episode_index"]).column("episode_index").to_pylist()
+                # frames numbered by position (the loader matched them): read
+                # the roster in catalogue ids, or every pointer looks broken
+                by_pos = getattr(ctx, "episode_ids_by_position", None)
+                local[rel] = {int(by_pos[int(e)]) if by_pos and 0 <= int(e) < len(by_pos)
+                              else int(e) for e in raw if e is not None}
             except Exception:  # noqa: BLE001
                 continue
         if not local:

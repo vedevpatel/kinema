@@ -188,6 +188,18 @@ class DroppedFramesCheck(Check):
                     details={"duplicates": {str(k): v for k, v in dup.items()}},
                 )
             )
+        by_pos = getattr(ctx, "episode_ids_by_position", None)
+        if by_pos:
+            res.findings.append(Finding(
+                self.id, Severity.WARN,
+                f"meta/episodes catalogues episode_index {by_pos[0]}..{by_pos[-1]} but the frames "
+                f"number episodes 0..{len(by_pos) - 1}: matched by position to audit them. "
+                "LeRobot's default positional lookup trains on this, but selecting episodes "
+                "by index (episodes=[...]) and any tool keyed on episode_index disagree - "
+                "rewrite one side so they match",
+                details={"kind": "positional-episode-index",
+                         "catalogue": [by_pos[0], by_pos[-1]], "frames": [0, len(by_pos) - 1]},
+            ))
         for ep in ctx.episode_ids():
             rows = ctx.rows_for(ep)
             fi = ctx.frame_index[rows]
@@ -271,7 +283,7 @@ class DroppedFramesCheck(Check):
                 "video frame counts not cross-checked",
             ))
         if n_gap == n_meta_mismatch == n_dup == n_vid_bad == 0 and not ctx.duplicate_episode_ids \
-                and not ctx.unreadable_files:
+                and not ctx.unreadable_files and not by_pos:
             res.summary = ("frame_index contiguous; episode lengths" if has_frame_index
                            else "frame_index unavailable; episode lengths") + (
                 " and video segments" if ctx.video_segments else "") + " match the data"
@@ -286,6 +298,8 @@ class DroppedFramesCheck(Check):
                 f"{len(ctx.unreadable_files)} unreadable data file(s)" if ctx.unreadable_files else "",
                 f"{len(ctx.duplicate_episode_ids)} episode index(es) catalogued twice"
                 if ctx.duplicate_episode_ids else "",
+                "metadata and frames number episodes differently (matched by position)"
+                if by_pos else "",
             ) if x]
             res.summary = "; ".join(parts) or "frame bookkeeping findings (see below)"
         return res

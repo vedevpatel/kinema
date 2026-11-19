@@ -194,7 +194,7 @@ def test_audit_one_falls_back_to_single_shard_when_spread_over_cap(tmp_path, mon
         sizes[f"videos/zzz.phantom/chunk-{i:03d}/file-000.mp4"] = lb.VIDEO_CAP_BYTES - 1
     downloaded = []
 
-    def fake_download_sample(repo_id, cap_bytes, dest):
+    def fake_download_sample(repo_id, cap_bytes, dest, unservable=None):
         for rel in real_sizes:
             if rel.startswith(("meta/", "data/")):
                 tgt = dest / rel
@@ -265,7 +265,7 @@ def test_audit_one_runs_visual_quality_on_downloaded_videos(tmp_path, monkeypatc
 
     import shutil
 
-    def fake_download_sample(repo_id, cap_bytes, dest):
+    def fake_download_sample(repo_id, cap_bytes, dest, unservable=None):
         for rel in sizes:
             if rel.startswith(("meta/", "data/")):
                 tgt = dest / rel
@@ -1175,3 +1175,46 @@ def test_heavy_rows_never_exceed_their_slots():
         in_flight.pop(0)  # oldest finishes
     assert sorted(submitted) == sorted(d["id"] for d in rows)
     assert submitted[:8] == ["h0", "h1", "l0", "l1", "l2", "l3", "l4", "l5"]
+
+
+def test_unservable_hub_file_is_named(tmp_path, monkeypatch):
+    # arekborucki/bridge_orig_lerobot: Xet CAS 404s on one file and the
+    # classic endpoint fails too - the error must say WHICH file
+    import huggingface_hub
+    lb = _load_leaderboard()
+
+    def xet_404(*a, **k):
+        raise RuntimeError("Task error: File reconstruction error: CAS Client Error: 404 Not Found")
+
+    def classic_fails(*a, **k):
+        raise OSError("HTTP Error 404")
+    monkeypatch.setattr(huggingface_hub, "hf_hub_download", xet_404)
+    monkeypatch.setattr(lb, "_classic_resolve_download", classic_fails)
+    with pytest.raises(lb.DatasetError, match="meta/episodes.jsonl"):
+        lb._hub_download("o/r", "meta/episodes.jsonl", tmp_path)
+
+
+def test_one_unservable_data_file_does_not_abort_the_sample(tmp_path, monkeypatch):
+    import types
+
+    import huggingface_hub
+    lb = _load_leaderboard()
+    files = ["meta/info.json"] + [f"data/chunk-000/episode_{i:06d}.parquet" for i in range(3)]
+    monkeypatch.setattr(huggingface_hub, "list_repo_tree", lambda *a, **k: [
+        types.SimpleNamespace(path=p, size=10) for p in files])
+    got = []
+
+    def fake_dl(repo, name, dest):
+        if name.endswith("episode_000000.parquet"):
+            raise lb.DatasetError(f"the Hub cannot serve {name}: Xet storage has no data for it")
+        got.append(name)
+    monkeypatch.setattr(lb, "_hub_download", fake_dl)
+    unservable: list = []
+    lb.download_sample("o/r", 10_000, tmp_path, unservable)
+    assert [n for n, _ in unservable] == ["data/chunk-000/episode_000000.parquet"]
+    assert "data/chunk-000/episode_000002.parquet" in got
+    # nothing servable at all is still a failed load
+    monkeypatch.setattr(lb, "_hub_download", lambda r, n, d: (_ for _ in ()).throw(
+        lb.DatasetError(f"the Hub cannot serve {n}")) if n.startswith("data/") else None)
+    with pytest.raises(lb.DatasetError, match="none of the sampled data files"):
+        lb.download_sample("o/r", 10_000, tmp_path, [])

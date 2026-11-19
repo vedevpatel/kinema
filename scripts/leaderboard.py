@@ -665,7 +665,13 @@ def _hub_download(repo_id: str, name: str, dest: Path) -> None:
             try:
                 _classic_resolve_download(repo_id, name, dest)
             except Exception:
-                raise e from None  # fallback failed too; surface the original
+                # both endpoints failed: the Hub cannot serve this file at all,
+                # so any loader (LeRobot included) fails on it. Name the file -
+                # the raw CAS error says only "404" and a hash
+                raise DatasetError(
+                    f"the Hub cannot serve {name}: Xet storage has no data for it "
+                    f"({msg[:160]}) and the classic resolve endpoint failed too - "
+                    "the repo needs that file re-uploaded") from None
         else:
             raise
 
@@ -841,7 +847,8 @@ def _range_read_parquet(repo_id: str, name: str, dest: Path, episodes: list[int]
     out.parent.mkdir(parents=True, exist_ok=True)
     pq.write_table(table, out)
 
-def download_sample(repo_id: str, cap_bytes: int, dest: Path) -> tuple[Path, dict[str, int]]:
+def download_sample(repo_id: str, cap_bytes: int, dest: Path,
+                    unservable: list | None = None) -> tuple[Path, dict[str, int]]:
     """meta/** in full plus data files in name order until cap_bytes.
 
     v3 shards hold many episodes per file, so the first shard(s) are a
@@ -924,8 +931,22 @@ def download_sample(repo_id: str, cap_bytes: int, dest: Path) -> tuple[Path, dic
                 f"sampling failed: {msg}"
             )
         return root, sizes
+    # one data file the Hub cannot serve (arekborucki/bridge_orig_lerobot:
+    # episode_000000 of 53k) must not block the audit of the rest: it is
+    # recorded for dropped-frames' unreadable-file FAIL - LeRobot's own
+    # download of it fails the same way - and the other files still audit
+    got = 0
     for name in chosen:
-        _hub_download(base, _pref(prefix, name), dest)
+        try:
+            _hub_download(base, _pref(prefix, name), dest)
+            got += 1
+        except DatasetError as e:
+            if unservable is None or "cannot serve" not in str(e):
+                raise
+            unservable.append((name, str(e)[:200]))
+    if chosen and not got:
+        raise DatasetError(f"{repo_id}: the Hub could serve none of the sampled data files "
+                           f"(e.g. {unservable[0][0] if unservable else chosen[0]})")
     return root, sizes
 
 
@@ -1045,7 +1066,8 @@ def audit_one(repo_id: str, max_episodes: int, cap_bytes: int) -> DatasetReport:
     tmp_dir = Path(tempfile.mkdtemp(prefix="kinema-leaderboard-"))
     dest = tmp_dir
     try:
-        dest, sizes = download_sample(repo_id, cap_bytes, dest)
+        unservable: list = []
+        dest, sizes = download_sample(repo_id, cap_bytes, dest, unservable)
         targets_all = _target_video_files(dest, max_episodes) or []
         subset = _video_subsample(targets_all, sizes, VIDEO_SAMPLE_FILES, VIDEO_CAP_BYTES)
         if subset is None and targets_all:
@@ -1082,6 +1104,7 @@ def audit_one(repo_id: str, max_episodes: int, cap_bytes: int) -> DatasetReport:
         # the full repo file listing lets metadata checks verify file
         # pointers against the repo itself, not the partial local download
         ctx.repo_files = sorted(sizes)
+        ctx.unreadable_files = list(ctx.unreadable_files) + unservable
         # the checks MUST run before the finally's rmtree: visual-quality
         # reads the downloaded MP4s off disk; every other check works from
         # the context's in-memory tables

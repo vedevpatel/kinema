@@ -191,6 +191,9 @@ class DatasetContext:
     feature_keys: dict = field(default_factory=dict)
     # episode index -> times catalogued, when the metadata lists it > once
     duplicate_episode_ids: dict = field(default_factory=dict)
+    # catalogued episode ids by position, when the frames number episodes
+    # 0..N-1 instead (matched by position; see the loader); None otherwise
+    episode_ids_by_position: list | None = None
     # None for manually constructed contexts; loader records actual parquet
     # columns so checks distinguish missing fields from present zero arrays.
     present_columns: frozenset[str] | None = None
@@ -547,6 +550,36 @@ def _load_episode_meta(root: Path) -> list[EpisodeMeta]:
     return episodes
 
 
+def _catalogue_file_order(root: Path) -> list[int] | None:
+    """Catalogued episode ids in the order the catalogue stores them - the
+    order a positional loader numbers them (episode_meta sorts by id, which
+    would hide a scrambled catalogue). v3 rows must also be strictly
+    increasing in dataset_from_index when it is present. None when the order
+    cannot be established."""
+    ep_dir = root / "meta" / "episodes"
+    jsonl = root / "meta" / "episodes.jsonl"
+    try:
+        if ep_dir.is_dir():
+            ids: list[int] = []
+            starts: list[int] = []
+            for f in sorted(ep_dir.glob("**/*.parquet")):
+                names = pq.read_schema(f).names
+                cols = ["episode_index"] + (["dataset_from_index"] if "dataset_from_index" in names else [])
+                t = pq.read_table(f, columns=cols).to_pydict()
+                ids.extend(int(i) for i in t["episode_index"])
+                if "dataset_from_index" in t:
+                    starts.extend(int(x) for x in t["dataset_from_index"])
+            if starts and (len(starts) != len(ids) or any(a >= b for a, b in zip(starts, starts[1:]))):
+                return None
+            return ids
+        if jsonl.exists():
+            return [int(json.loads(line)["episode_index"])
+                    for line in jsonl.read_text().splitlines() if line.strip()]
+    except (OSError, ValueError, KeyError, pa.ArrowInvalid):
+        return None
+    return None
+
+
 def _load_episode_stats(
     root: Path, keys: dict[str, str] | None = None
 ) -> dict[int, dict[str, dict[str, np.ndarray]]]:
@@ -864,6 +897,28 @@ def load_dataset(
         lo, hi = np.searchsorted(meta_arr, [rng[0], rng[1] + 1])
         return meta_arr[lo:hi]
 
+    # Positional episode indexing (lerobot/behavior1k-task0045): meta/episodes
+    # catalogues source ids (450010, 450020, ...) while the frames number
+    # episodes 0..N-1 by position - LeRobot's default loader looks episodes
+    # up by position and trains on it. Matched by position only when the
+    # footer statistics prove it: every row group's frame indices within
+    # 0..N-1, none overlapping the catalogue, the catalogue strictly
+    # increasing in file order. A wrong match would still surface:
+    # dropped-frames compares each episode's catalogued length to its rows.
+    remap: np.ndarray | None = None
+    all_ranges = [r for _, _, rs in files for r in rs]
+    known = [r for r in all_ranges if r is not None]
+    file_order = _catalogue_file_order(root)
+    if (known and len(known) == len(all_ranges)
+            and min(r[0] for r in known) >= 0 and max(r[1] for r in known) < len(meta_ids)
+            and not any(len(_candidates(r)) for r in known)
+            and meta_ids != list(range(len(meta_ids)))
+            and file_order is not None and len(file_order) == len(meta_ids)
+            and all(a < b for a, b in zip(file_order, file_order[1:]))):
+        remap = meta_arr  # position p -> catalogued id
+        files = [(f, pf, [(int(remap[r[0]]), int(remap[r[1]])) if r else None for r in rs])
+                 for f, pf, rs in files]
+
     if max_episodes is not None and repo_id is not None:
         # Hub downloads target the metadata spread. Extra cached shards must
         # not resample those anchors into a different, cache-dependent set.
@@ -948,6 +1003,13 @@ def load_dataset(
                 chunks_before = {k: len(v) for k, v in chunks.items()}
                 try:
                     for t in pf.iter_batches(batch_size=_READ_BATCH_ROWS, row_groups=[g], columns=cols):
+                        if remap is not None:
+                            pos = _ints(t, "episode_index")
+                            ids = np.where((pos >= 0) & (pos < len(remap)),
+                                           remap[np.clip(pos, 0, len(remap) - 1)], -1)
+                            t = pa.Table.from_batches([t])
+                            t = t.set_column(t.column_names.index("episode_index"), "episode_index",
+                                             pa.array(ids, type=pa.int64()))
                         t = t.filter(pc.is_in(t.column("episode_index").cast(pa.int64()), value_set=value_set))
                         if not t.num_rows:
                             continue
@@ -1120,6 +1182,7 @@ def load_dataset(
         stats_sources=stats_sources,
         feature_keys=keys,
         duplicate_episode_ids=duplicate_ids,
+        episode_ids_by_position=[int(x) for x in remap] if remap is not None else None,
         video_segments=_load_video_segments(root),
         present_columns=frozenset(seen),
         null_counts={k: v for k, v in nulls.items() if v},

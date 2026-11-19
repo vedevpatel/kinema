@@ -184,7 +184,19 @@ Knobs: `grid_warn_frac` (0.10, as a fraction of the frame period).
 
 `frame_index` gaps, episode lengths in the metadata vs rows in the data, and
 v3 video segments vs data. A metadata lie here blocks training outright, so
-mismatches are FAIL.
+mismatches are FAIL. Data files that cannot be read - corrupt pages, or a
+file the Hub itself cannot serve - are a FAIL naming the files; the rest of
+the dataset is still audited.
+
+Frames that number episodes by position (0..N-1) while `meta/episodes`
+catalogues other ids (`lerobot/behavior1k-task0045`: 450010, 450020, ...)
+are matched by position - only when the parquet footer statistics prove it:
+every frame index within 0..N-1, none overlapping the catalogue, and the
+catalogue strictly increasing in file order (and in `dataset_from_index`).
+LeRobot's default positional lookup trains on such a dataset, so it is a
+WARN, not a refusal: selecting episodes by index and any tool keyed on
+`episode_index` disagree with it. A wrong match would still show, as
+per-episode length mismatches.
 
 No knobs.
 
