@@ -979,3 +979,80 @@ def test_stale_omitted_row_retries_without_destroying_good_report(tmp_path, monk
     row = json.loads((tmp_path / 'data.json').read_text())['datasets'][0]
     assert row['report'] == stored['report']
     assert row['engine'] == 'old' and '429' in row['last_audit_error']
+
+
+def test_prune_only_after_repeated_fresh_misses_in_a_healthy_lane():
+    lb = _load_leaderboard()
+    rows = [{'id': f't{i}', 'lane': 'top', 'report': {'score': 70}} for i in range(10)]
+    listing = [{'id': f't{i}', 'lane': 'top'} for i in range(1, 10)]  # t0 dropped off
+    # a cached worklist proves nothing: no miss is counted
+    kept = lb.reconcile_discovery(rows, listing, fresh=False)
+    assert 't0' in {e['id'] for e in kept} and 'discovery_misses' not in kept[0]
+    # fresh discoveries count; pruned on the third miss in a row
+    state = rows
+    for n in (1, 2):
+        state = lb.reconcile_discovery(state, listing, fresh=True)
+        assert next(e for e in state if e['id'] == 't0')['discovery_misses'] == n
+    state = lb.reconcile_discovery(state, listing, fresh=True)
+    assert 't0' not in {e['id'] for e in state}
+    # reappearing resets the counter
+    back = lb.reconcile_discovery(lb.reconcile_discovery(rows, listing, fresh=True),
+                                  listing + [{'id': 't0', 'lane': 'top'}], fresh=True)
+    assert next(e for e in back if e['id'] == 't0')['discovery_misses'] == 0
+
+
+def test_unhealthy_lane_listing_counts_no_misses():
+    lb = _load_leaderboard()
+    rows = [{'id': f'r{i}', 'lane': 'rlds', 'report': {}} for i in range(10)]
+    state = rows
+    for _ in range(5):  # the rlds lane came back with 2 of 10: a listing failure
+        state = lb.reconcile_discovery(state, [{'id': 'r0', 'lane': 'rlds'},
+                                               {'id': 'r1', 'lane': 'rlds'}], fresh=True)
+    assert len(state) == 10 and all(not e.get('discovery_misses') for e in state)
+
+
+def test_worklist_roundtrip_and_age(tmp_path):
+    import json
+    import os
+    import time
+    lb = _load_leaderboard()
+    p = tmp_path / 'worklist.json'
+    lb.save_worklist(p, [{'id': 'a/b'}])
+    ds, age = lb.load_worklist(p)
+    assert ds == [{'id': 'a/b'}] and 0 <= age < 0.1
+    # legacy bare-list format: age from mtime
+    p.write_text(json.dumps([{'id': 'c/d'}]))
+    old = time.time() - 50 * 3600
+    os.utime(p, (old, old))
+    ds, age = lb.load_worklist(p)
+    assert ds == [{'id': 'c/d'}] and 49 < age < 51
+
+
+def test_hard_deadline_abandons_stuck_audits_and_still_writes(tmp_path):
+    import json
+    import subprocess
+    import time
+    script = Path(__file__).resolve().parent.parent / "scripts" / "leaderboard.py"
+    out = tmp_path / "docs"
+    out.mkdir()
+    wl = tmp_path / "worklist.json"
+    wl.write_text(json.dumps({"generated": "2099-01-01T00:00:00+00:00",
+                              "datasets": [{"id": f"o/d{i}", "downloads": 1, "likes": 0,
+                                            "data_bytes": 0, "lane": "top"} for i in range(4)]}))
+    driver = tmp_path / "drive.py"
+    driver.write_text(f'''
+import sys, time, importlib.util
+spec = importlib.util.spec_from_file_location("lb", {str(script)!r})
+lb = importlib.util.module_from_spec(spec); spec.loader.exec_module(lb)
+lb.audit_one = lambda *a, **k: time.sleep(60)  # a download that never returns in time
+sys.argv = ["lb", "--worklist", {str(wl)!r}, "--out", {str(out)!r}, "--workers", "2",
+            "--time-budget", "1", "--hard-deadline", "3"]
+sys.exit(lb.main())
+''')
+    t0 = time.monotonic()
+    proc = subprocess.run([sys.executable, str(driver)], capture_output=True, text=True, timeout=45)
+    took = time.monotonic() - t0
+    assert proc.returncode == 0, proc.stderr[-2000:]
+    assert took < 30, f"run outlived its 3 s hard deadline: {took:.0f}s"
+    assert "hard deadline: abandoned" in proc.stdout
+    assert (out / "data.json").exists()

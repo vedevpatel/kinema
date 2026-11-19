@@ -14,7 +14,8 @@ import struct
 from dataclasses import dataclass
 
 from kinema.checks.base import CheckResult, Finding, Severity
-from kinema.rlds import RldsDataset, RldsError, GcsClient, SHARD_RE, decode_example, iter_records
+from kinema.rlds import (SHARD_RE, GcsClient, RldsDataset, RldsError, _masked_crc32c, decode_example,
+                         iter_records)
 SINGLE_SHARD_WARN_BYTES = 2 * 1024**3  # one corrupt object kills everything
 DEFAULT_SAMPLE_CAP = 64 * 1024**2  # skip episodes whose record is bigger
 
@@ -43,10 +44,14 @@ def rlds_episode_counts(ds: RldsDataset) -> CheckResult:
     """Declared shard/episode counts vs what the bucket actually holds."""
     res = CheckResult(check_id="rlds-episode-counts", title="RLDS episode counts")
     shards = _shard_parts(ds)
-    if ds.ambiguous_splits or "" in shards:
+    if ds.ambiguous_splits:
         res.skipped = True
         res.skip_reason = "shard inventory cannot be assigned unambiguously to declared splits"
         return res
+    # files with unparseable names (".~tmp~", "incomplete.*" leftovers) are not
+    # shards of any split: rlds-shard-inventory reports them; here they must
+    # not switch the count check off
+    n_junk = len(shards.pop("", {}))
     declared = ds.shard_lengths
     if not declared:
         res.findings.append(Finding(
@@ -77,7 +82,8 @@ def rlds_episode_counts(ds: RldsDataset) -> CheckResult:
                 details={"split": split}))
     total = sum(ds.splits.values())
     res.summary = (f"{total} episodes across {len(declared)} split(s)"
-                   if declared else "no declared splits")
+                   if declared else "no declared splits") + (
+        f"; {n_junk} unparseable file name(s) ignored (see rlds-shard-inventory)" if n_junk else "")
     return res
 
 
@@ -109,11 +115,19 @@ def rlds_feature_spec(ds: RldsDataset) -> CheckResult:
             res.findings.append(Finding(
                 "rlds-feature-spec", Severity.FAIL,
                 f"steps feature missing {required!r}"))
-    if "action" not in step_feats:
-        res.findings.append(Finding(
-            "rlds-feature-spec", Severity.WARN, "steps feature has no action"))
     obs = step_feats.get("observation", {})
     obs_feats = obs.get("featuresDict", {}).get("features", {})
+    if "action" not in step_feats:
+        # a dataset whose steps carry no robot state either (robot_vqa: images
+        # and text) is not a control dataset - no action is expected there
+        stateish = [k for k in obs_feats
+                    if any(w in k.lower() for w in ("state", "joint", "proprio", "position",
+                                                    "pose", "gripper", "eef", "qpos"))]
+        res.findings.append(Finding(
+            "rlds-feature-spec", Severity.WARN if stateish else Severity.INFO,
+            "steps feature has no action" + ("" if stateish else
+                                             " - and no robot state either: not a control "
+                                             "dataset, so none is expected")))
     if not obs_feats:
         res.findings.append(Finding(
             "rlds-feature-spec", Severity.WARN, "steps feature has no observation"))
@@ -225,6 +239,10 @@ def rlds_step_structure(ds: RldsDataset, client: GcsClient,
         return res
     try:
         head = client.get(name, (0, 11))
+        if len(head) < 12:
+            raise RldsError("first shard is shorter than one record header")
+        if _masked_crc32c(head[0:8]) != struct.unpack_from("<I", head, 8)[0]:
+            raise RldsError("first record's length header fails its CRC - the shard is corrupt")
         (length,) = struct.unpack_from("<Q", head, 0)
         if length > cfg.sample_cap_bytes:
             res.skipped = True
@@ -239,6 +257,10 @@ def rlds_step_structure(ds: RldsDataset, client: GcsClient,
                 "first shard's first record did not decode"))
             return res
         ep = decode_example(record)
+    except struct.error as e:  # truncated or odd-length packed field
+        res.findings.append(Finding(
+            "rlds-step-structure", Severity.FAIL, f"sample decode failed: malformed field ({e})"))
+        return res
     except RldsError as e:
         res.findings.append(Finding(
             "rlds-step-structure", Severity.FAIL, f"sample decode failed: {e}"))

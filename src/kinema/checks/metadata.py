@@ -206,13 +206,21 @@ class EpisodeFilePointersCheck(Check):
             coverage = (f"checked {judged} of {len(decl)} catalogued episodes "
                         f"against {len(local)} local shard(s)")
         if broken:
-            res.summary = (
-                f"{len(broken)} episode(s) point at a shard that does not contain their "
-                "rows - the v2.1->v3.0 converter rollover bug "
-                "(https://github.com/huggingface/lerobot/issues/2401): those episodes "
-                "silently vanish from LeRobot training loads. Re-convert or re-export "
-                f"with a fixed lerobot to repair the metadata ({coverage})"
-            )
+            moved = [b for b in broken if b[2]]
+            gone = len(broken) - len(moved)
+            parts = []
+            if moved:
+                parts.append(
+                    f"{len(moved)} episode(s) point at a shard while their rows live in "
+                    "another - the v2.1->v3.0 converter rollover bug "
+                    "(https://github.com/huggingface/lerobot/issues/2401): re-convert or "
+                    "re-export with a fixed lerobot to repair the metadata")
+            if gone:
+                parts.append(
+                    f"{gone} episode(s) have no rows in any local shard - missing data, "
+                    "not a pointer bug (dropped-frames reports the episodes)")
+            res.summary = ("; ".join(parts) + f"; those episodes silently drop out of "
+                           f"LeRobot training loads ({coverage})")
         else:
             res.summary = f"every shard pointer matches its file's contents ({coverage})"
         res.details = {"broken": [ep for ep, _, _ in broken], "judged": judged,
@@ -531,8 +539,10 @@ class RewardDoneCheck(Check):
                         "the trajectory continues after termination",
                         details={"episodes": continued},
                     ))
-        res.summary = ("reward and done present"
-                       if ctx.reward is not None and ctx.done is not None
-                       else f"reward {'present' if ctx.reward is not None else 'absent'}, "
-                            f"done {'present' if ctx.done is not None else 'absent'}")
+        base = ("reward and done present"
+                if ctx.reward is not None and ctx.done is not None
+                else f"reward {'present' if ctx.reward is not None else 'absent'}, "
+                     f"done {'present' if ctx.done is not None else 'absent'}")
+        n_gated = sum(1 for f in res.findings if f.severity >= Severity.WARN)
+        res.summary = base + (f"; {n_gated} issue(s) with the labels" if n_gated else "")
         return res

@@ -71,11 +71,14 @@ def iter_records(buf: bytes):
     """
     off = 0
     while off + 12 <= len(buf):
+        # the header is complete here, so its CRC is checkable: verify it
+        # BEFORE trusting the length - a corrupt length otherwise reads as a
+        # huge "incomplete trailing record" and the damage passes as clean
+        if _masked_crc32c(buf[off:off + 8]) != struct.unpack_from("<I", buf, off + 8)[0]:
+            raise RldsError(f"tfrecord length CRC mismatch at offset {off}")
         (length,) = struct.unpack_from("<Q", buf, off)
         if off + 12 + length + 4 > len(buf):
             return  # incomplete trailing record (range fetch boundary)
-        if _masked_crc32c(buf[off:off + 8]) != struct.unpack_from("<I", buf, off + 8)[0]:
-            raise RldsError(f"tfrecord length CRC mismatch at offset {off}")
         payload = buf[off + 12:off + 12 + length]
         (want,) = struct.unpack_from("<I", buf, off + 12 + length)
         if _masked_crc32c(payload) != want:

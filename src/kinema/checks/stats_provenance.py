@@ -102,4 +102,8 @@ class StatsF32FingerprintCheck(Check):
                 "constant channels get a fabricated std and a DC-offset mean",
                 details={"episodes": {f: e for f, e in picked.items()},
                          "dims": {f: d for f, d in dims.items()}}))
+            res.summary = f"per-episode stats carry naive float32 accumulation ({total} episode(s))"
+        else:
+            res.summary = (f"no float32-accumulation fingerprint in {len(picks)} sampled "
+                           "episode(s)")
         return res

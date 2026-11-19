@@ -2,8 +2,10 @@ name: calibration
 
 # Full-list calibration (~700 MB of pinned datasets): too heavy for per-push
 # CI, so it runs weekly and on demand. The nightly sensitivity guard in ci.yml
-# covers the quick subset; this watches the rest. The report is an artifact -
-# compare it against the last run, it does not gate anything by itself.
+# covers the eval half's quick subset; this watches the full pinned list. The
+# report is an artifact to compare against the last run. The run turns red
+# when any pinned dataset fails to load (calibrate.py exits 1 rather than
+# publish a partial calibration); whatever report it wrote is still uploaded.
 
 on:
   schedule:
@@ -24,7 +26,9 @@ jobs:
       - run: pip install -e .
       - run: python scripts/calibrate.py --markdown calibration.md
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: calibration-report
           path: calibration.md
+          if-no-files-found: ignore
           retention-days: 90

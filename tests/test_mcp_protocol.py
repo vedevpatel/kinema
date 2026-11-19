@@ -664,3 +664,32 @@ def test_forced_hub_cannot_load_shadow_local_directory(tmp_path, monkeypatch):
     assert root == cache and repo == "owner/name" and revision == "pinned"
     assert calls[0]["repo_id"] == "owner/name" and calls[0]["revision"] == "pinned"
     assert _resolve_source(str(tmp_path / "owner/name"))[1] is None
+
+
+# --- report_path follow-ups (audit re-check) ------------------------------------
+
+def test_report_path_rejects_unencodable_and_nul_names_before_the_run():
+    assert "cannot be encoded" in mcp._report_path_problem("/tmp/bad\ud800.json")
+    assert "NUL" in mcp._report_path_problem("/tmp/nul\x00.json")
+    # and the writer never raises on one: the run's summary must survive
+    path, err = mcp._write_report("{}", "/tmp/bad\ud800.json", "ds")
+    assert path is None and err
+
+
+def test_report_path_through_a_user_symlink_is_refused(tmp_path):
+    real = tmp_path / "real"
+    real.mkdir()
+    (tmp_path / "link").symlink_to(real)
+    assert "symbolic link" in mcp._report_path_problem(str(tmp_path / "link" / "r.json"))
+
+
+@pytest.mark.skipif(not os.path.islink("/tmp"), reason="needs a system /tmp symlink (macOS)")
+def test_system_tmp_symlink_is_resolved_not_refused():
+    target = "/tmp/kinema-test-report-path.json"
+    try:
+        assert mcp._report_path_problem(target) is None
+        path, err = mcp._write_report('{"x": 1}', target, "ds")
+        assert err is None and path == os.path.realpath(target)
+    finally:
+        if os.path.exists(target):
+            os.remove(target)

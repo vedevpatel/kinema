@@ -183,7 +183,8 @@ TOOLS: list[dict[str, Any]] = [
         "name": "similar_datasets",
         "description": "Datasets like yours: rank your report against every dataset audited on "
         "the kinema leaderboard (a labelled corpus of real robot data and its defects) and "
-        "return the closest matches with shared warnings, their measured harm, and links to "
+        "return the closest matches with shared warnings, the measured harm where the harm "
+        "table has it (historical v1.1 weights; many checks have none), and links to "
         "their full audits. Give either a dataset to audit or a report_path from an earlier "
         "run_checks call.",
         "inputSchema": _schema(
@@ -357,16 +358,48 @@ def _is_kinema_report(path: Path) -> bool:
         return False
 
 
+def _system_symlink(link: Path) -> bool:
+    """A symlink only root could have planted: owned by root, inside a
+    root-owned directory nobody else can write. macOS's /tmp -> private/tmp
+    and /var -> private/var qualify; a link a user or attacker made does not."""
+    try:
+        st = os.lstat(link)
+        pst = os.stat(link.parent)
+    except OSError:
+        return False
+    return st.st_uid == 0 and pst.st_uid == 0 and not (pst.st_mode & 0o022)
+
+
+def _resolved_report_path(p: Path) -> tuple[Path | None, str | None]:
+    """(path to use, problem). System symlinks among the ancestors are
+    resolved away so the no-follow writer can walk the real path; any other
+    symlink - in an ancestor or the file itself - is refused."""
+    if p.is_symlink():
+        return None, f"refusing symbolic link in report_path {p}"
+    for anc in p.parents:
+        if anc.is_symlink() and not _system_symlink(anc):
+            return None, f"refusing symbolic link {anc} in report_path {p}"
+    return Path(os.path.realpath(p.parent)) / p.name, None
+
+
 def _report_path_problem(raw: str) -> str | None:
     """Early user feedback only. The writer repeats enforcement on open FDs."""
+    if "\x00" in raw:
+        return "report_path contains a NUL byte"
+    try:
+        os.fsencode(raw)
+    except UnicodeError:
+        return f"report_path {raw!r} cannot be encoded as a filesystem path"
     p = Path(raw).expanduser()
     if not p.is_absolute():
         return (f"report_path {raw!r} must be an absolute path (the server's working "
                 f"directory, {os.getcwd()}, is not yours)")
     if p.suffix.lower() != ".json":
         return f"report_path {raw!r} must end in .json"
-    if p.is_symlink() or any(parent.is_symlink() for parent in p.parents):
-        return f"refusing symbolic link in report_path {p}"
+    resolved, problem = _resolved_report_path(p)
+    if problem or resolved is None:
+        return problem or f"report_path {raw!r} could not be resolved"
+    p = resolved
     if p.exists() and not _is_kinema_report(p):
         return f"refusing to overwrite {p}: it exists and is not a kinema report"
     if not p.parent.is_dir():
@@ -452,9 +485,13 @@ def _write_report(text: str, requested: str | None, dataset: str) -> tuple[str |
                 problem = _report_path_problem(requested)
                 if problem:
                     return None, problem
-                _write_requested_report(text, p)
-            return str(p), None
-        except OSError as e:
+                real, problem = _resolved_report_path(p)
+                if problem or real is None:
+                    return None, problem
+                _write_requested_report(text, real)
+            return str(real), None
+        except (OSError, ValueError, UnicodeError) as e:
+            # never raise: the run finished, its summary must survive
             return None, f"could not write {p}: {e}"
     errors = []
     for p in _default_report_paths(dataset):
@@ -714,7 +751,14 @@ class McpServer:
                         req_id, "invalid arguments: one of dataset or report_path is required"))
                     return
                 if args.get("report_path") and not args.get("dataset"):
-                    query = load_query_report(args["report_path"])
+                    rp = Path(str(args["report_path"])).expanduser()
+                    if not rp.is_absolute():
+                        emit(self._tool_error(
+                            req_id, f"invalid arguments: report_path {args['report_path']!r} must be "
+                                    f"an absolute path (the server's working directory, "
+                                    f"{os.getcwd()}, is not yours)"))
+                        return
+                    query = load_query_report(str(rp))
                 else:
                     query, _ctx = run_checks(
                         dataset=args["dataset"],

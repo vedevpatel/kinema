@@ -207,13 +207,31 @@ _RLDS_LANE_MAX_CALLS = 2500  # GCS JSON-API calls per bucket (gresearch's shard
 # listings paginate: ~17 calls/dataset; 600 starved the pass at the d's)
 
 
+def _rlds_shards_complete(ds) -> bool:
+    """Every declared split's full shard set is present in this copy."""
+    from kinema.checks.rlds_checks import _shard_parts
+
+    lengths = getattr(ds, "shard_lengths", None)
+    if not lengths:
+        return True  # nothing declared to judge against: keep plain precedence
+    if getattr(ds, "ambiguous_splits", None):
+        return False
+    try:
+        parts = _shard_parts(ds)
+    except Exception:  # noqa: BLE001 - completeness is a tiebreak, never a lane killer
+        return True
+    return all(len(parts.get(split, {})) == len(n)
+               for split, n in lengths.items())
+
+
 def probe_rlds_lane(workers: int = 8) -> list[dict]:
     """Board entries for the RLDS corpus on GCS (not Hugging Face).
 
     Discovery is an anonymous bucket listing per bucket in RLDS_BUCKETS;
     each dataset prefix is probed (newest TFDS semver, dataset_info.json +
     features.json). A dataset boards ONCE under rlds/<name>: the first
-    bucket in precedence order whose probe finds real data claims the name
+    bucket in precedence order holding its COMPLETE declared shard set claims
+    the name; a partial copy boards only when no bucket has a complete one
     (the gdm and gresearch copies of a mirrored dataset DIVERGE, so the
     winning bucket is recorded on the row for reproducibility).
     A bucket-level listing failure zeroes the WHOLE lane, not just that
@@ -236,6 +254,7 @@ def probe_rlds_lane(workers: int = 8) -> list[dict]:
 
     out: list[dict] = []
     claimed: set[str] = set()
+    partial: dict[str, dict] = {}
     try:
         for bucket, base in RLDS_BUCKETS:
             client = GcsClient(bucket)
@@ -256,7 +275,8 @@ def probe_rlds_lane(workers: int = 8) -> list[dict]:
                 return {"id": f"rlds/{name}", "rlds": True, "rlds_prefix": p,
                         "rlds_bucket": _bucket,
                         "version": ds.version, "downloads": 0, "likes": 0,
-                        "data_bytes": ds.data_bytes}, task_client.calls
+                        "data_bytes": ds.data_bytes,
+                        "_complete": _rlds_shards_complete(ds)}, task_client.calls
 
             todo = [p for p in sorted(prefixes)
                     if p.rstrip("/").split("/")[-1] not in claimed]
@@ -266,14 +286,22 @@ def probe_rlds_lane(workers: int = 8) -> list[dict]:
                     entry, probe_calls = item if item is not None else (None, 0)
                     calls += probe_calls
                     if entry is not None:
-                        claimed.add(entry["rlds_prefix"].rstrip("/").split("/")[-1])
-                        out.append(entry)
+                        name = entry["rlds_prefix"].rstrip("/").split("/")[-1]
+                        if entry.pop("_complete"):
+                            claimed.add(name)
+                            partial.pop(name, None)
+                            out.append(entry)
+                        else:
+                            # a partial copy claims the name only if no later
+                            # bucket holds the complete declared shard set
+                            partial.setdefault(name, entry)
                     if calls > _RLDS_LANE_MAX_CALLS:
                         print(f"rlds lane over {_RLDS_LANE_MAX_CALLS} API calls in "
                               f"{bucket} - boarding what we have", flush=True)
                         break
             finally:
                 stream.close()
+        out.extend(e for n, e in sorted(partial.items()) if n not in claimed)
         return out
     except Exception as e:  # noqa: BLE001 - the lane dies quiet, the board lives
         print(f"rlds lane failed ({type(e).__name__}) - zero rlds rows this run "
@@ -997,15 +1025,43 @@ def render_dataset_page(rep: DatasetReport, audited: str | None = None,
     return page(f"{rep.source} - kinema audit", body)
 
 
-def reconcile_discovery(entries: list[dict], datasets: list[dict]) -> list[dict]:
-    """An omitted probe is not evidence of deletion, in any lane."""
+PRUNE_AFTER_MISSES = 3  # fresh discoveries in a row without the dataset
+
+
+def reconcile_discovery(entries: list[dict], datasets: list[dict],
+                        fresh: bool = False, prune_after: int = PRUNE_AFTER_MISSES) -> list[dict]:
+    """Merge discovery metadata into stored rows; prune only on evidence.
+
+    One omitted probe is not evidence of deletion (a 429, a timeout). A row
+    is dropped only after `prune_after` FRESH discoveries in a row did not
+    list it - a cached worklist proves nothing and never counts - and only
+    when its lane's discovery looks healthy: a lane that came back with
+    under half its stored rows is a listing failure, not mass deletion, so
+    no miss is counted for that lane at all."""
     current = {d["id"]: d for d in datasets}
+    healthy: dict[str, bool] = {}
+    if fresh:
+        lanes = {e.get("lane") for e in entries}
+        for lane in lanes:
+            stored = sum(1 for e in entries if e.get("lane") == lane)
+            found = sum(1 for d in datasets if d.get("lane") == lane)
+            healthy[lane] = found >= 0.5 * stored
     out = []
     for old in entries:
-        fresh = current.get(old["id"])
-        metadata = ({k: v for k, v in fresh.items()
-                     if k not in {"report", "engine", "reason", "status"}} if fresh else {})
-        out.append({**old, **metadata, "discovery_current": fresh is not None})
+        row = current.get(old["id"])
+        metadata = ({k: v for k, v in row.items()
+                     if k not in {"report", "engine", "reason", "status"}} if row else {})
+        merged = {**old, **metadata, "discovery_current": row is not None}
+        if fresh:
+            if row is not None:
+                merged["discovery_misses"] = 0
+            elif healthy.get(old.get("lane"), False):
+                merged["discovery_misses"] = int(old.get("discovery_misses") or 0) + 1
+                if merged["discovery_misses"] >= prune_after:
+                    print(f"pruning {old['id']}: absent from {prune_after} fresh discoveries",
+                          flush=True)
+                    continue
+        out.append(merged)
     return out
 
 
@@ -1235,7 +1291,9 @@ def render_harm_table(doc: dict) -> str:
         f"Generated {esc(doc.get('generated', ''))}"
         + (f"; {esc(comp['table_runs_gpu_hours'])} GPU-hours across listed runs on {esc(gpu)}"
            if "table_runs_gpu_hours" in comp else "")
-        + (f"; partial ledger {esc(comp['ledger_gpu_hours'])} GPU-hours on {esc(gpu)} (not the run total)"
+        + (f"; accelerators {esc(gpu)}" if gpu and "table_runs_gpu_hours" not in comp else "")
+        + (f"; partial ledger {esc(comp['ledger_gpu_hours'])} GPU-hours (one manifest's "
+           "spend, not the run total)"
            if "ledger_gpu_hours" in comp else "")
         + ".</p>"
         + (f"<p class=dim>{esc(doc['notes'])}</p>" if doc.get("notes") else "")
@@ -1370,6 +1428,25 @@ def rescore_site(out: Path) -> int:
     return 0
 
 
+def load_worklist(path: Path) -> tuple[list[dict], float]:
+    """(datasets, age in hours). Accepts the old bare-list format (age = file mtime)."""
+    import time
+
+    raw = json.loads(path.read_text())
+    if isinstance(raw, dict):
+        gen = dt.datetime.fromisoformat(raw["generated"])
+        age = (dt.datetime.now(dt.timezone.utc) - gen).total_seconds() / 3600
+        return list(raw["datasets"]), age
+    return list(raw), (time.time() - path.stat().st_mtime) / 3600
+
+
+def save_worklist(path: Path, datasets: list[dict]) -> None:
+    payload = {"generated": dt.datetime.now(dt.timezone.utc).isoformat(), "datasets": datasets}
+    tmp = path.with_name(f".{path.name}.tmp")
+    tmp.write_text(json.dumps(payload, separators=(",", ":")))
+    tmp.replace(path)
+
+
 def main() -> int:
     import socket
     import time
@@ -1386,6 +1463,13 @@ def main() -> int:
     ap.add_argument("--time-budget", type=float, default=0, help="stop starting new audits after N seconds")
     ap.add_argument("--workers", type=int, default=1)
     ap.add_argument("--worklist", default="", help="cache file for the dataset list")
+    ap.add_argument("--worklist-max-age-hours", type=float, default=0,
+                    help="rediscover when the worklist is older than this (0: never expires)")
+    ap.add_argument("--discover-only", action="store_true",
+                    help="refresh the worklist (and stored rows' discovery state), audit nothing")
+    ap.add_argument("--hard-deadline", type=float, default=0,
+                    help="seconds from start after which in-flight audits are abandoned and the "
+                         "run writes what it has and exits (keep below the shell timeout)")
     ap.add_argument("--rescore", action="store_true",
                     help="recompute stored scores under the current score model; no audits")
     args = ap.parse_args()
@@ -1396,17 +1480,24 @@ def main() -> int:
     (out / "dataset").mkdir(parents=True, exist_ok=True)
 
     worklist_path = Path(args.worklist) if args.worklist else None
-    if worklist_path and worklist_path.exists():
-        datasets = json.loads(worklist_path.read_text())
-        print(f"loaded {len(datasets)} datasets from worklist cache")
-    else:
+    datasets, fresh = None, False
+    if worklist_path and worklist_path.exists() and not args.discover_only:
+        datasets, age_h = load_worklist(worklist_path)
+        if args.worklist_max_age_hours and age_h > args.worklist_max_age_hours:
+            print(f"worklist is {age_h:.0f}h old (> {args.worklist_max_age_hours:.0f}h): rediscovering")
+            datasets = None
+        else:
+            print(f"loaded {len(datasets)} datasets from worklist cache ({age_h:.0f}h old)")
+    if datasets is None:
         print(f"listing top {args.limit} lerobot datasets on the Hub"
               + (f" + {args.new_lane} newest..." if args.new_lane else "..."))
         datasets = find_lerobot_datasets(args.limit, args.new_lane,
                                          workers=args.workers)
-        print(f"found {len(datasets)} LeRobot-format datasets")
+        fresh = True
+        print(f"found {len(datasets)} LeRobot-format datasets "
+              f"({time.monotonic() - started:.0f}s)")
         if worklist_path:
-            worklist_path.write_text(json.dumps(datasets))
+            save_worklist(worklist_path, datasets)
 
     # resume: skip entries already audited BY THIS ENGINE. Results from older
     # check logic stay on the board (marked stale) until they are replaced,
@@ -1422,7 +1513,7 @@ def main() -> int:
                 e for e in prev
                 if e.get("report") or (e.get("reason") and e.get("status") in ("gated", "unsupported", "error"))
             ]
-            entries = reconcile_discovery(entries, datasets)
+            entries = reconcile_discovery(entries, datasets, fresh=fresh)
             # stored results carry their verdicts: rescore them under the
             # current model so the whole board swaps models in this run
             n_moved = rescore_entries(entries)
@@ -1439,6 +1530,12 @@ def main() -> int:
             rewrite_dataset_pages(out, entries)
             print(f"rescored stored results under {SCORE_MODEL}: {n_moved} score(s) changed")
     stale_ids = {e["id"] for e in entries if e["id"] not in done_ids}
+    if args.discover_only:
+        # discovery state (misses, pruning, fresh metadata) is the whole job
+        _write(out, entries, f"{dt.datetime.now(dt.timezone.utc):%Y-%m-%d %H:%M UTC}",
+               max_episodes=args.max_episodes)
+        print(f"discovery only: {len(datasets)} listed, {len(entries)} board rows kept")
+        return 0
 
     from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 
@@ -1493,9 +1590,16 @@ def main() -> int:
         generated = f"{dt.datetime.now(dt.timezone.utc):%Y-%m-%d %H:%M UTC}"
         _write(out, entries, generated, max_episodes=args.max_episodes)
 
+    def past_deadline() -> bool:
+        return bool(args.hard_deadline) and time.monotonic() - started >= args.hard_deadline
+
     # submit incrementally: the queue stays shallow so --time-budget actually
-    # bounds the run (at most max_pending audits in flight when it expires)
-    with ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
+    # bounds the run (at most max_pending audits in flight when it expires).
+    # Not a `with` block: on the hard deadline the pool is abandoned rather
+    # than joined, so a stuck download cannot outlive the shell timeout.
+    pool = ThreadPoolExecutor(max_workers=max(1, args.workers))
+    abandoned = False
+    try:
         pending = {}
         it = iter(todo)
 
@@ -1516,22 +1620,48 @@ def main() -> int:
             if args.time_budget and time.monotonic() - started > args.time_budget:
                 print("time budget reached; letting in-flight audits finish", flush=True)
                 break
-            done, _ = wait(pending, timeout=30, return_when=FIRST_COMPLETED)
+            # never sleep past the budget or the deadline waiting on a slow audit
+            limits = [30.0]
+            for lim in (args.time_budget, args.hard_deadline):
+                if lim:
+                    limits.append(max(0.5, lim - (time.monotonic() - started)))
+            done, _ = wait(pending, timeout=min(limits), return_when=FIRST_COMPLETED)
             for fut in done:
                 pending.pop(fut)
                 record(fut.result())
             while len(pending) < max_pending and submit_next():
                 pass
         for fut in list(pending):
+            if args.hard_deadline:
+                remaining = args.hard_deadline - (time.monotonic() - started)
+                if remaining <= 0:
+                    abandoned = True
+                    break
+                wait_s = min(600.0, remaining)
+            else:
+                wait_s = 600.0
             try:
-                record(fut.result(timeout=600))
+                record(fut.result(timeout=wait_s))
             except Exception as e:  # noqa: BLE001
                 print(f"    dropped in-flight audit: {type(e).__name__}", flush=True)
+                if past_deadline():
+                    abandoned = True
+                    break
+    finally:
+        pool.shutdown(wait=not abandoned, cancel_futures=True)
 
     generated = f"{dt.datetime.now(dt.timezone.utc):%Y-%m-%d %H:%M UTC}"
     _write(out, entries, generated, max_episodes=args.max_episodes)
     n_ok = sum(1 for e in entries if e.get("report"))
     print(f"done: {n_ok}/{len(entries)} audited -> {out}/index.html")
+    if abandoned:
+        # worker threads are still blocked in downloads; a normal interpreter
+        # exit would join them. The site is written (atomic writes): leave now.
+        import os
+        print(f"hard deadline: abandoned {sum(1 for f in pending if not f.done())} "
+              "in-flight audit(s); results so far are written", flush=True)
+        sys.stdout.flush()
+        os._exit(0)
     return 0
 
 

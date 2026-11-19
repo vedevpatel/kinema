@@ -187,14 +187,17 @@ def inferred_gripper_dims(action, names: list[str] | None) -> set[int]:
     is an unused joint, not a gripper. Teleoperated grippers move
     continuously but still reach both ends over a dataset; a gripper never
     actuated at all is constant and already excluded.
-    Revalidated on the 22 name-labelled datasets of the leaderboard
-    catalog (scripts/revalidate_gripper_prior.py, 40-episode samples):
-    the either-end rule picks a non-gripper in 7.7% of its 26 slot picks
-    (reproducing finding #15's ~7%); the both-ends rule drops that to
-    4.8% of 21 picks (95% precision) - it clears the parked-arm false
-    positive and leaves only a mobile-base angular_z that genuinely
-    dwells at both ends. Recall falls from 89% to 74% of slot grippers;
-    that trade is safe because misses keep their severity. Misses stay safe: an
+    Revalidated on the 23 name-labelled datasets of the pinned calibration
+    list (scripts/calibration_datasets.txt; scripts/revalidate_gripper_prior.py,
+    40-episode samples, re-run 2026-11-18): the either-end rule picks a
+    non-gripper in 7.4% of its 27 slot picks (reproducing finding #15's ~7%);
+    the both-ends rule drops that to 4.5% of 22 picks (95.5% precision) -
+    it clears the parked-arm false positive and leaves only a mobile-base
+    angular_z that genuinely dwells at both ends. Recall falls from 89% to
+    75% of slot grippers; that trade is safe because misses keep their
+    severity. Caveats: this is an in-sample check on the catalogue the rule
+    was designed against, every false positive comes from one dataset, and
+    at these counts the old and new precision intervals overlap. Misses stay safe: an
     unrecognised gripper's findings keep their severity instead of being
     downgraded. Advisory: callers that would HIDE a finding should
     downgrade, not drop.

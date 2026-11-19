@@ -84,7 +84,6 @@ class CheckConfig:
     calib_scale_line_vs_step: float = 1.5  # ...and beats the best two-level step (backlash)
     calib_gripper_warn: float = 0.15  # gripper offset at its free end
     # delta commands: measured step vs commanded step (regression slope)
-    calib_delta_scale_warn: float = 0.5  # |slope - 1| at/above this gates
     calib_delta_scale_info: float = 0.25  # milder disagreement: report only
     calib_delta_min_r2: float = 0.5  # steps must track before a scale verdict
     # idle / stuck
@@ -131,7 +130,16 @@ def load_config_overrides(path: str) -> dict[str, Any]:
     )
     if bad:
         raise ValueError(f"{path}: values must be numbers: {', '.join(bad)}")
-    return dict(data)
+    import math
+    nonfinite = sorted(k for k, v in data.items() if not math.isfinite(v))
+    if nonfinite:  # json accepts NaN/Infinity; a NaN threshold silently tunes nothing
+        raise ValueError(f"{path}: values must be finite numbers: {', '.join(nonfinite)}")
+    int_fields = {f.name for f in fields(CheckConfig)
+                  if f.type in (int, "int") or isinstance(f.default, int) and not isinstance(f.default, bool)}
+    not_int = sorted(k for k in data if k in int_fields and float(data[k]) != int(data[k]))
+    if not_int:
+        raise ValueError(f"{path}: these settings take whole numbers: {', '.join(not_int)}")
+    return {k: (int(v) if k in int_fields else v) for k, v in data.items()}
 
 
 class Check:

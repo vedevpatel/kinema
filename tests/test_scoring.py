@@ -300,7 +300,9 @@ def test_flagged_episodes_reads_episode_index_and_details_episodes():
     r = _result(STUCK, Severity.WARN, per_episode=[3], grouped=[1, 2, 3])
     r.findings.append(Finding(STUCK, Severity.INFO, "no episodes", details={"joint": 2}))
     r.findings.append(Finding(STUCK, Severity.INFO, "junk", details={"episodes": ["x", True, 9]}))
-    assert flagged_episodes(r) == {1, 2, 3, 9}
+    r.findings.append(Finding(STUCK, Severity.WARN, "gated", details={"episodes": ["x", True, 7]}))
+    # gated evidence only: the INFO finding's episode 9 is not waiver evidence
+    assert flagged_episodes(r) == {1, 2, 3, 7}
     assert flagged_episodes(CheckResult(STUCK, STUCK)) == set()
 
 
@@ -426,7 +428,9 @@ def test_rescore_sets_charge_fields_and_is_idempotent():
     assert by_id[STUCK]["waived_by"] == IDLE
     assert by_id[STUCK]["waiver_evidence"] == {"shared_episodes": 1, "overlap": 0.5}
     assert by_id[IDLE]["charge"] == 10 and "waived_by" not in by_id[IDLE]
-    assert by_id["stats-drift"]["charge"] == 10 and "waived_by" not in by_id["stats-drift"]
+    # charge is the actual deduction: a PASS costs 0 (its WARN weight stays in "weight")
+    assert by_id["stats-drift"]["charge"] == 0 and by_id["stats-drift"]["weight"] == 10
+    assert "waived_by" not in by_id["stats-drift"]
     again = rescore_report_dict(copy.deepcopy(d))
     assert again == d
     # round trip (what dataset pages render) and the JSON writer agree with it
@@ -452,3 +456,16 @@ def test_dataset_page_annotates_the_waived_row():
     assert "charge waived - same episodes as idle-segments" in waived
     charged = lb.render_dataset_page(report_from_dict(_stored_pair([8], [30, 31])), audited="x")
     assert "Health score: 84/100" in charged and "charge waived" not in charged
+
+
+def test_info_only_overlap_does_not_waive_separate_warn_defects():
+    # idle WARN on 0-4 + INFO "ends idle" on 10-99; stuck WARN on 50-54 + INFO on
+    # 5-99: the gated sets are disjoint, so both defects pay
+    idle = _result(IDLE, Severity.WARN, per_episode=range(5))
+    idle.findings.append(Finding(IDLE, Severity.INFO, "ends idle", details={"episodes": list(range(10, 100))}))
+    stuck = _result(STUCK, Severity.WARN, grouped=range(50, 55))
+    stuck.findings.append(Finding(STUCK, Severity.INFO, "unused DOF", details={"episodes": list(range(5, 100))}))
+    rep = _pair_report(idle, stuck)
+    assert "waived_by" not in rep.charges()[STUCK]
+    assert rep.score == 84
+

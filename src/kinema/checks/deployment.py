@@ -196,7 +196,7 @@ class DeploymentReadinessCheck(Check):
                             self.id,
                             Severity.WARN,
                             f"{pname} normalizes with q01/q99 quantiles but "
-                            f"{ctx.stats_source} has none for {feat} - recompute stats "
+                            f"{(ctx.stats_sources or {}).get(feat, ctx.stats_source)} has none for {feat} - recompute stats "
                             "with quantiles, unless your training pipeline computes its "
                             "own norm stats",
                             details={"feature": feat, "policy": pname, "stats": sorted(entry)},

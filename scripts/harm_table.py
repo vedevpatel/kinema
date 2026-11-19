@@ -1,24 +1,27 @@
 #!/usr/bin/env python3
-"""Harm table v1: injected defects on lerobot/pusht, each scored by
+"""Harm table (v2 data): injected defects on lerobot/pusht, each scored by
 what it does to a trained policy - held-out action MSE and rollout success -
-against a clean arm trained the same way.
+against a clean arm trained the same way, same seed.
 
-Arms: clean + duplicates_20pct, idle_start_30f, scale_mismatch_0.5x_25pct
-(the harm study v0 recipes, imported from scripts/harm_study.py unchanged)
-+ stuck_joint_30pct (one action dim frozen to its episode-start value in
-30% of episodes) + action_saturation_30pct (actions clipped to the central
-30% of each dim's range in every episode) + dropped_frames_10pct_25pct
-(10% of interior frames deleted in 25% of episodes). Policy: LeRobot's diffusion-policy pusht example
-(examples/training/train_policy.py at lerobot==0.5.1: DiffusionConfig
-defaults, Adam lr 1e-4, 5000 steps), batch 32 for every arm. Outcomes:
-held-out action MSE on the 24 episodes after the 120 training episodes (the
-harm_study.py split) and success over 20 gym_pusht rollouts. 3 seeds.
+Arms: clean + the harm study v0 recipes (duplicates_20pct, idle_start_30f,
+scale_mismatch_0.5x_25pct, imported from scripts/harm_study.py unchanged)
++ stuck_joint_30pct, action_saturation_30pct, dropped_frames_10pct_25pct,
+outlier_burst_5pct and stale_stats_offset_0.5sigma (recipes below). Policy:
+LeRobot's diffusion-policy pusht example (examples/training/train_policy.py
+at lerobot==0.5.1: DiffusionConfig defaults, Adam lr 1e-4), batch 32 for
+every arm; STEPS and EVAL_EPISODES below set the budget (the published
+table: 20k steps, 50 rollouts). Outcomes: held-out action MSE on the 24
+episodes after the 120 training episodes (the harm_study.py split) and
+rollout success. 3 seeds per defect, 5 for duplicates. Rows whose defect
+and clean runs ran on different accelerators are flagged in
+accelerator_pairs: those deltas are confounded.
 
 Every GPU run is recorded in a manifest. A completed run is never retrained;
 a run killed mid-way stays on the ledger as spent GPU time. Before an arm
 launches, its projected cumulative GPU time (everything spent so far, plus
 the estimated cost of the arm's remaining runs) must fit the ceiling
-(15 GPU-hours) or the harness refuses it. docs/harm-table.json is rebuilt
+(CEILING_GPU_HOURS, default 15; the published v2 runs were authorized under
+18) or the harness refuses it. docs/harm-table.json is rebuilt
 from the manifest after every completed run.
 
 Run:
@@ -547,6 +550,16 @@ def confidence_label(n_seeds: int) -> str:
     return f"indicative ({n_seeds} seed{'s' if n_seeds != 1 else ''})"
 
 
+def table_confidence_label(rows: Sequence[dict]) -> str:
+    """The table-level label from the PER-ROW seed counts: the union of seeds
+    across rows (0-5) is not a seed count any single defect has."""
+    counts = sorted({len(r["seeds"]) for r in rows if r.get("seeds")})
+    if not counts:
+        return "indicative (no seeds)"
+    span = str(counts[0]) if len(counts) == 1 else f"{counts[0]}-{counts[-1]}"
+    return f"indicative ({span} seeds per defect)"
+
+
 def build_table(results: dict[tuple[str, int], dict], *, policy: dict, steps: int, eval_episodes: int | None,
                 split: tuple[list[int], list[int]], compute: dict | None = None, date: str | None = None,
                 dates: dict[str, str] | None = None) -> dict:
@@ -602,7 +615,7 @@ def build_table(results: dict[tuple[str, int], dict], *, policy: dict, steps: in
         "steps": steps,
         "eval_episodes": eval_episodes,
         "seeds": all_seeds,
-        "confidence": confidence_label(len(all_seeds)),
+        "confidence": table_confidence_label(rows),
         "outcomes": {
             "mse_delta_pct": "held-out action MSE, defect arm vs clean arm, same seed, % of clean",
             "success_delta_pts": "rollout success rate, defect arm minus clean arm, same seed, percentage points",

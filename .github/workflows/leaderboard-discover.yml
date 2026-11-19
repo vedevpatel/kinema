@@ -1,0 +1,48 @@
+name: leaderboard-discover
+
+# Weekly: list the board's datasets on the Hub (the slow, rate-limited part,
+# ~45 min with back-offs) and commit docs/worklist.json, so the nightly audit
+# spends its whole budget auditing. Also counts fresh-discovery misses: a row
+# absent from 3 fresh discoveries in a row (in a lane that listed healthily)
+# is pruned.
+
+on:
+  schedule:
+    - cron: "17 6 * * 0"  # Sundays, ahead of the nightly audit
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: leaderboard
+  cancel-in-progress: false
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e .
+      - name: discover
+        run: >-
+          timeout 4800 env HF_TOKEN=${{ secrets.HF_TOKEN }}
+          python scripts/leaderboard.py --discover-only --limit 200 --workers 16
+          --worklist docs/worklist.json --out docs
+      - name: commit worklist
+        run: |
+          git config user.name "Ved Patel"
+          git config user.email "130187703+vedevpatel@users.noreply.github.com"
+          git add docs
+          git diff --cached --quiet && exit 0
+          git commit -m "leaderboard: weekly discovery"
+          for attempt in 1 2 3 4 5; do
+            git pull --rebase -X theirs origin main && git push && exit 0
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 15))
+          done
+          exit 1

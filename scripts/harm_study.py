@@ -9,11 +9,12 @@ what specific checks catch, a CPU-trainable behavior-cloning baseline
 (ridge regression state -> action; no GPU, no new deps), and the held-out
 action-prediction MSE delta as the harm metric.
 
-A defect that a check flags but that does not move held-out MSE is a
-candidate for downgrading; a defect that moves MSE and is NOT flagged is a
-coverage hole. The GPU-grade protocol (real BC policy, rollout success
-rate) is documented in docs/harm-study.md - this script is the always-runs
-floor, not the ceiling.
+A ridge model is a limited proxy: it has no normalization step (stale
+stats read exactly 0%) and barely registers short bursts (outlier_burst
+~+1% here vs ~+108% on the GPU diffusion policy), so "does not move ridge
+MSE" is NOT evidence that a check should be downgraded - only the GPU
+table (scripts/harm_table.py, docs/harm-study.md) can say that. Use this
+script to exercise the recipes on CPU, not to price defects.
 
 Run:  python scripts/harm_study.py [--episodes 120] [--json /tmp/harm.json]
 """

@@ -1,5 +1,12 @@
 # tiered-v2: WARN weights re-anchored on harm table v1.1
 
+> **Historical design record (2026-11-15).** The readings below were written
+> against harm table v1.1 at 3 seeds. Later analysis tempered two of them:
+> duplicate and dropped-frame seed deltas straddle zero, so they show no
+> detectable effect at this power rather than establishing the defects are
+> benign; and idle-segments' three seeds disagree ~10x, so its tier B is a
+> point estimate. Current wording lives in `docs/checks.md`.
+
 Score model `tiered-v2` replaces `tiered-v1.1`. Only WARN-weight
 memberships change. The band edges (100/10/0), FAIL cost (25), per-check
 billing and the correlated-check waiver edge all stay as they were; the
@@ -28,8 +35,8 @@ Tiers: A >= 100% (weight 10), B >= 10% (6), C < 10% (2).
 | --- | --- | --- | --- |
 | calibration-drift | 10, A, measured (+347%, ridge BC v0) | 10, A, measured | Scale mismatch is the top killer, and it gets worse with training (+665% at 5k, +1475% at 20k). |
 | stuck-actuator | 6, placeholder | **10, A, measured** | A solid #2 at both budgets (+545%, then +698%), and every seed is above 500%. |
-| idle-segments | 10, A, measured (+881%, ridge BC v0) | **6, B, measured** | The harm shrinks with training (+332% at 5k, +75% at 20k). The diffusion policy learns past the padding. |
-| duplicate-and-leakage | 2, C, measured (+0.1%, ridge BC v0) | 2, C, measured | Benign at both budgets (+3.9%, then -3.6%). |
+| idle-segments | 10, A, measured (+881%, ridge BC v0) | **6, B, measured** | The mean harm shrinks with training (+332% at 5k, +75% at 20k), but the 20k seeds range +14% to +129%. |
+| duplicate-and-leakage | 2, C, measured (+0.1%, ridge BC v0) | 2, C, measured | No detectable effect at either budget (+3.9%, then -3.6%; seeds straddle zero). |
 
 Net change: stuck-actuator +4, idle-segments -4. calibration-drift and
 duplicate-and-leakage keep their weights; only their evidence changes.

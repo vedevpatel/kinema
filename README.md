@@ -11,8 +11,9 @@ leader and follower arm, episodes that are mostly the robot sitting still, times
 the sampling grid. kinema finds those before you burn the GPU hours.
 
 ```bash
-pip install kinema
-# or from source: git clone https://github.com/vedevpatel/kinema && pip install -e kinema
+pip install "git+https://github.com/vedevpatel/kinema"   # this source version (see the note below)
+# or from a checkout: git clone https://github.com/vedevpatel/kinema && pip install -e kinema
+# `pip install kinema` gets PyPI 0.1.0, which predates several checks below
 
 kinema check lerobot/pusht                 # straight off the Hugging Face Hub
 kinema check ./my-dataset --policy pi0     # local dataset, deployment checks for pi0
@@ -21,7 +22,7 @@ kinema check owner/name@<commit> --video  # pinned revision; + blur/exposure fro
 kinema check lerobot/droid_1.0.1 --max-episodes 50   # spread sample; downloads only the shards it reads
 ```
 
-The source checkout is `0.1.1.dev0`. Published PyPI `0.1.0` predates some checks and RLDS work described here; use the Git install below for this source version. No new package release is implied.
+The source checkout is `0.1.1.dev0`. Published PyPI `0.1.0` predates some checks and RLDS work described here; use the Git install above for this source version. No new package release is implied.
 
 No `lerobot` dependency. Installs in seconds: `pyarrow`, `numpy`, `huggingface-hub`, `rich`.
 Works on LeRobot **v3.0 and v2.1** layouts, local directories, `.zip`s, and Hub repo ids.
@@ -59,7 +60,8 @@ verdict: WARN; score model tiered-v2
 ```
 
 Exit code is `1` on any FAIL (`--fail-on warn` to also gate on warnings), so it drops
-straight into CI as a pre-training gate.
+straight into CI as a pre-training gate. Exit code `2` means the audit could not run at
+all: the dataset failed to load, or `--config` / an argument was invalid.
 
 ## The checks
 
@@ -71,7 +73,7 @@ lives in [docs/checks.md](docs/checks.md).
 | `stats-drift` | stored stats disagree with the data: mean shift > 0.1 std, std off > 5%, min/max off > 1% of range. Sampled loads are checked against the per-episode stats of exactly the loaded episodes, and `stats.json` against all per-episode stats; v2.1 uses aggregated `episodes_stats.jsonl` like LeRobot does | every run normalizes with those numbers; drift = wrong-scaled inputs at training *and* inference |
 | `timestamp-grid` | timestamps off the 1/fps grid, non-monotonic runs | `delta_timestamps` sampling returns misaligned windows |
 | `dropped-frames` | `frame_index` gaps, metadata length vs data mismatch | corrupt episodes; the metadata lie blocks training outright |
-| `calibration-drift` | mean action-state offset on still frames, per joint, independent of position. Only on dims where action is a position command for the same joint (names agree, action tracks state); grippers excluded | leader/follower drift (the 17-degree case from LeRobot PR #3762) survives recording *and* training |
+| `calibration-drift` | still-frame action-state disagreement per joint: a constant offset (leader/follower drift) or a scale error that grows across the range (a line that beats a two-level step, so backlash is not called scale). Only on dims where action is a position command for the same joint (names agree, action tracks state); grippers get a free-end test (the open end, where nothing blocks them); delta commands get an informational scale ratio | leader/follower drift (the 17-degree case from LeRobot PR #3762) survives recording *and* training |
 | `idle-segments` | episodes that start idle, or idle >30% of the time in runs >2s (command held AND robot still); a still tail after the task is INFO | teaches the policy to do nothing - the classic "robot stays still at inference" postmortem |
 | `stuck-actuator` | episodes where nothing moves; a joint that moves in most episodes but not in a few; gripper never firing on pick/place | the policy learns to ignore that joint |
 | `action-saturation` | >5% of commands during motion pinned at exactly the min/max of a continuous, non-gripper dim | clipped commands the policy will imitate |
@@ -84,7 +86,7 @@ lives in [docs/checks.md](docs/checks.md).
 | `video-file-pointers` | episode metadata naming a video file the repo does not contain (v3 segment columns or the v2.x `video_path` template, checked against the repo file listing) | the episode's rows load but its video does not decode - the failure surfaces far from the cause |
 | `task-strings` | empty task strings, frames pointing at a `task_index` the task table does not define, episode tasks with no table entry | language conditioning trains on `""` or an unrecoverable task |
 | `reward-done` | constant or NaN reward, `done` never True, `done` True mid-episode with frames after it | RL / reward-conditioned training gets labels with no signal |
-| `visual-quality` | blur (variance of Laplacian, frames decimated to ~VGA first so one threshold works at any resolution), underexposure (95th-percentile brightness) and overexposure (pixels clipped at the codec's brightest level), per camera, sampled inside each episode's segment (v2.1 per-episode and v3 shared MP4s) | bad visuals cost ~30% of training loss ([HF GIGO](https://huggingface.co/blog/robotdata/gigo)). Needs `--video` and the `video` extra |
+| `visual-quality` | blur (variance of Laplacian, frames decimated to ~VGA first so one threshold works at any resolution), underexposure (95th-percentile brightness) and overexposure (pixels clipped at the codec's brightest level), per camera, sampled inside each episode's segment (v2.1 per-episode and v3 shared MP4s) | low-quality examples measurably hurt training - 20% low-quality data raised training loss ~30% in [HF's GIGO study](https://huggingface.co/blog/robotdata/gigo). Needs `--video` and the `video` extra |
 | `deployment-readiness` | episode length vs the policy's action chunk, stats coverage, quantile-norm support, declared shapes, and what the policy conditions on (camera input, task language, typical resolution - declared per policy in `src/kinema/policies.json`) | the openpi #906 failure mode: low loss, failed robot |
 
 The table above is the LeRobot `kinema check` registry. It also includes
@@ -139,7 +141,8 @@ layer on top of the same checks. Point your MCP client at it:
 }
 ```
 
-(The plain `uvx kinema mcp` form works with the published PyPI package. A
+(The plain `uvx kinema mcp` form runs the published PyPI 0.1.0, which predates
+`similar_datasets` and several checks; use the Git form above for this version. A
 `pip install -e .` checkout works too:
 `"command": "kinema", "args": ["mcp"]`.)
 
@@ -159,8 +162,10 @@ Four tools:
   (verdict, score, top findings) sized for client output limits, with the full
   JSON report written to a file (`<dataset>.kinema-report-<timestamp>.json` next
   to a local dataset, else `~/.cache/kinema/reports/`; an explicit `report_path`
-  must be absolute and only replaces an earlier kinema report).
+  must be absolute, must not pass through a symbolic link - system-owned ones such
+  as macOS's `/tmp` are resolved - and only replaces an earlier kinema report).
 - `similar_datasets(dataset? or report_path?, k?)` - ranks evaluated board reports
+  (`report_path` here is an absolute path to a kinema JSON report to read)
   by shared WARN/FAIL evidence and shape. Unevaluated reports and the query itself
   are excluded. This is retrieval, not a guarantee that a match is suitable.
 - `list_checks()` - the check catalog from the registry, with docs links.
@@ -205,15 +210,21 @@ RAM, so a full load of a DROID-sized dataset cannot OOM a smaller machine.
 
 ## The leaderboard
 
-The most-downloaded LeRobot datasets on Hugging Face, audited nightly, plus a
-capped block of seats per flagship publisher (RoboCOIN, Unitree) whose
-LeRobot-format datasets the search does not surface, and a probation lane of
-the newest uploads:
+The most-downloaded LeRobot datasets on Hugging Face (`--limit 200`: the top
+lane), plus a capped block of seats per flagship publisher whose LeRobot-format
+datasets the search does not surface (`FLAGSHIP_ORG_SEATS`, `FLAGSHIP_SEEDS` and
+nested-repo seats in `scripts/leaderboard.py`), a probation lane of the newest
+uploads, and an RLDS lane for the Open X-Embodiment datasets on Google Cloud
+Storage (metadata checks only). The board audits nightly; the dataset list
+itself is refreshed weekly by the `leaderboard-discover` workflow into
+`docs/worklist.json`, and a row is pruned only after it is missing from three
+fresh discoveries in a row:
 **[vedevpatel.github.io/kinema](https://vedevpatel.github.io/kinema/)**
 
-Board audits a sample of 250 episodes per dataset (`--max-episodes 250`), spread
-evenly across the dataset, to keep a nightly run of 200 datasets feasible; a
-local `kinema check` scans the full dataset. Board audits also fetch a
+Board audits a sample of up to 250 episodes per dataset (`--max-episodes 250`),
+spread evenly across what the download budget reaches - v2.x datasets keep one
+file per episode and are capped at 40 files, so they audit fewer - to keep a
+nightly run feasible; a local `kinema check` scans the full dataset. Board audits also fetch a
 24-file spread of the audited episodes' video shards, hard-capped at 400 MB,
 so visual-quality runs on the board; a dataset whose spread exceeds the cap
 falls back to the middle shard that still fits the budget, and skips only

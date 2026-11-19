@@ -6,7 +6,7 @@ import numpy as np
 
 from kinema.checks.base import Check, CheckConfig, CheckResult, Finding, Severity
 from kinema.dataset import ACTION_KEY, STATE_KEY
-from kinema.stats import action_gripper_dims, toggle_dims, velocity_dims
+from kinema.stats import action_gripper_dims, is_generic, toggle_dims, velocity_dims
 
 
 class ActionSaturationCheck(Check):
@@ -30,42 +30,54 @@ class ActionSaturationCheck(Check):
         # normal operation, not clipping
         toggles = toggle_dims(ctx, exclude=named_grip | inferred_grip
                               | velocity_dims(ctx.action_names, n))
-        finite = np.isfinite(action).all(axis=1)
-        a = action[finite]
-        if len(a) < 20:
+        # finite values are judged per dim: one all-NaN padding dim must not
+        # discard every row (it used to skip the whole check)
+        fin = np.isfinite(action)
+        if fin.any(axis=0).sum() == 0 or fin.sum(axis=0).max() < 20:
             return self.skip("too few finite action frames")
-        lo, hi = a.min(axis=0), a.max(axis=0)
-        rng = hi - lo
+        with np.errstate(invalid="ignore"):
+            lo, hi = np.nanmin(np.where(fin, action, np.nan), axis=0), np.nanmax(np.where(fin, action, np.nan), axis=0)
+            sd = np.nanstd(np.where(fin, action, np.nan), axis=0)
+        rng = np.where(np.isfinite(hi - lo), hi - lo, 0.0)
         tol = 1e-6 * np.maximum(rng, 1e-12)
 
         # moving frames: some dim changed since the previous frame of the
         # same episode (idle stretches are idle-segments' job)
-        eps = np.maximum(1e-8, cfg.idle_eps_frac * a.std(axis=0))
+        eps = np.maximum(1e-8, cfg.idle_eps_frac * np.where(np.isfinite(sd), sd, 0.0))
         moving = np.zeros(len(action), dtype=bool)
         for ep in ctx.episode_ids():
             rows = ctx.rows_for(ep)
             if len(rows) < 2:
                 continue
-            d = np.abs(np.diff(action[rows], axis=0)) >= eps
-            moving[rows[1:]] = d.any(axis=1)
-        moving = moving[finite]
+            step = np.abs(np.diff(action[rows], axis=0))
+            moving[rows[1:]] = (np.isfinite(step) & (step >= eps)).any(axis=1)
+        names_ok = bool(ctx.action_names) and len(ctx.action_names) == n
 
         checked = 0
         for j in range(n):
-            if j in grip or rng[j] <= 1e-8 or len(np.unique(a[:, j])) <= 10:
-                continue  # gripper, constant or discrete-valued dim
-            if moving.sum() < 20:
+            col = action[:, j]
+            ok = fin[:, j]
+            x = col[ok]
+            if j in grip or rng[j] <= 1e-8 or len(x) < 20 or len(np.unique(x)) <= 10:
+                continue  # gripper, constant, mostly-missing or discrete-valued dim
+            mv = moving & ok
+            if mv.sum() < 20:
                 continue
             checked += 1
-            at_hi = np.abs(a[:, j] - hi[j]) <= tol[j]
-            at_lo = np.abs(a[:, j] - lo[j]) <= tol[j]
-            f_hi = float((at_hi & moving).sum() / moving.sum())
-            f_lo = float((at_lo & moving).sum() / moving.sum())
+            at_hi = ok & (np.abs(col - hi[j]) <= tol[j])
+            at_lo = ok & (np.abs(col - lo[j]) <= tol[j])
+            f_hi = float((at_hi & mv).sum() / mv.sum())
+            f_lo = float((at_lo & mv).sum() / mv.sum())
             f = max(f_hi, f_lo)
             if f > cfg.saturation_warn_fraction:
                 side = "max" if f_hi >= f_lo else "min"
-                name = f" ({ctx.action_names[j]})" if ctx.action_names and len(ctx.action_names) == n else ""
-                if f > 0.5:
+                name = f" ({ctx.action_names[j]})" if names_ok else ""
+                # most of the data AT the limit reads as a mode (an unnamed
+                # gripper, an on/off command, a rest pose) - but only when the
+                # dim could be one. A dim NAMED as a joint pinned 65% of the
+                # time is worse clipping than 25%, never better.
+                named_joint = names_ok and not is_generic([ctx.action_names[j]])
+                if f > 0.5 and not named_joint:
                     # most of the data AT the limit is a mode, not a clipped tail:
                     # an unnamed gripper / binary-like command or a rest state
                     res.findings.append(Finding(
@@ -94,7 +106,9 @@ class ActionSaturationCheck(Check):
                 f"{cfg.saturation_warn_fraction:.0%} ({checked} dims checked)"
             )
         else:
-            res.summary = f"{len(res.findings)} dim(s) saturated"
+            n_gated = sum(1 for f in res.findings if f.severity >= Severity.WARN)
+            res.summary = f"{n_gated} dim(s) saturated" + (
+                f" (+{len(res.findings) - n_gated} informational)" if len(res.findings) > n_gated else "")
         return res
 
 
@@ -126,9 +140,19 @@ class NanAndNormalizationCheck(Check):
                         details={"nan": n_nan, "inf": n_inf, "episodes": bad_eps},
                     )
                 )
-            std = arr.std(axis=0)
+            with np.errstate(invalid="ignore"):
+                std = np.nanstd(np.where(np.isfinite(arr), arr, np.nan), axis=0)
+                mean = np.nanmean(np.where(np.isfinite(arr), arr, np.nan), axis=0)
+            std = np.where(np.isfinite(std), std, 0.0)
+            mean = np.where(np.isfinite(mean), mean, 0.0)
             zero = np.nonzero(std == 0)[0]
-            tiny = np.nonzero((std > 0) & (std < 1e-6))[0]
+            # "near-zero" relative to the dim's own magnitude and to the
+            # feature's typical spread - not an absolute 1e-6, which flagged
+            # every dim of data simply recorded in small units
+            live = std[std > 0]
+            typical = float(np.median(live)) if len(live) else 0.0
+            ref_scale = np.maximum(np.abs(mean), typical)
+            tiny = np.nonzero((std > 0) & (std < 1e-6 * ref_scale))[0]
             for j in zero:
                 res.findings.append(
                     Finding(
@@ -152,4 +176,12 @@ class NanAndNormalizationCheck(Check):
                 )
         if not res.findings:
             res.summary = "no NaN/Inf; all dims have usable variance"
+        else:
+            n_bad = sum(1 for f in res.findings if f.severity == Severity.FAIL)
+            n_tiny = sum(1 for f in res.findings if f.severity == Severity.WARN)
+            n_const = sum(1 for f in res.findings if f.severity == Severity.INFO)
+            res.summary = ", ".join(x for x in (
+                f"{n_bad} feature(s) with NaN/Inf" if n_bad else "",
+                f"{n_tiny} near-constant dim(s)" if n_tiny else "",
+                f"{n_const} constant dim(s)" if n_const else "") if x)
         return res

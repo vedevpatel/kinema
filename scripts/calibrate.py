@@ -303,8 +303,9 @@ def main() -> int:
     ap.add_argument("datasets", nargs="*", help="default: the pinned list")
     ap.add_argument("--quick", action="store_true", help="the pinned list's small subset")
     ap.add_argument("--role", choices=["tune", "eval"],
-                    help="one half of the pinned list: tune is where thresholds come "
-                    "from; eval is the regression group the nightly guard runs on")
+                    help="one regression group of the pinned list (not a pristine holdout): "
+                    "eval is the group the nightly guard's floors and ceilings were measured "
+                    "on; tune is the other group")
     ap.add_argument("--max-episodes", type=int, default=50)
     ap.add_argument("--markdown", default="")
     args = ap.parse_args()

@@ -181,7 +181,10 @@ class DatasetContext:
     # (meta is always complete, even when the frame data is sampled)
     episode_stats: dict = field(default_factory=dict, repr=False)
     stats_json: dict = field(default_factory=dict, repr=False)  # raw meta/stats.json
-    stats_source: str = "meta/stats.json"  # where ctx.stats came from
+    stats_source: str = "meta/stats.json"  # where ctx.stats came from (all features)
+    # per feature: "meta/stats.json" or "aggregated per-episode stats" - one
+    # feature falling back must not relabel (and un-gate) the other
+    stats_sources: dict = field(default_factory=dict)
     state_names: list | None = None
     action_names: list | None = None
     # canonical key -> the column name this dataset uses ("actions", ...)
@@ -191,6 +194,8 @@ class DatasetContext:
     # None for manually constructed contexts; loader records actual parquet
     # columns so checks distinguish missing fields from present zero arrays.
     present_columns: frozenset[str] | None = None
+    # column -> null cells read (filled: -1 for ints, NaN for floats)
+    null_counts: dict = field(default_factory=dict)
     unreadable_files: list = field(default_factory=list)  # [(relpath, error)]
     # v3: episode -> camera -> (chunk_index, file_index, from_s, to_s)
     video_segments: dict = field(default_factory=dict, repr=False)
@@ -264,10 +269,28 @@ def _meta_shard_map(root: Path) -> dict[int, str] | None:
             t = pq.read_table(f, columns=list(cols)).to_pydict()
         except (OSError, pa.ArrowInvalid, ValueError):
             return None  # unreadable meta: best-effort only
+        template = _data_path_template(root)
         for ep, ch, fi in zip(t[cols[0]], t[cols[1]], t[cols[2]]):
             if ch is not None and fi is not None:
-                out[int(ep)] = f"data/chunk-{int(ch):03d}/file-{int(fi):03d}.parquet"
+                try:
+                    out[int(ep)] = template.format(chunk_index=int(ch), file_index=int(fi),
+                                                   episode_chunk=int(ch), episode_index=int(ep))
+                except (KeyError, IndexError, ValueError):
+                    out[int(ep)] = f"data/chunk-{int(ch):03d}/file-{int(fi):03d}.parquet"
     return out or None
+
+
+_DEFAULT_V3_DATA_PATH = "data/chunk-{chunk_index:03d}/file-{file_index:03d}.parquet"
+
+
+def _data_path_template(root: Path) -> str:
+    """info.json's data_path (the converter may not use the default naming)."""
+    try:
+        info = json.loads((root / "meta" / "info.json").read_text())
+    except (OSError, ValueError):
+        return _DEFAULT_V3_DATA_PATH
+    tpl = info.get("data_path")
+    return tpl if isinstance(tpl, str) and "{" in tpl else _DEFAULT_V3_DATA_PATH
 
 
 def _target_data_files(root: Path, max_episodes: int) -> list[str] | None:
@@ -373,12 +396,18 @@ def _target_video_files(root: Path, max_episodes: int) -> list[str] | None:
 
 
 def _hub_address(src: str) -> tuple[str, str | None, str]:
-    """Validate and split owner/name[//subpath][@revision], never a disk path."""
+    """Validate and split a Hub address, never a disk path. Both orders work:
+    owner/name@revision//subpath and owner/name//subpath@revision."""
     revision = None
-    if "@" in src:
-        src, revision = src.rsplit("@", 1)
-        if not revision or any(c.isspace() for c in revision):
-            raise DatasetError("invalid Hub revision")
+    head, sep, tail = src.partition("//")
+    if "@" in head:  # owner/name@rev//sub - the revision belongs to the repo
+        head, revision = head.split("@", 1)
+    elif sep and "@" in tail:  # owner/name//sub@rev
+        tail, revision = tail.rsplit("@", 1)
+    if revision is not None and (not revision or any(c.isspace() for c in revision)):
+        raise DatasetError("invalid Hub revision")
+    tail = tail.rstrip("/")  # a trailing slash on a subpath is harmless
+    src = head + (sep + tail if sep else "")
     base, _, subpath = src.partition("//")
     if not re.fullmatch(r"[A-Za-z0-9][\w.-]*/[A-Za-z0-9][\w.-]*", base):
         raise DatasetError("Hub source must be owner/name, optionally //subpath and @revision")
@@ -464,13 +493,19 @@ def _load_episode_meta(root: Path) -> list[EpisodeMeta]:
             names = pq.read_schema(f).names
             return pq.read_table(f, columns=[c for c in ("episode_index", "length", "tasks") if c in names])
 
-        table = pa.concat_tables([_meta(f) for f in files], promote_options="default")
+        try:
+            table = pa.concat_tables([_meta(f) for f in files], promote_options="default")
+        except (OSError, pa.ArrowInvalid) as e:
+            raise DatasetError(f"meta/episodes cannot be read ({type(e).__name__}: {e})") from e
         cols = table.column_names
         idx = table.column("episode_index").to_pylist()
         length = table.column("length").to_pylist() if "length" in cols else [0] * len(idx)
         if "tasks" in cols:
             raw_tasks = table.column("tasks").to_pylist()
-            tasks = [[str(t) for t in (ts or [])] for ts in raw_tasks]
+            # a list column holds one task per entry; a plain string column is
+            # ONE task per episode (iterating it gave single characters)
+            tasks = [[ts] if isinstance(ts, str) else [str(t) for t in (ts or [])]
+                     for ts in raw_tasks]
         else:
             tasks = [[] for _ in idx]
         episodes = [
@@ -579,24 +614,33 @@ def _load_video_segments(root: Path) -> dict[int, dict[str, tuple]]:
 
 def _effective_stats(
     stats_json: dict, episode_stats: dict, version: str, episode_ids: list[int]
-) -> tuple[dict, str]:
+) -> tuple[dict, str, dict]:
     """The stats a LeRobot policy would actually normalize with.
 
     v2.1 ignores meta/stats.json and aggregates episodes_stats.jsonl at load
     time; v2.0/v3.0 read meta/stats.json. A feature missing from stats.json
-    falls back to the aggregated per-episode stats when those exist."""
+    falls back to the aggregated per-episode stats when those exist. Like
+    LeRobot, the aggregate is over the per-episode entries that exist - one
+    missing line must not leave the dataset with no stats at all.
+
+    Returns (stats, overall source, per-feature sources)."""
     stats = dict(stats_json)
-    source = "meta/stats.json"
+    sources: dict[str, str] = {}
     v21 = version.startswith("v2.1")
     for feat in (STATE_KEY, ACTION_KEY):
         if feat in stats and not v21:
+            sources[feat] = "meta/stats.json"
             continue
         per_ep = [episode_stats[e][feat] for e in episode_ids if feat in episode_stats.get(e, {})]
-        agg = aggregate(per_ep) if len(per_ep) == len(episode_ids) else None
+        agg = aggregate(per_ep) if per_ep else None
         if agg:
             stats[feat] = {k: v.tolist() for k, v in agg.items()}
-            source = "aggregated per-episode stats"
-    return stats, source
+            sources[feat] = "aggregated per-episode stats"
+        elif feat in stats:
+            sources[feat] = "meta/stats.json"
+    overall = ("meta/stats.json" if all(v == "meta/stats.json" for v in sources.values())
+               else "aggregated per-episode stats")
+    return stats, overall, sources
 
 
 def _column(table: "pa.Table | pa.RecordBatch", name: str) -> np.ndarray | None:
@@ -622,15 +666,45 @@ def _column(table: "pa.Table | pa.RecordBatch", name: str) -> np.ndarray | None:
         if width >= 0:
             flat = col.flatten().to_numpy(zero_copy_only=False)  # nulls -> NaN
             return flat.astype(np.float64, copy=False).reshape(len(col), width)
-    # null rows, ragged or nested lists: the slow, general path
-    return np.asarray(col.to_pylist(), dtype=np.float64)
+    # null rows, ragged or nested lists: the slow, general path. A null ROW
+    # becomes a NaN row (nan-and-normalization reports it) rather than a raw
+    # ValueError; genuinely ragged rows are a dataset error with a name.
+    rows = col.to_pylist()
+    width = next((len(r) for r in rows if r is not None), 0)
+    if any(r is not None and len(r) != width for r in rows):
+        raise DatasetError(f"column {name!r} has rows of different lengths")
+    return np.asarray([r if r is not None else [float("nan")] * width for r in rows],
+                      dtype=np.float64).reshape(len(rows), width)
 
 
-def _ints(table: "pa.Table | pa.RecordBatch", name: str) -> np.ndarray:
-    col = table.column(name)
+def _flat_scalar(col):
+    """A scalar column, unwrapping width-1 list columns ([[t0], [t1], ...])."""
     if isinstance(col, pa.ChunkedArray):
         col = col.combine_chunks()
-    return col.to_numpy().astype(np.int64, copy=False)
+    typ = col.type
+    if pa.types.is_fixed_size_list(typ) or pa.types.is_list(typ) or pa.types.is_large_list(typ):
+        if col.null_count == 0:
+            flat = col.flatten()
+            if len(flat) == len(col):
+                return flat
+        col = pa.array([(v[0] if v else None) if v is not None else None
+                        for v in col.to_pylist()])
+    return col
+
+
+def _ints(table: "pa.Table | pa.RecordBatch", name: str, fill: int = -1) -> np.ndarray:
+    """An integer column; nulls become `fill` (they would otherwise make a
+    healthy shard read as unreadable - the zero-copy conversion refuses them)."""
+    col = _flat_scalar(table.column(name))
+    if col.null_count:
+        col = pc.fill_null(col, fill)
+    return col.to_numpy(zero_copy_only=False).astype(np.int64, copy=False)
+
+
+def _floats(table: "pa.Table | pa.RecordBatch", name: str) -> np.ndarray:
+    """A float column; nulls become NaN, width-1 lists are unwrapped."""
+    col = _flat_scalar(table.column(name))
+    return col.to_numpy(zero_copy_only=False).astype(np.float64, copy=False)
 
 
 def load_dataset(
@@ -693,7 +767,7 @@ def load_dataset(
     for canon, col in keys.items():
         if col != canon and col in stats_json and canon not in stats_json:
             stats_json[canon] = stats_json[col]
-    stats, stats_source = _effective_stats(
+    stats, stats_source, stats_sources = _effective_stats(
         stats_json, episode_stats, version, [e.index for e in episodes]
     )
 
@@ -820,6 +894,7 @@ def load_dataset(
     maps: dict[str, np.memmap] = {}
     widths: dict[str, int] = {}
     seen: set[str] = set()
+    nulls: dict[str, int] = {}
     n = 0
 
     def _put(name: str, arr: np.ndarray) -> None:
@@ -851,6 +926,11 @@ def load_dataset(
             for g in groups:
                 if cancelled is not None and cancelled.is_set():
                     raise CancelledError(f"cancelled while reading {f.name}")
+                # a row group lands whole or not at all: an error part-way
+                # used to leave its episodes half-loaded while dropped-frames
+                # said they were not audited
+                n_before = n
+                chunks_before = {k: len(v) for k, v in chunks.items()}
                 try:
                     for t in pf.iter_batches(batch_size=_READ_BATCH_ROWS, row_groups=[g], columns=cols):
                         t = t.filter(pc.is_in(t.column("episode_index").cast(pa.int64()), value_set=value_set))
@@ -859,16 +939,17 @@ def load_dataset(
                         for name in ("episode_index", "frame_index", "task_index"):
                             if name in t.column_names:
                                 seen.add(name)
+                                nulls[name] = nulls.get(name, 0) + t.column(name).null_count
                                 _put(name, _ints(t, name))
                         if "timestamp" in t.column_names:
                             seen.add("timestamp")
-                            _put("timestamp", t.column("timestamp").to_numpy().astype(np.float64, copy=False))
+                            nulls["timestamp"] = nulls.get("timestamp", 0) + t.column("timestamp").null_count
+                            _put("timestamp", _floats(t, "timestamp"))
                         for extra in (reward_col, done_col):
                             if extra and extra in t.column_names:
                                 seen.add(extra)
-                                # zero_copy_only=False: boolean columns (done) have no
-                                # zero-copy numpy form
-                                _put(extra, t.column(extra).to_numpy(zero_copy_only=False).astype(np.float64, copy=False))
+                                # bool/null/width-1-list safe; nulls -> NaN
+                                _put(extra, _floats(t, extra))
                         for canon in (STATE_KEY, ACTION_KEY):
                             name = keys[canon]
                             if name in t.column_names:
@@ -879,6 +960,9 @@ def load_dataset(
                                     _put(name, arr)
                         n += t.num_rows
                 except (OSError, pa.ArrowInvalid) as e:  # truncated / corrupt data pages
+                    n = n_before
+                    for k in list(chunks):
+                        del chunks[k][chunks_before.get(k, 0):]
                     _bad(f, e)
                     break
     except BaseException:
@@ -921,8 +1005,11 @@ def load_dataset(
         # A catalogued episode absent from an available authoritative shard
         # is missing data, not an episode to erase from the audit. Keep it so
         # dropped-frames can compare its declared length with zero rows.
+        target_set = set(targets)  # was a list: quadratic on huge catalogues
+        bad_rel = {name for name, _ in unreadable}
         episodes = [e for e in episodes if e.index in present or (
-            e.index in targets and shard_map and e.index in shard_map
+            e.index in target_set and shard_map and e.index in shard_map
+            and shard_map[e.index] not in bad_rel  # its shard is reported unreadable already
             and (root / shard_map[e.index]).is_file())]
         truncated = True
 
@@ -1015,10 +1102,12 @@ def load_dataset(
         episode_stats=episode_stats,
         stats_json=stats_json,
         stats_source=stats_source,
+        stats_sources=stats_sources,
         feature_keys=keys,
         duplicate_episode_ids=duplicate_ids,
         video_segments=_load_video_segments(root),
         present_columns=frozenset(seen),
+        null_counts={k: v for k, v in nulls.items() if v},
         unreadable_files=unreadable,
         state_names=feature_names(info, keys[STATE_KEY]),
         action_names=feature_names(info, keys[ACTION_KEY]),

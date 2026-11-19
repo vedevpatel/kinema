@@ -46,7 +46,7 @@ downstream pays 0 and the upstream pays the larger of the two weights)
 and, when waived, `waived_by` (the upstream
 check id) and `waiver_evidence` (`shared_episodes`, `overlap`); leaderboard
 dataset pages annotate the waived row. Each check's flagged episode set is
-the union of its findings' `episode_index` and `details.episodes`. Limit:
+the union of its WARN/FAIL findings' `episode_index` and `details.episodes` (INFO notes are not evidence). Limit:
 the waiver reads stored episode sets, so a check that reports none can never
 be waived; and the gate only removes a double charge where the episodes
 coincide - idle padding on episodes whose arm then works, plus dead joints
@@ -72,7 +72,7 @@ its basis in report JSON (`weight`, `weight_basis`):
 | --- | --- | --- |
 | calibration-drift | 10 | measured: +1475.3% (tier A) |
 | stuck-actuator | 10 | measured: +697.8% (tier A) |
-| idle-segments | 6 | measured: +75.1% (tier B) |
+| idle-segments | 6 | measured: +75.1% (tier B; 3 seeds, wide spread) |
 | duplicate-and-leakage | 2 | measured: -3.6% (tier C) |
 | stats-drift, nan-and-normalization, deployment-readiness, timestamp-grid | 10 | placeholder |
 | dropped-frames | 8 | placeholder |
@@ -86,8 +86,8 @@ harm estimates. Re-anchoring needs a separate score-model decision, especially
 where newer rows confound accelerator and seed effects. The v1.1 re-anchor moved stuck-actuator from placeholder to
 measured.
 
-Placeholder weights are the hand-tuned legacy values, kept until the harm
-table measures them. Limit: every measured number is a held-out MSE delta,
+Placeholder weights are the hand-tuned legacy values; the paragraph above is
+why newer harm-table measurements have not replaced them yet. Limit: every measured number is a held-out MSE delta,
 not rollout success; success floors for every arm in the v1.1 protocol
 (clean 2%/4%/2% at 20k steps), so MSE is the outcome metric and no
 success-rate re-check is pending.
@@ -224,8 +224,10 @@ held drive command is constant motion, not idling), which removes the
 classic false positive; unnamed velocity commands can still read as idle.
 
 Limit (score weight): a WARN costs 6, tier B, measured - 30 idle frames
-prepended raised held-out action MSE by 75.1% in harm table v1.1 (diffusion
-policy, 20k steps).
+prepended raised held-out action MSE by 75.1% on average in harm table v1.1
+(diffusion policy, 20k steps). The three seeds disagree by ~10x (+129%, +82%,
++14%; a paired 95% interval spans roughly -69% to +219%), so the tier is a
+point estimate, not a settled one - it could be C or A at more seeds.
 
 Knobs: `idle_eps_frac` (0.01), `idle_min_seconds` (2.0),
 `idle_warn_fraction` (0.30), `idle_state_frac` (0.02).
@@ -295,7 +297,8 @@ No knobs.
   a scripted start would repeat across the dataset - also a WARN; an aligned
   opening shared more widely is a scripted start, INFO; a shared stretch
   anywhere else is a splice or botched merge, WARN.
-- near: downsampled trajectories within 0.05 std per dim (z-scored, so no
+- near: downsampled trajectories within 0.05 std RMS over all dims and grid
+  points (z-scored, so no
   single large-unit dim decides). Exact up to 100k episodes with
   memory-bounded blocks (64 MB per block); above that an evenly-spaced
   sample with an INFO note saying so.
@@ -396,10 +399,13 @@ payloads.
 
 ## rlds-feature-spec
 
-features.json sanity for RLDS datasets: FAIL when the featuresDict tree or
-the steps sequence (with is_first / is_last) is missing or unparseable;
-WARN when steps lack action or observation features; INFO when no image
-features are declared.
+features.json sanity for RLDS datasets: FAIL when the featuresDict tree is
+missing or unparseable (the legacy `{"type", "content"}` schema is read too);
+SKIP for non-trajectory TFDS datasets with no `steps` sequence (VQA, prompt/
+answer sets: the RLDS trajectory spec does not apply); WARN when steps lack
+action or observation features; INFO when no image features are declared.
+The counts, inventory, step-structure and mirror checks SKIP when a bucket
+holds several shard generations and the metadata does not select one.
 
 ## rlds-shard-inventory
 
@@ -472,8 +478,11 @@ that is both dark and blurry is attributed to the lighting and counted once,
 never double-reported. Per camera, sampled inside each episode's segment;
 v2.1 per-episode and v3 shared MP4s both work.
 
-Needs `--video` and the `video` extra (`pip install -e .[video]`); the
-nightly board skips it because the MP4s run to hundreds of MB per camera.
+Needs `--video` and the `video` extra (`pip install -e .[video]`). The nightly
+board runs it on a capped spread of video shards (24 files, 400 MB). A clipped
+region that sits in the same place in nearly every frame (a sim's white canvas,
+a lamp in shot) is reported as a static saturated background (INFO), not as
+overexposure.
 
 ## deployment-readiness
 

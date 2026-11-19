@@ -326,3 +326,44 @@ def test_legacy_feature_schema_and_nontrajectory_applicability():
     assert rlds_feature_spec(flat).skipped
     assert rlds_step_structure(flat, GcsClient("unused"), RldsCheckConfig(sample=True)).skipped
     assert rlds_feature_spec(_dataset(features={})).verdict == Severity.FAIL
+
+
+# --- audit follow-ups -------------------------------------------------------------
+
+def test_corrupt_length_header_raises_instead_of_reading_as_a_truncated_tail():
+    import struct as _struct
+    import pytest as _pytest
+    from kinema.rlds import RldsError, _masked_crc32c, iter_records
+    payload = b"x" * 10
+    hdr = _struct.pack("<Q", len(payload))
+    good = hdr + _struct.pack("<I", _masked_crc32c(hdr)) + payload + _struct.pack("<I", _masked_crc32c(payload))
+    assert list(iter_records(good)) == [payload]
+    bad = bytearray(good)
+    bad[2] ^= 0x01  # one flipped bit makes the length enormous
+    with _pytest.raises(RldsError, match="length CRC"):
+        list(iter_records(bytes(bad)))
+
+
+def test_unparseable_leftover_files_do_not_switch_off_episode_counts():
+    from types import SimpleNamespace
+    from kinema.checks.rlds_checks import rlds_episode_counts
+    ds = SimpleNamespace(
+        shards=[("p/x-train.tfrecord-00000-of-00002", 10), ("p/x-train.tfrecord-00001-of-00002", 10),
+                ("p/.~x-train.tfrecord-00001~", 3)],
+        shard_lengths={"train": [5, 5]}, splits={"train": 10}, ambiguous_splits=[])
+    res = rlds_episode_counts(ds)
+    assert not res.skipped and "ignored" in res.summary
+
+
+def test_complete_mirror_outranks_a_partial_copy():
+    import importlib.util
+    from pathlib import Path
+    from types import SimpleNamespace
+    spec = importlib.util.spec_from_file_location(
+        "lb", Path(__file__).resolve().parent.parent / "scripts" / "leaderboard.py")
+    lb = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(lb)
+    shards = [(f"p/x-train.tfrecord-{i:05d}-of-00004", 1) for i in range(4)]
+    full = SimpleNamespace(shards=shards, shard_lengths={"train": [1] * 4}, ambiguous_splits=[])
+    part = SimpleNamespace(shards=shards[:3], shard_lengths={"train": [1] * 4}, ambiguous_splits=[])
+    assert lb._rlds_shards_complete(full) and not lb._rlds_shards_complete(part)

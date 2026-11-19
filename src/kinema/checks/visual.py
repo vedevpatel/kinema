@@ -79,6 +79,36 @@ def _saturated_fraction(gray: np.ndarray) -> float:
     return float((gray >= mx - 5).mean())
 
 
+def _clip_mask(gray: np.ndarray) -> np.ndarray:
+    """The clipped-pixel mask on a coarse (<= ~64 px) grid, for stability tests."""
+    sy = max(1, gray.shape[0] // 64)
+    sx = max(1, gray.shape[1] // 64)
+    g = gray[::sy, ::sx]
+    mx = float(g.max())
+    return (g >= mx - 5) if mx >= 200 else np.zeros(g.shape, dtype=bool)
+
+
+# a clipped region present in this share of a camera's sampled frames is a
+# fixed part of the scene (a sim's white canvas, a lamp in shot), not exposure
+_STATIC_PERSIST = 0.8
+_STATIC_SHARE = 0.8
+
+
+def _static_clip_share(masks: list[np.ndarray]) -> float:
+    """Share of all clipped pixels that sit in the camera's persistent clipped
+    region. Near 1: the saturation is static scene content; low: exposure
+    that comes and goes with the episodes."""
+    shapes = {m.shape for m in masks}
+    if len(masks) < 4 or len(shapes) != 1:
+        return 0.0
+    M = np.stack(masks)
+    total = int(M.sum())
+    if total == 0:
+        return 0.0
+    persist = M.mean(axis=0) >= _STATIC_PERSIST
+    return float((M & persist).sum()) / total
+
+
 def _laplacian_variance(gray: np.ndarray) -> float:
     g = gray.astype(np.float64)
     lap = (
@@ -176,6 +206,7 @@ class VisualQualityCheck(Check):
         # camera -> episode -> (median blur, median p95 brightness,
         # median saturated-pixel fraction)
         scores: dict[str, dict[int, tuple[float, float, float]]] = {}
+        masks: dict[str, list[np.ndarray]] = {}
         for path, file_segs in by_file.items():
             cam = file_segs[0].camera
             try:
@@ -192,6 +223,7 @@ class VisualQualityCheck(Check):
                         float(np.median([np.percentile(g, 95) for g in imgs])),
                         float(np.median([_saturated_fraction(g) for g in imgs])),
                     )
+                    masks.setdefault(cam, []).extend(_clip_mask(g) for g in imgs[:3])
 
         if not scores:
             return self.skip("no frames could be decoded")
@@ -221,6 +253,17 @@ class VisualQualityCheck(Check):
                        f"({unit} {op} {thresh:g}; worst {worst})")
                 details: dict = {"camera": cam, "kind": kind, "episodes": sorted(bad),
                                  "values": {str(e): v for e, v in bad.items()}}
+                if kind == "overexposed":
+                    static = _static_clip_share(masks.get(cam, []))
+                    details["static_clip_share"] = static
+                    if static >= _STATIC_SHARE:
+                        # the same pixels clip in nearly every frame: a white sim
+                        # canvas or a fixed light in shot - scene content, not
+                        # exposure the policy loses detail to
+                        sev = Severity.INFO
+                        msg += (f"; {static:.0%} of the clipped pixels are the same fixed "
+                                "region in every frame - a static saturated background "
+                                "(sim canvas, fixed light), not an exposure problem")
                 if kind == "underexposed" and n_confounded:
                     msg += (f"; {n_confounded} dark episode(s) also read as blurry - "
                             "counted once, here: dark frames shrink the blur metric")

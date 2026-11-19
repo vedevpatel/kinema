@@ -105,6 +105,11 @@ def flagged_episodes(result: CheckResult) -> set[int]:
     stale and force re-audits for a billing-only change."""
     out: set[int] = set()
     for f in result.findings:
+        # gated evidence only: INFO notes ("ends idle", "unused DOF") say
+        # nothing about the defect the score charges, and letting them overlap
+        # waived one of two separate WARN defects (audit finding)
+        if f.severity < Severity.WARN:
+            continue
         if f.episode_index is not None:
             out.add(int(f.episode_index))
         eps = f.details.get("episodes") if isinstance(f.details, dict) else None
@@ -195,7 +200,12 @@ def _result_from_dict(cdict: dict[str, Any]) -> CheckResult:
 
 
 def _apply_charge_fields(c: dict[str, Any], charge: dict[str, Any]) -> None:
-    c["charge"] = charge["charge"]
+    # "charge" is what this check actually cost the score: the FAIL cost, the
+    # (possibly waived) WARN weight, or 0. What a WARN on it WOULD cost stays
+    # in "weight" - one field, one meaning (charge read 10 on a PASS before).
+    verdict = c.get("verdict")
+    c["charge"] = (_FAIL_COST if verdict == "FAIL"
+                   else charge["charge"] if verdict == "WARN" else 0)
     for key in ("waived_by", "waiver_evidence"):
         if key in charge:
             c[key] = charge[key]
@@ -282,6 +292,11 @@ _MARK = {
 }
 
 
+def verdict_label(sev: Severity) -> str:
+    """The one verdict vocabulary every output uses (JSON, console, MCP): PASS, not OK."""
+    return _MARK[sev]
+
+
 def render_console(report: DatasetReport, console=None, max_findings: int = 12) -> None:
     from rich.console import Console
     from rich.table import Table
@@ -308,16 +323,21 @@ def render_console(report: DatasetReport, console=None, max_findings: int = 12) 
         table.add_row(r.check_id, label, summary)
     console.print(table)
 
+    # the cap spends its slots worst-first: every FAIL/WARN prints before any
+    # INFO, so a check's only WARN can no longer hide behind another check's
+    # list of INFO notes (the pusht demo's deployment WARN did)
+    ranked = sorted(
+        ((r, f) for r in report.results if not r.skipped for f in r.findings),
+        key=lambda rf: (-int(rf[1].severity), report.results.index(rf[0])))
+    pick = ranked[:max(max_findings, sum(1 for _, f in ranked if f.severity >= Severity.WARN))]
+    chosen = {id(f) for _, f in pick}
     shown = 0
     for r in report.results:
-        if shown >= max_findings:
-            break
-        if r.skipped or not r.findings:
+        mine = [f for f in r.findings if id(f) in chosen] if not r.skipped else []
+        if not mine:
             continue
         console.print(f"\n[bold]{r.check_id}[/bold] - {r.title}")
-        for f in r.findings:
-            if shown >= max_findings:
-                break
+        for f in mine:
             console.print(f"  [{_STYLE[f.severity]}]{_MARK[f.severity]}[/{_STYLE[f.severity]}] {f.message}")
             shown += 1
 

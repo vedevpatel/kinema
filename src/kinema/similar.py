@@ -116,6 +116,17 @@ def fetch_board(url: str = BOARD_URL, cache_dir: Path = _CACHE_DIR,
     served instead - the corpus a day old beats no corpus."""
     get = fetcher or _http_get
     cache = cache_dir / "kinema-board.json"
+    if max_age_s and cache.exists():
+        age = time.time() - cache.stat().st_mtime
+        if age < max_age_s:
+            try:
+                data = json.loads(cache.read_text())
+                entries = data.get("datasets") or []
+                return entries, {"url": url, "datasets": len(entries),
+                                 "generated": data.get("generated"), "cached": True,
+                                 "cache_age_s": int(age)}
+            except Exception:  # noqa: BLE001 - a corrupt cache falls through to a fetch
+                pass
     try:
         raw = get(url)
         data = json.loads(raw)

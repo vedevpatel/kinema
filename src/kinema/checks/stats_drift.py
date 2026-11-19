@@ -94,6 +94,7 @@ class StatsDriftCheck(Check):
             "max": (cfg.stats_range_warn, cfg.stats_range_fail),
         }
         worst = 0.0
+        present = []
         for stat in ("mean", "std", "min", "max"):
             if stat not in ref:
                 res.findings.append(
@@ -110,9 +111,16 @@ class StatsDriftCheck(Check):
                     )
                 )
                 continue
-        if any(ref.get(k) is None or ref[k].shape != actual[k].shape for k in ("mean", "std", "min", "max")):
+            present.append(stat)
+        if not present:
             return worst
+        # compare whatever IS stored: a mean/std-only entry still has a mean
+        # and std worth checking. Absent stats borrow the data's own values,
+        # which only shapes the shared sigma/range floors and yields no error.
+        ref = {**{k: actual[k] for k in ("mean", "std", "min", "max")},
+               **{k: ref[k] for k in present}}
         errs, floored_mean = _errors(actual, ref)
+        errs = {k: v for k, v in errs.items() if k in present}
         n_floored = int((floored_mean > cfg.stats_mean_warn_sigma).sum())
         if n_floored:
             res.findings.append(Finding(
@@ -175,22 +183,26 @@ class StatsDriftCheck(Check):
             if arr is None:
                 continue
             stored = as_stat_dict(ctx.stats.get(feat))
-            if not stored or "mean" not in stored:
+            if not stored or ("mean" not in stored and "min" not in stored):
+                # nothing to compare: absence is deployment-readiness's FAIL
+                # (one condition, one severity, charged once)
                 res.findings.append(
                     Finding(
                         self.id,
-                        Severity.WARN,
+                        Severity.INFO,
                         f"{feat}: no normalization stats (neither meta/stats.json nor "
-                        "per-episode stats) - policies that normalize will fail",
+                        "per-episode stats) - nothing to compare; deployment-readiness "
+                        "reports the missing stats",
                     )
                 )
                 continue
             actual = data_stats(arr)
             if actual is None:
                 continue
+            source = (ctx.stats_sources or {}).get(feat, ctx.stats_source)
 
             if not subset:
-                worst = max(worst, self._compare(res, feat, actual, stored, ctx.stats_source, cfg, "data"))
+                worst = max(worst, self._compare(res, feat, actual, stored, source, cfg, "data"))
             else:
                 per_ep = [ctx.episode_stats[e][feat] for e in loaded
                           if feat in ctx.episode_stats.get(e, {})]
@@ -203,7 +215,7 @@ class StatsDriftCheck(Check):
                         f"data ({len(loaded)} loaded episodes with frames)"))
                     episode_stats_ok = not any(
                         f.severity >= Severity.WARN for f in res.findings[before:])
-                    if ctx.stats_source == "meta/stats.json":
+                    if source == "meta/stats.json":
                         # training normalizes with stats.json, not these: broken
                         # per-episode stats only bite on re-aggregation / merges
                         for f in res.findings[before:]:
@@ -327,7 +339,7 @@ class StatsDriftCheck(Check):
 
             # stats.json vs the per-episode stats it should be aggregated from:
             # conclusive on any download, since meta is always complete
-            if feat in ctx.stats_json and ctx.stats_source == "meta/stats.json":
+            if feat in ctx.stats_json and source == "meta/stats.json":
                 all_ids = [e for e in ctx.episode_stats]
                 per_all = [ctx.episode_stats[e][feat] for e in all_ids if feat in ctx.episode_stats[e]]
                 agg_all = aggregate(per_all) if per_all else None
@@ -355,7 +367,7 @@ class StatsDriftCheck(Check):
                 "range containment (a full load is the conclusive audit)",
             ))
         if not any(f.severity >= Severity.WARN for f in res.findings):
-            ref = {"full": f"{ctx.stats_source}", "per-episode": "per-episode stats of the loaded episodes",
+            ref = {"full": "the stored stats", "per-episode": "per-episode stats of the loaded episodes",
                    "bootstrap": "the sample's bootstrap interval and stored range",
                    "containment": "stored range"}[mode]
             res.summary = f"data matches {ref} (worst {worst:.0%} of the FAIL threshold)"

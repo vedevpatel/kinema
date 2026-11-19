@@ -13,6 +13,9 @@ import numpy as np
 from kinema.checks.base import Check, CheckConfig, CheckResult, Finding, Severity
 
 
+_LEROBOT_TOLERANCE_S = 1e-4  # LeRobotDataset's default tolerance_s
+
+
 class TimestampGridCheck(Check):
     id = "timestamp-grid"
     title = "Timestamp grid (spacing, monotonic, start at 0)"
@@ -46,6 +49,7 @@ class TimestampGridCheck(Check):
             for v in (ctx.info.get("features") or {}).values()
         )
         worst_jit, worst_ep = 0.0, None
+        loose_eps: list[tuple[int, float]] = []
         flagged = 0
         offset_eps: list[tuple[int, float]] = []
         jitter_eps: list[tuple[int, float, int]] = []  # (episode, jitter, gaps)
@@ -77,6 +81,21 @@ class TimestampGridCheck(Check):
             if jit > cfg.grid_warn_frac:
                 flagged += 1
                 jitter_eps.append((ep, jit, gaps))
+            elif jit * period > _LEROBOT_TOLERANCE_S:
+                # below the WARN line (small, routine jitter) but above what
+                # LeRobot accepts by default: worth knowing before training
+                loose_eps.append((ep, jit))
+        if loose_eps and not jitter_eps:
+            worst_l = max(j for _, j in loose_eps)
+            res.findings.append(Finding(
+                self.id, Severity.INFO,
+                f"{len(loose_eps)} episode(s) with frame-spacing jitter up to "
+                f"{worst_l * period * 1000:.2f} ms ({worst_l:.1%} of a period): under the "
+                f"{cfg.grid_warn_frac:.0%} WARN line, but over LeRobot's default "
+                f"tolerance_s ({_LEROBOT_TOLERANCE_S:g} s) - load with tolerance_s >= "
+                f"{worst_l * period:.4f}",
+                details={"episodes": [e for e, _ in loose_eps]},
+            ))
         if jitter_eps:
             # one finding for the whole grid problem, not one per episode:
             # the fix is a re-stamped timeline for the dataset, and a long
@@ -111,7 +130,9 @@ class TimestampGridCheck(Check):
                 )
             )
         if not any(f.severity >= Severity.WARN for f in res.findings):
-            res.summary = f"evenly spaced at {fps:g} fps and monotonic"
+            res.summary = (f"evenly spaced at {fps:g} fps and monotonic" if not loose_eps else
+                           f"monotonic, within the WARN line at {fps:g} fps; jitter exceeds "
+                           f"LeRobot's default tolerance_s in {len(loose_eps)} episode(s)")
         else:
             res.summary = (
                 f"{flagged}/{ctx.total_episodes} episodes flagged; worst spacing deviation "
@@ -135,6 +156,14 @@ class DroppedFramesCheck(Check):
                 "frame_index column missing from the frame data - a default LeRobot "
                 "feature that loaders and tools expect; gap/duplicate-index checks not "
                 "evaluated (metadata length and video evidence are still checked)"))
+        for col in ("frame_index", "timestamp", "episode_index"):
+            k = (ctx.null_counts or {}).get(col)
+            if k:
+                res.findings.append(Finding(
+                    self.id, Severity.WARN,
+                    f"{k} null value(s) in the {col} column - filled so the rest of the "
+                    "audit could run, but loaders that read the column will choke on them",
+                    details={"column": col, "nulls": int(k)}))
         if ctx.unreadable_files:
             ex = "; ".join(f"{name} ({err})" for name, err in ctx.unreadable_files[:3])
             res.findings.append(
@@ -247,8 +276,16 @@ class DroppedFramesCheck(Check):
                            else "frame_index unavailable; episode lengths") + (
                 " and video segments" if ctx.video_segments else "") + " match the data"
         else:
-            res.summary = (
-                f"{n_gap} episodes with gaps, {n_dup} with duplicate indices, "
-                f"{n_meta_mismatch} with metadata length mismatches"
-            )
+            # name every problem the findings report, not only the three
+            # per-episode counters (a video-only FAIL read "0 gaps, 0 dup")
+            parts = [x for x in (
+                f"{n_gap} episode(s) with gaps" if n_gap else "",
+                f"{n_dup} with duplicate indices" if n_dup else "",
+                f"{n_meta_mismatch} with metadata length mismatches" if n_meta_mismatch else "",
+                f"{n_vid_bad} video segment mismatch(es)" if n_vid_bad else "",
+                f"{len(ctx.unreadable_files)} unreadable data file(s)" if ctx.unreadable_files else "",
+                f"{len(ctx.duplicate_episode_ids)} episode index(es) catalogued twice"
+                if ctx.duplicate_episode_ids else "",
+            ) if x]
+            res.summary = "; ".join(parts) or "frame bookkeeping findings (see below)"
         return res

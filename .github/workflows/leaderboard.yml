@@ -13,6 +13,12 @@ on:
 permissions:
   contents: write
 
+# one board writer at a time: the weekly discovery job shares this group, and
+# a second audit queues instead of racing the first one's push
+concurrency:
+  group: leaderboard
+  cancel-in-progress: false
+
 jobs:
   audit:
     runs-on: ubuntu-latest
@@ -32,15 +38,43 @@ jobs:
       - name: audit
         id: audit
         continue-on-error: true
-        run: timeout 3300 env HF_HUB_ENABLE_HF_TRANSFER=1 HF_TOKEN=${{ secrets.HF_TOKEN }} python scripts/leaderboard.py --limit 200 --max-episodes 250 --workers 16 --time-budget 3000 --out docs
+        # discovery is the weekly leaderboard-discover job's work; the nightly
+        # reads its worklist and only rediscovers when it is >14 days old.
+        # time-budget stops new audits at 40 min; hard-deadline abandons
+        # in-flight ones at 50 min, well inside the 55 min shell timeout.
+        run: >-
+          timeout 3300 env HF_HUB_ENABLE_HF_TRANSFER=1 HF_TOKEN=${{ secrets.HF_TOKEN }}
+          python scripts/leaderboard.py --limit 200 --max-episodes 250 --workers 16
+          --worklist docs/worklist.json --worklist-max-age-hours 336
+          --time-budget 2400 --hard-deadline 3000 --out docs
+      - name: keep the audit results even if the push fails
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: board-${{ github.run_id }}
+          path: |
+            docs/data.json
+            docs/worklist.json
+          if-no-files-found: ignore
+          retention-days: 14
       - name: commit site
         if: always()
         run: |
           git config user.name "Ved Patel"
           git config user.email "130187703+vedevpatel@users.noreply.github.com"
           git add docs
-          git diff --cached --quiet || git commit -m "leaderboard: nightly audit"
-          git push
+          git diff --cached --quiet && exit 0
+          git commit -m "leaderboard: nightly audit"
+          # main moves while a 55-minute audit runs: rebase onto it and retry.
+          # -X theirs keeps this run's board files if both sides touched them.
+          for attempt in 1 2 3 4 5; do
+            git pull --rebase -X theirs origin main && git push && exit 0
+            echo "push attempt $attempt failed; retrying"
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 15))
+          done
+          echo "could not push after 5 attempts - results are in the run artifact"
+          exit 1
       - name: fail the run if the audit crashed
         if: steps.audit.outcome == 'failure'
         run: exit 1

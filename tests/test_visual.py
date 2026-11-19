@@ -116,3 +116,19 @@ def test_dark_frames_are_not_double_reported_as_blurry(dim_video_dataset):
     assert dark, "the dim dataset must still be called underexposed"
     assert dark[0].details.get("confounded_blur")
     assert "also read as blurry" in dark[0].message
+
+
+def test_static_white_canvas_is_not_overexposure(tmp_path):
+    # pusht: a sim's white canvas clips the same pixels in every frame while
+    # a dark object moves across it - scene content, INFO not WARN
+    def canvas(ep):
+        img = np.full((SIZE, SIZE), 255.0)
+        x = 8 + (ep * 3) % 40
+        img[20:36, x:x + 12] = 30.0
+        return img.astype(np.uint8)
+    root = make_dataset(tmp_path / "canvas", episodes=EPISODES)
+    _write_videos(root, canvas)
+    res = CHECK.run(load_dataset(str(root)), CheckConfig(video=True))
+    over = [f for f in res.findings if f.details.get("kind") == "overexposed"]
+    assert over and all(f.severity == Severity.INFO for f in over), [f.message for f in res.findings]
+    assert over[0].details["static_clip_share"] >= 0.8

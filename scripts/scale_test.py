@@ -6,9 +6,9 @@ The v0 leaderboard was tuned on <=5k-episode sets; DROID (76k episodes),
 BitRobot and robocasa were never loaded. This script is the honest way to
 close that: run it on a machine big enough to hold the working set.
 
-Requirements (measured, not guessed):
+Requirements (from one observed run, not a benchmark; see docs/scale-test.md):
   - RAM: a 500-episode DROID sample peaked at ~1.8 GB AFTER the loader fixes
-    (batched row-group reads + memmap writeback flushing, e4439dc) - but was
+    (batched row-group reads + memmap writeback flushing, 0b0713a) - but was
     OOM-killed on a 2 GB sandbox at exit -9 before finishing. Run on >=8 GB
     to have headroom; 16 GB (GitHub's larger runner) is comfortable.
   - Disk: sampled Hub shards land in ~/.cache/huggingface; a 500-episode

@@ -33,6 +33,16 @@ from kinema.report import (
 _SAMPLED_VERDICT_MIN_EPISODES = 250
 
 
+def _positive_int(text: str) -> int:
+    try:
+        v = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{text!r} is not an integer")
+    if v < 1:
+        raise argparse.ArgumentTypeError(f"must be at least 1, got {v}")
+    return v
+
+
 def _run_checks(args) -> int:
     try:
         overrides = load_config_overrides(args.config) if args.config else {}
@@ -137,7 +147,7 @@ def main(argv=None) -> int:
     p_check.add_argument("source", help="local dir, .zip, or Hub repo id (owner/name)")
     p_check.add_argument("--policy", default=None, help="target policy: act, diffusion, smolvla, pi0, pi05, pi0_fast")
     p_check.add_argument("--video", action="store_true", help="include video checks (needs the video extra)")
-    p_check.add_argument("--max-episodes", type=int, default=None, help="audit a sample of N episodes, spread across the dataset (Hub downloads fetch only the shards they live in)")
+    p_check.add_argument("--max-episodes", type=_positive_int, default=None, help="audit a sample of N episodes, spread across the dataset (Hub downloads fetch only the shards they live in)")
     p_check.add_argument("--config", default=None, help="JSON file of threshold overrides (CheckConfig field names)")
     p_check.add_argument("--json", nargs="?", const="-", default=None, help="write JSON report (to PATH, or stdout)")
     p_check.add_argument("--markdown", nargs="?", const="-", default=None, help="write markdown report (to PATH, or stdout)")

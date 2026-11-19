@@ -9,7 +9,7 @@ leave behind.
 - partial: episodes sharing identical 8-frame windows of motion. Windows,
   not single frames: clipped or quantized commands repeat individual
   values by chance, a run of 8 moving frames does not.
-- near: downsampled trajectories within 0.05 std per dim (z-scored with
+- near: downsampled trajectories within 0.05 std RMS over dims and grid points (z-scored with
   dataset-wide stats, so no single large-unit dim decides).
 - leakage: any of the above spanning two splits declared in info.json
   ("splits": {"train": "0:80", "val": "80:100"}) - eval metrics would be
@@ -244,7 +244,7 @@ class DuplicateCheck(Check):
                     res.findings.append(Finding(
                         self.id, Severity.INFO,
                         f"episodes {e1} and {e2}: near-identical trajectories (downsampled, "
-                        "within 0.05 std per dim) - possible re-recordings of the same run",
+                        "within 0.05 std RMS across dims) - possible re-recordings of the same run",
                         details={"episodes": [e1, e2], "kind": "near"},
                     ))
 

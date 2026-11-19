@@ -11,7 +11,8 @@ from __future__ import annotations
 import numpy as np
 
 from kinema.checks.base import Check, CheckConfig, CheckResult, Finding, Severity
-from kinema.stats import action_gripper_dims, canonical, is_generic, toggle_dims, velocity_dims
+from kinema.stats import (action_gripper_dims, canonical, is_generic, structural_velocity_dims,
+                          toggle_dims, velocity_dims)
 
 _PICK_WORDS = ("pick", "place", "grasp", "grab", "lift")
 
@@ -71,7 +72,11 @@ class IdleSegmentsCheck(Check):
             return self.skip("action column missing")
         fps = ctx.fps or 30.0
         finite_action = np.where(np.isfinite(action), action, np.nan)
-        eps = np.maximum(1e-8, cfg.idle_eps_frac * np.nanstd(finite_action, axis=0))
+        with np.errstate(invalid="ignore"):
+            raw_eps = cfg.idle_eps_frac * np.nanstd(finite_action, axis=0)
+        # an all-NaN dim (padding, dead sensor) has no std: give it the floor
+        # rather than letting NaN poison every comparison on that dim
+        eps = np.maximum(1e-8, np.where(np.isfinite(raw_eps), raw_eps, 0.0))
         state = ctx.state
         # the robot "did not move" over a run when every state dim stays
         # within a sliver of its dataset range (robust to sensor jitter,
@@ -96,7 +101,11 @@ class IdleSegmentsCheck(Check):
             if len(rows) < 3:
                 continue
             n_eps += 1
-            unchanged = np.abs(np.diff(action[rows], axis=0)) < eps
+            step = np.abs(np.diff(action[rows], axis=0))
+            # a non-finite step carries no evidence of motion: it must not make
+            # every frame look moving (one Inf, or an all-NaN padding dim, used
+            # to blind the whole check)
+            unchanged = (step < eps) | ~np.isfinite(step)
             if state is None:
                 for j, (z, tol) in neutral.items():
                     unchanged[:, j] = np.abs(action[rows][1:, j] - z) <= tol
@@ -186,6 +195,9 @@ class StuckActuatorCheck(Check):
         toggles = toggle_dims(ctx, exclude=named_grip | inferred_grip
                               | velocity_dims(ctx.action_names, n))
         grip |= toggles
+        # velocity commands (base twist, named or recognised structurally) sit
+        # at exactly zero whenever that axis is not driven: not a dead motor
+        vel = velocity_dims(ctx.action_names, n) | structural_velocity_dims(ctx)
         lo = np.nanpercentile(action, 1, axis=0)
         hi = np.nanpercentile(action, 99, axis=0)
         glob = hi - lo
@@ -234,6 +246,9 @@ class StuckActuatorCheck(Check):
             if j in inferred_grip or j in toggles:  # a shut/open gripper idles legitimately: report, do not gate
                 sev, why = Severity.INFO, why + (" [dim looks like an unnamed gripper]" if j in inferred_grip
                                                  else " [two-level on/off command]")
+            elif j in vel:
+                sev, why = Severity.INFO, ("a velocity command at rest - that axis was not "
+                                           "driven in those episodes, not a dead motor")
             res.findings.append(Finding(
                 self.id, sev,
                 f"joint {j}{name} does not move in {len(stuck_eps)}/{n_eps} episodes "
@@ -272,9 +287,15 @@ class StuckActuatorCheck(Check):
         if not any(f.severity >= Severity.WARN for f in res.findings):
             res.summary = "every joint moves wherever the dataset uses it"
         else:
-            flagged = {e for f in res.findings if f.severity >= Severity.WARN
-                       for e in f.details.get("episodes", [])}
-            res.summary = f"{len(flagged)}/{n_eps} episodes with stuck joints"
+            gated = [f for f in res.findings if f.severity >= Severity.WARN]
+            flagged = {e for f in gated for e in f.details.get("episodes", [])}
+            dataset_wide = sum(1 for f in gated if not f.details.get("episodes"))
+            parts = []
+            if flagged:
+                parts.append(f"{len(flagged)}/{n_eps} episodes with stuck joints")
+            if dataset_wide:
+                parts.append(f"{dataset_wide} joint(s) never follow their commands")
+            res.summary = "; ".join(parts) or f"{len(gated)} stuck-actuator finding(s)"
         return res
 
     def _not_followed(self, ctx, cfg, eps_ids, dead_set) -> list[Finding]:

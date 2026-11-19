@@ -34,7 +34,7 @@ from kinema.checks.deployment import (
     resolve_policy,
 )
 from kinema.dataset import CancelledError, load_dataset
-from kinema.report import DatasetReport, SCORE_MODEL
+from kinema.report import SCORE_MODEL, DatasetReport, verdict_label
 
 __all__ = ["CancelledError"]  # re-exported: the MCP layer and tests catch it from here
 
@@ -112,11 +112,14 @@ def _match_causes(
     matched severity, then by cause-map order."""
     causes: list[dict] = []
     claimed: set[int] = set()
+    # every finding is a candidate; each cause applies its own min_severity
+    # (an INFO-level cause such as converter-f32-accumulation must be able to
+    # fire). Only WARN/FAIL findings no cause claims are surfaced as unmapped.
     findings = [
         (r, f)
         for r in results
         for f in r.findings
-        if f.severity >= Severity.WARN and not r.skipped
+        if not r.skipped
     ]
     for order, cause in enumerate(CAUSES["causes"]):
         ind = cause["indicates"]
@@ -152,14 +155,15 @@ def _match_causes(
     causes.sort(key=lambda c: c["_rank"], reverse=True)
     for c in causes:
         del c["_rank"]
-    unmapped = [_evidence(f) for _, f in findings if id(f) not in claimed]
+    unmapped = [_evidence(f) for _, f in findings
+                if id(f) not in claimed and f.severity >= Severity.WARN]
     return causes, unmapped
 
 
 def _coverage(report: DatasetReport, ctx, unmapped: list[dict]) -> dict:
     """The negative-answer block: exactly what was and was not examined."""
     skipped = [
-        {"check_id": r.check_id, "reason": r.skip_reason}
+        {"check_id": r.check_id, "reason": mcp_skip_reason(r)}
         for r in report.results
         if r.skipped
     ]
@@ -170,16 +174,21 @@ def _coverage(report: DatasetReport, ctx, unmapped: list[dict]) -> dict:
             dims_sat_out.update(excl)
     notes: list[str] = []
     if ctx.truncated:
+        loaded = ctx.episode_ids()
+        with_stats = all(e in (ctx.episode_stats or {}) for e in loaded)
         notes.append(
-            f"sampled load: {ctx.total_episodes} episodes examined "
-            "(--max-episodes); a sampled load without per-episode stats can "
-            "only prove gross corruption"
+            f"sampled load: {ctx.total_episodes} episodes examined (--max-episodes)"
+            + ("; stats were compared against the loaded episodes' own per-episode stats"
+               if with_stats else
+               "; without per-episode stats a sampled load can only flag stored stats, "
+               "not prove them wrong - load the full dataset to confirm")
         )
-    if ctx.stats_source != "meta/stats.json":
-        notes.append(f"stats compared against {ctx.stats_source}, not meta/stats.json")
+    for feat, src in sorted((ctx.stats_sources or {}).items()):
+        if src != "meta/stats.json":
+            notes.append(f"{feat} stats compared against {src}, not meta/stats.json")
     out = {
         "checks_run": [
-            {"check_id": r.check_id, "verdict": r.verdict.name, "summary": r.summary}
+            {"check_id": r.check_id, "verdict": verdict_label(r.verdict), "summary": r.summary}
             for r in report.results
             if not r.skipped
         ],
@@ -191,6 +200,16 @@ def _coverage(report: DatasetReport, ctx, unmapped: list[dict]) -> dict:
         "blind_spots": CAUSES["blind_spots"],
     }
     return out
+
+
+def mcp_skip_reason(r) -> str:
+    """A skip reason that is true for the caller: no MCP tool takes a video
+    flag, so "pass --video" would be advice the client cannot follow."""
+    reason = r.skip_reason or ""
+    if r.check_id == "visual-quality" and reason.startswith("pass --video"):
+        return ("video checks do not run over MCP (they download MP4s); run "
+                "`kinema check --video` locally for blur/exposure")
+    return reason
 
 
 def run_check_subset(
@@ -282,7 +301,15 @@ def diagnose(
             f"unknown policy {policy!r} (known: {', '.join(known_policies())}; "
             "aliases like pi0.5 resolve to their family entry)"
         )
-    clusters = clusters_for_symptom(symptom)
+    matched = clusters_for_symptom(symptom)
+    # a cluster with a `surface` limit (rlds-integrity: leaderboard RLDS lane
+    # only) is never examined here - name it instead of claiming a match
+    clusters = [c for c in matched if not CAUSES["clusters"][c].get("surface")]
+    not_examined = [
+        {"cluster": c, "checks": CAUSES["clusters"][c].get("checks", []),
+         "note": CAUSES["clusters"][c]["surface"]}
+        for c in matched if CAUSES["clusters"][c].get("surface")
+    ]
     check_ids = [c.id for c in ALL_CHECKS]
     cfg = CheckConfig(
         video=video, policy=canon, policy_overrides=dict(policy_overrides or {})
@@ -296,6 +323,7 @@ def diagnose(
         "policy_assumptions": entry,
         "symptom": symptom,
         "clusters_matched": clusters,
+        "clusters_not_examined": not_examined,
         "ranking": (
             "every check ran regardless of the symptom; causes in the symptom's "
             "clusters (matches_symptom) rank first, then by severity"
@@ -366,13 +394,13 @@ def summarize_report(report: DatasetReport, top: int = 25) -> dict:
         "truncated": report.truncated,
         "score": report.score,
         "score_model": SCORE_MODEL,
-        "verdict": report.verdict.name,
+        "verdict": verdict_label(report.verdict),
         "counts": counts,
         "checks": [
             {
                 "id": r.check_id,
-                "verdict": r.verdict.name,
-                "summary": r.skip_reason if r.skipped else r.summary,
+                "verdict": verdict_label(r.verdict),
+                "summary": mcp_skip_reason(r) if r.skipped else r.summary,
                 "skipped": r.skipped,
                 "finding_count": len(r.findings),
             }
