@@ -21,7 +21,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "timestamp-grid",
@@ -34,7 +34,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "dropped-frames",
@@ -47,7 +47,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "calibration-drift",
@@ -60,7 +60,7 @@
       "skip_reason": "state dim 16 != action dim 12 and no names to pair them by",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "idle-segments",
@@ -73,7 +73,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 6
+      "charge": 0
     },
     {
       "id": "stuck-actuator",
@@ -954,8 +954,8 @@
           }
         },
         {
-          "severity": "WARN",
-          "message": "joint 5 does not move in 3/250 episodes [2323, 2364, 2486] - it moves in the others - dead or disabled motor during those recordings?",
+          "severity": "INFO",
+          "message": "joint 5 does not move in 3/250 episodes [2323, 2364, 2486] - a velocity command at rest - that axis was not driven in those episodes, not a dead motor",
           "episode_index": null,
           "details": {
             "joint": 5,
@@ -968,8 +968,8 @@
           }
         },
         {
-          "severity": "WARN",
-          "message": "joint 6 does not move in 7/250 episodes [2038, 2119, 2201, 2323, 2364, 2405, 2486] - it moves in the others - dead or disabled motor during those recordings?",
+          "severity": "INFO",
+          "message": "joint 6 does not move in 7/250 episodes [2038, 2119, 2201, 2323, 2364, 2405, 2486] - a velocity command at rest - that axis was not driven in those episodes, not a dead motor",
           "episode_index": null,
           "details": {
             "joint": 6,
@@ -986,8 +986,8 @@
           }
         },
         {
-          "severity": "WARN",
-          "message": "joint 7 does not move in 5/250 episodes [2201, 2323, 2364, 2405, 2486] - it moves in the others - dead or disabled motor during those recordings?",
+          "severity": "INFO",
+          "message": "joint 7 does not move in 5/250 episodes [2201, 2323, 2364, 2405, 2486] - a velocity command at rest - that axis was not driven in those episodes, not a dead motor",
           "episode_index": null,
           "details": {
             "joint": 7,
@@ -1239,7 +1239,7 @@
       "verdict": "INFO",
       "weight": 10,
       "weight_basis": "placeholder",
-      "summary": "",
+      "summary": "3 constant dim(s)",
       "skipped": false,
       "skip_reason": "",
       "details": {},
@@ -1272,7 +1272,7 @@
           }
         }
       ],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "duplicate-and-leakage",
@@ -1285,7 +1285,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 2
+      "charge": 0
     },
     {
       "id": "outlier-episodes",
@@ -3302,7 +3302,7 @@
           }
         }
       ],
-      "charge": 3
+      "charge": 0
     },
     {
       "id": "embedded-images",
@@ -3315,7 +3315,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "camera-coverage",
@@ -3328,7 +3328,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "episode-file-pointers",
@@ -3346,7 +3346,7 @@
         "local_shards": 4
       },
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "video-file-pointers",
@@ -3362,7 +3362,7 @@
         "missing": 0
       },
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "task-strings",
@@ -3375,7 +3375,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "reward-done",
@@ -3388,7 +3388,7 @@
       "skip_reason": "no reward/done fields (position-control datasets rarely have them)",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "visual-quality",
@@ -3411,7 +3411,7 @@
         }
       },
       "findings": [],
-      "charge": 6
+      "charge": 0
     },
     {
       "id": "deployment-readiness",
@@ -3424,7 +3424,49 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
+    },
+    {
+      "id": "stats-f32-fingerprint",
+      "title": "Stats f32 accumulation fingerprint",
+      "verdict": "INFO",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "per-episode stats carry naive float32 accumulation (3 episode(s))",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "per-episode stats reproduce naive float32 accumulation bitwise (3 sampled episode(s), observation.state dims [7, 8, 13], action dims [5, 6, 9]): the converter's stats are accumulation-rounded, not data-exact; constant channels get a fabricated std and a DC-offset mean",
+          "episode_index": null,
+          "details": {
+            "episodes": {
+              "observation.state": [
+                5054,
+                7580
+              ],
+              "action": [
+                5054
+              ]
+            },
+            "dims": {
+              "observation.state": [
+                7,
+                8,
+                13
+              ],
+              "action": [
+                5,
+                6,
+                9
+              ]
+            }
+          }
+        }
+      ],
+      "charge": 0
     }
   ]
 }

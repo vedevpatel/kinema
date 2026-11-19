@@ -6,7 +6,7 @@
   "fps": 10.0,
   "truncated": true,
   "video_audited": 5,
-  "score": 78,
+  "score": 88,
   "score_model": "tiered-v2",
   "verdict": "WARN",
   "checks": [
@@ -21,7 +21,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "timestamp-grid",
@@ -34,7 +34,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "dropped-frames",
@@ -47,7 +47,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "calibration-drift",
@@ -60,7 +60,7 @@
       "skip_reason": "state dim 8 != action dim 7 and no names to pair them by",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "idle-segments",
@@ -101,17 +101,17 @@
     {
       "id": "stuck-actuator",
       "title": "Stuck actuators (joints that never move)",
-      "verdict": "WARN",
+      "verdict": "INFO",
       "weight": 10,
       "weight_basis": "measured",
-      "summary": "14/250 episodes with stuck joints",
+      "summary": "every joint moves wherever the dataset uses it",
       "skipped": false,
       "skip_reason": "",
       "details": {},
       "findings": [
         {
-          "severity": "WARN",
-          "message": "joint 0 (motor_0) does not move in 7/250 episodes [26, 457, 692, 705, 744, 845, 936] - it moves in the others - dead or disabled motor during those recordings?",
+          "severity": "INFO",
+          "message": "joint 0 (motor_0) does not move in 7/250 episodes [26, 457, 692, 705, 744, 845, 936] - a velocity command at rest - that axis was not driven in those episodes, not a dead motor",
           "episode_index": null,
           "details": {
             "joint": 0,
@@ -128,8 +128,8 @@
           }
         },
         {
-          "severity": "WARN",
-          "message": "joint 1 (motor_1) does not move in 14/250 episodes [26, 113, 340, 422, 457, 553, 692, 705]... - it moves in the others - dead or disabled motor during those recordings?",
+          "severity": "INFO",
+          "message": "joint 1 (motor_1) does not move in 14/250 episodes [26, 113, 340, 422, 457, 553, 692, 705]... - a velocity command at rest - that axis was not driven in those episodes, not a dead motor",
           "episode_index": null,
           "details": {
             "joint": 1,
@@ -153,7 +153,7 @@
           }
         }
       ],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "action-saturation",
@@ -205,7 +205,7 @@
       "verdict": "INFO",
       "weight": 10,
       "weight_basis": "placeholder",
-      "summary": "",
+      "summary": "4 constant dim(s)",
       "skipped": false,
       "skip_reason": "",
       "details": {},
@@ -247,7 +247,7 @@
           }
         }
       ],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "duplicate-and-leakage",
@@ -260,7 +260,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 2
+      "charge": 0
     },
     {
       "id": "outlier-episodes",
@@ -1959,7 +1959,7 @@
           }
         }
       ],
-      "charge": 3
+      "charge": 0
     },
     {
       "id": "embedded-images",
@@ -1972,7 +1972,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "camera-coverage",
@@ -1985,7 +1985,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "episode-file-pointers",
@@ -2003,7 +2003,7 @@
         "local_shards": 1
       },
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "video-file-pointers",
@@ -2019,7 +2019,7 @@
         "missing": 0
       },
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "task-strings",
@@ -2032,7 +2032,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "reward-done",
@@ -2045,7 +2045,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "visual-quality",
@@ -2154,7 +2154,7 @@
           }
         }
       ],
-      "charge": 6
+      "charge": 0
     },
     {
       "id": "deployment-readiness",
@@ -2167,7 +2167,61 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
+    },
+    {
+      "id": "stats-f32-fingerprint",
+      "title": "Stats f32 accumulation fingerprint",
+      "verdict": "INFO",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "per-episode stats carry naive float32 accumulation (10 episode(s))",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "per-episode stats reproduce naive float32 accumulation bitwise (10 sampled episode(s), observation.state dims [0, 1, 2, 3, 4]..., action dims [0, 1, 2, 6]): the converter's stats are accumulation-rounded, not data-exact; constant channels get a fabricated std and a DC-offset mean",
+          "episode_index": null,
+          "details": {
+            "episodes": {
+              "observation.state": [
+                0,
+                270,
+                540,
+                810,
+                1084
+              ],
+              "action": [
+                0,
+                270,
+                540,
+                810,
+                1084
+              ]
+            },
+            "dims": {
+              "observation.state": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                7
+              ],
+              "action": [
+                0,
+                1,
+                2,
+                6
+              ]
+            }
+          }
+        }
+      ],
+      "charge": 0
     }
   ]
 }

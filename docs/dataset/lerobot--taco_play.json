@@ -6,7 +6,7 @@
   "fps": 15.0,
   "truncated": true,
   "video_audited": 5,
-  "score": 75,
+  "score": 85,
   "score_model": "tiered-v2",
   "verdict": "WARN",
   "checks": [
@@ -21,7 +21,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "timestamp-grid",
@@ -34,7 +34,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "dropped-frames",
@@ -47,15 +47,15 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "calibration-drift",
       "title": "Calibration drift (action vs state on still frames)",
-      "verdict": "WARN",
+      "verdict": "INFO",
       "weight": 10,
       "weight_basis": "measured",
-      "summary": "2 joint(s) miscalibrated; not compared: 5 different space; 2 delta-command dim(s) checked for scale agreement",
+      "summary": "no position-command dims to compare; not compared: 5 different space; 2 delta-command dim(s) checked for scale agreement",
       "skipped": false,
       "skip_reason": "",
       "details": {
@@ -91,8 +91,8 @@
       },
       "findings": [
         {
-          "severity": "WARN",
-          "message": "delta command 1 (motor_1): the measured steps of its state dim are 0.01x the commanded steps (R^2 0.67) - action and state disagree on scale: a conversion-units bug, or commands the robot cannot follow; anything comparing commands to measured motion inherits the mismatch",
+          "severity": "INFO",
+          "message": "delta command 1 (motor_1): measured state steps are 0.01x the stored commands (R^2 0.67) - normalization or controller scaling may be intentional; no common-unit contract is established, so this ratio alone is not a conversion-error verdict",
           "episode_index": null,
           "details": {
             "joint": 1,
@@ -103,8 +103,8 @@
           }
         },
         {
-          "severity": "WARN",
-          "message": "delta command 5 (motor_5): the measured steps of its state dim are 0.04x the commanded steps (R^2 0.68) - action and state disagree on scale: a conversion-units bug, or commands the robot cannot follow; anything comparing commands to measured motion inherits the mismatch",
+          "severity": "INFO",
+          "message": "delta command 5 (motor_5): measured state steps are 0.04x the stored commands (R^2 0.68) - normalization or controller scaling may be intentional; no common-unit contract is established, so this ratio alone is not a conversion-error verdict",
           "episode_index": null,
           "details": {
             "joint": 5,
@@ -115,7 +115,7 @@
           }
         }
       ],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "idle-segments",
@@ -128,7 +128,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 6
+      "charge": 0
     },
     {
       "id": "stuck-actuator",
@@ -193,7 +193,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 6
+      "charge": 0
     },
     {
       "id": "nan-and-normalization",
@@ -206,7 +206,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "duplicate-and-leakage",
@@ -2734,7 +2734,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "camera-coverage",
@@ -2747,7 +2747,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "episode-file-pointers",
@@ -2765,7 +2765,7 @@
         "local_shards": 1
       },
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "video-file-pointers",
@@ -2781,7 +2781,7 @@
         "missing": 0
       },
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "task-strings",
@@ -2794,7 +2794,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "reward-done",
@@ -2807,7 +2807,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "visual-quality",
@@ -2830,7 +2830,7 @@
         }
       },
       "findings": [],
-      "charge": 6
+      "charge": 0
     },
     {
       "id": "deployment-readiness",
@@ -2843,7 +2843,64 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
+    },
+    {
+      "id": "stats-f32-fingerprint",
+      "title": "Stats f32 accumulation fingerprint",
+      "verdict": "INFO",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "per-episode stats carry naive float32 accumulation (10 episode(s))",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "per-episode stats reproduce naive float32 accumulation bitwise (10 sampled episode(s), observation.state dims [0, 1, 2, 3, 4]..., action dims [0, 1, 2, 3, 4]...): the converter's stats are accumulation-rounded, not data-exact; constant channels get a fabricated std and a DC-offset mean",
+          "episode_index": null,
+          "details": {
+            "episodes": {
+              "observation.state": [
+                0,
+                897,
+                1794,
+                2691,
+                3602
+              ],
+              "action": [
+                0,
+                897,
+                1794,
+                2691,
+                3602
+              ]
+            },
+            "dims": {
+              "observation.state": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6
+              ],
+              "action": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6
+              ]
+            }
+          }
+        }
+      ],
+      "charge": 0
     }
   ]
 }

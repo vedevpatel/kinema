@@ -21,7 +21,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "timestamp-grid",
@@ -34,7 +34,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "dropped-frames",
@@ -54,7 +54,7 @@
           "details": {}
         }
       ],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "calibration-drift",
@@ -67,7 +67,7 @@
       "skip_reason": "state dim 8 != action dim 7 and no names to pair them by",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "idle-segments",
@@ -80,7 +80,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 6
+      "charge": 0
     },
     {
       "id": "stuck-actuator",
@@ -118,7 +118,7 @@
         },
         {
           "severity": "INFO",
-          "message": "joint 4 does not move in 12/13 episodes [0, 70, 141, 211, 282, 352, 423, 493]... - an unused degree of freedom for this task?",
+          "message": "joint 4 does not move in 12/13 episodes [0, 70, 141, 211, 282, 352, 423, 493]... - a velocity command at rest - that axis was not driven in those episodes, not a dead motor",
           "episode_index": null,
           "details": {
             "joint": 4,
@@ -175,7 +175,7 @@
           }
         }
       ],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "action-saturation",
@@ -188,7 +188,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 6
+      "charge": 0
     },
     {
       "id": "nan-and-normalization",
@@ -201,7 +201,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "duplicate-and-leakage",
@@ -214,7 +214,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 2
+      "charge": 0
     },
     {
       "id": "outlier-episodes",
@@ -321,7 +321,7 @@
         "flagged": {}
       },
       "findings": [],
-      "charge": 3
+      "charge": 0
     },
     {
       "id": "embedded-images",
@@ -346,7 +346,7 @@
           }
         }
       ],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "camera-coverage",
@@ -359,7 +359,7 @@
       "skip_reason": "no video cameras declared",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "episode-file-pointers",
@@ -372,7 +372,7 @@
       "skip_reason": "v2.x layout: one parquet per episode, no shard pointers to check",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "video-file-pointers",
@@ -385,7 +385,7 @@
       "skip_reason": "no video cameras declared",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "task-strings",
@@ -398,7 +398,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "reward-done",
@@ -411,7 +411,7 @@
       "skip_reason": "no reward/done fields (position-control datasets rarely have them)",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "visual-quality",
@@ -424,7 +424,7 @@
       "skip_reason": "pass --video to run (downloads MP4s; needs the video extra)",
       "details": {},
       "findings": [],
-      "charge": 6
+      "charge": 0
     },
     {
       "id": "deployment-readiness",
@@ -437,7 +437,62 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
+    },
+    {
+      "id": "stats-f32-fingerprint",
+      "title": "Stats f32 accumulation fingerprint",
+      "verdict": "INFO",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "per-episode stats carry naive float32 accumulation (10 episode(s))",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "per-episode stats reproduce naive float32 accumulation bitwise (10 sampled episode(s), observation.state dims [0, 1, 2, 3, 4]..., action dims [0, 1, 2, 6]): the converter's stats are accumulation-rounded, not data-exact; constant channels get a fabricated std and a DC-offset mean",
+          "episode_index": null,
+          "details": {
+            "episodes": {
+              "observation.state": [
+                0,
+                211,
+                423,
+                634,
+                846
+              ],
+              "action": [
+                0,
+                211,
+                423,
+                634,
+                846
+              ]
+            },
+            "dims": {
+              "observation.state": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7
+              ],
+              "action": [
+                0,
+                1,
+                2,
+                6
+              ]
+            }
+          }
+        }
+      ],
+      "charge": 0
     }
   ]
 }

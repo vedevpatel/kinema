@@ -6,24 +6,24 @@
   "fps": 30.0,
   "truncated": true,
   "video_audited": 5,
-  "score": 84,
+  "score": 94,
   "score_model": "tiered-v2",
   "verdict": "WARN",
   "checks": [
     {
       "id": "stats-drift",
       "title": "Stats drift (stored normalization stats vs actual data)",
-      "verdict": "WARN",
+      "verdict": "INFO",
       "weight": 10,
       "weight_basis": "placeholder",
-      "summary": "worst error 0.0x the FAIL threshold",
+      "summary": "data matches the sample's bootstrap interval and stored range (worst 0% of the FAIL threshold)",
       "skipped": false,
       "skip_reason": "",
       "details": {},
       "findings": [
         {
-          "severity": "WARN",
-          "message": "action.std: the stored std is inconsistent with the loaded sample on dim 4 (stored 0.00105746, outside the sample's 99.9% bootstrap interval [0.000628427, 0.00105425] over 40 episodes) - the stored stats look wrong (sampled audit: load the full dataset to confirm)",
+          "severity": "INFO",
+          "message": "action.std: the stored std sits outside the loaded sample's 99.9% bootstrap interval on dim 4 (stored 0.00105746, interval [0.000628427, 0.00105425] over 40 episodes) - a gap below the WARN tolerance: descriptive only",
           "episode_index": null,
           "details": {
             "feature": "action",
@@ -32,14 +32,21 @@
             "reference": "bootstrap",
             "episodes": 40,
             "stored": 0.001057456829585135,
+            "gap": 0.0030330154080385843,
             "interval": [
               0.0006284271973496315,
               0.0010542495467276676
             ]
           }
+        },
+        {
+          "severity": "INFO",
+          "message": "sampled subset and no per-episode stats: mean/std checked against the bootstrap sampling distribution of the loaded episodes, plus range containment (a full load is the conclusive audit)",
+          "episode_index": null,
+          "details": {}
         }
       ],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "timestamp-grid",
@@ -52,7 +59,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "dropped-frames",
@@ -72,7 +79,7 @@
           "details": {}
         }
       ],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "calibration-drift",
@@ -158,7 +165,7 @@
         "excluded_joints": {}
       },
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "idle-segments",
@@ -171,7 +178,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 6
+      "charge": 0
     },
     {
       "id": "stuck-actuator",
@@ -184,7 +191,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "action-saturation",
@@ -197,7 +204,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 6
+      "charge": 0
     },
     {
       "id": "nan-and-normalization",
@@ -210,7 +217,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "duplicate-and-leakage",
@@ -223,7 +230,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 2
+      "charge": 0
     },
     {
       "id": "outlier-episodes",
@@ -592,7 +599,7 @@
           }
         }
       ],
-      "charge": 3
+      "charge": 0
     },
     {
       "id": "embedded-images",
@@ -605,7 +612,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "camera-coverage",
@@ -618,7 +625,7 @@
       "skip_reason": "episode videos only partially fetched - camera coverage needs a full video audit",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "episode-file-pointers",
@@ -631,7 +638,7 @@
       "skip_reason": "v2.x layout: one parquet per episode, no shard pointers to check",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "video-file-pointers",
@@ -647,7 +654,7 @@
         "missing": 0
       },
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "task-strings",
@@ -660,7 +667,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "reward-done",
@@ -673,7 +680,7 @@
       "skip_reason": "no reward/done fields (position-control datasets rarely have them)",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "visual-quality",
@@ -727,7 +734,20 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
+    },
+    {
+      "id": "stats-f32-fingerprint",
+      "title": "Stats f32 accumulation fingerprint",
+      "verdict": "SKIP",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "no per-episode stats",
+      "details": {},
+      "findings": [],
+      "charge": 0
     }
   ]
 }
