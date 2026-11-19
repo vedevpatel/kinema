@@ -44,6 +44,24 @@ _FLAT_REL = 3e-5
 _SAMPLE_MIN_COVER = 0.5
 
 
+def _reach_note(stored: dict, actual: dict, d: int) -> str:
+    """When the stored [min, max] reaches far beyond every loaded frame, say
+    so: unloaded episodes then hold extreme values that set this dim's
+    normalization (IPEC-COMMUNITY/dobbe_lerobot: stored z reaches -132 m, a
+    40-episode sample stays within [-2.4, 1.7]) - nan-and-normalization
+    measures it on a load that includes them."""
+    if "min" not in stored or "max" not in stored:
+        return ""
+    span = float(actual["max"][d] - actual["min"][d])
+    reach = max(float(actual["min"][d] - stored["min"][d]), float(stored["max"][d] - actual["max"][d]))
+    if span <= 0 or not np.isfinite(reach) or reach < 20 * span:
+        return ""
+    return (f"; the stored range [{stored['min'][d]:.4g}, {stored['max'][d]:.4g}] reaches "
+            f"{reach / span:.0f}x the loaded data's spread beyond it - a few unloaded "
+            "episodes may hold extreme frames that dominate this dim's normalization "
+            "(a full load measures it)")
+
+
 def flat_in_data(actual: dict) -> np.ndarray:
     return actual["std"] <= _FLAT_REL * np.maximum(1.0, np.abs(actual["mean"]))
 
@@ -281,7 +299,7 @@ class StatsDriftCheck(Check):
                                         f"{fmt.format(float(garr[d]))} on dim {d}, in the direction a "
                                         f"{len(loaded)}-episode sample that missed part of the dataset's "
                                         "spread produces - not evidence the stored stats are wrong "
-                                        "(load the full dataset to judge)",
+                                        "(load the full dataset to judge)" + _reach_note(stored, actual, d),
                                         details={"feature": feat, "stat": kind, "dim": d,
                                                  "error": float(garr[d]), "reference": "sampled",
                                                  "sampling_explains": True},
