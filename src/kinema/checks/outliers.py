@@ -30,6 +30,7 @@ from __future__ import annotations
 import numpy as np
 
 from kinema.checks.base import Check, CheckConfig, CheckResult, Finding, Severity
+from kinema.checks.stats_drift import noise_floor
 from kinema.stats import action_gripper_dims, is_toggle, structural_velocity_dims, velocity_dims
 
 # metric -> (which side is harmful, evidence family)
@@ -141,8 +142,14 @@ class OutlierEpisodesCheck(Check):
             vel = (velocity_dims(ctx.action_names, n)
                    | structural_velocity_dims(ctx)) - grip
 
+            # float32 noise floor relative to each dim's magnitude, not an
+            # absolute 1e-8: a channel jittering at 4e-6 around 0.9 is not
+            # motion in metres or millimetres alike (tests/test_invariance.py)
+            with np.errstate(invalid="ignore"):
+                nf = noise_floor({"min": np.nanmin(action, axis=0), "max": np.nanmax(action, axis=0)})
+
             def _cont(j: int) -> bool:
-                return (std[j] > 1e-8 and len(np.unique(action[:, j])) > 10
+                return (std[j] > nf[j] and len(np.unique(action[:, j])) > 10
                         and not is_toggle(ctx, j, std[j]))
 
             vel_dims = [j for j in sorted(vel) if _cont(j)]
@@ -150,8 +157,8 @@ class OutlierEpisodesCheck(Check):
             da_all = np.abs(np.diff(action, axis=0))
             step_scale = (np.nanpercentile(da_all[:, vel_dims], 99, axis=0)
                           if vel_dims else None)
-            scale = np.where(std > 1e-8, std, 1.0)
-            eps_idle = np.maximum(1e-8, 0.01 * std)
+            scale = np.where(std > nf, std, 1.0)
+            eps_idle = np.maximum(np.maximum(nf, 0.01 * std), 1e-300)
 
         eps: list[int] = []
         tasks: list = []
@@ -206,7 +213,8 @@ class OutlierEpisodesCheck(Check):
         have_state = all(p is not None for p in end_poses)
         if have_state:
             end_arr = np.asarray(end_poses, dtype=np.float64)
-            rng = np.maximum(1e-8, np.nanmax(end_arr, axis=0) - np.nanmin(end_arr, axis=0))
+            lo_e, hi_e = np.nanmin(end_arr, axis=0), np.nanmax(end_arr, axis=0)
+            rng = np.maximum(np.maximum(hi_e - lo_e, noise_floor({"min": lo_e, "max": hi_e})), 1e-300)
         for idx in groups.values():
             if len(idx) < 5:
                 continue

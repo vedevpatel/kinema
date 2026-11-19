@@ -218,6 +218,11 @@ itself is refreshed weekly by the `leaderboard-discover` workflow into
 fresh discoveries in a row:
 **[vedevpatel.github.io/kinema](https://vedevpatel.github.io/kinema/)**
 
+A new WARN or FAIL reaches the board only if it survives the robustness gate:
+it is re-run with the data rescaled, episodes reordered and (on sampled loads) the sample halved,
+and a verdict that moves publishes as INFO; each check publishes at most 10 new
+WARN/FAIL verdicts a night ([docs/checks.md](docs/checks.md#robustness-gate)).
+
 Board audits a sample of up to 250 episodes per dataset (`--max-episodes 250`),
 spread evenly across what the download budget reaches - v2.x datasets keep one
 file per episode and are capped at 40 files, so they audit fewer - to keep a

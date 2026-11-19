@@ -27,6 +27,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
+import numpy as np  # noqa: E402
+
 from kinema.checks import ALL_CHECKS, CheckConfig, Severity  # noqa: E402
 from kinema.dataset import DatasetError, _meta_shard_map, _target_video_files, load_dataset  # noqa: E402
 from kinema.engine import engine_version  # noqa: E402
@@ -1058,7 +1060,115 @@ def next_row(it, deferred: list, in_flight: list) -> dict | None:
     return None
 
 
-def audit_one(repo_id: str, max_episodes: int, cap_bytes: int) -> DatasetReport:
+# --- robustness gate (docs/checks.md, "Robustness gate") --------------------
+# A NEW WARN/FAIL - a check whose verdict rose against the row's current
+# board verdict - is re-run under metamorphic probes (kinema.probes) before
+# it is published. A verdict that moves under a probe is an artifact of the
+# representation, the episode order or the sample, so it publishes as INFO
+# with the reason. Each check also admits at most `cap` new WARN/FAIL
+# verdicts per run; the rest publish as INFO, held for review in
+# held-transitions.json (a workflow artifact, not the public site).
+PROBE_MAX_BYTES = 64 << 20  # probes copy the arrays: light, in-RAM loads only
+_RANK = {"SKIP": -1, "OK": 0, "PASS": 0, "INFO": 1, "WARN": 2, "FAIL": 3}
+_NOT_PROBED = {"visual-quality"}  # reads MP4s again; never representation-bound
+
+
+class TransitionGate:
+    def __init__(self, cap: int):
+        import threading
+
+        self.cap = cap
+        self.admitted: dict[str, int] = {}
+        self.held: list[dict] = []
+        self.unstable: list[dict] = []
+        self._lock = threading.Lock()
+
+    def admit(self, check_id: str) -> bool:
+        with self._lock:
+            n = self.admitted.get(check_id, 0)
+            if self.cap and n >= self.cap:
+                return False
+            self.admitted[check_id] = n + 1
+            return True
+
+    def note(self, kind: str, row: dict) -> None:
+        with self._lock:
+            (self.held if kind == "held" else self.unstable).append(row)
+
+
+def _nightly_probes(ctx, flagged: set[int]):
+    from kinema import probes
+
+    out = [("unit-milli", lambda: probes.affine(ctx, 1e-3)),
+           ("unit-kilo", lambda: probes.affine(ctx, 1e3)),
+           ("order-reversed", lambda: probes.reverse_episodes(ctx))]
+    if ctx.truncated:
+        # a finding on a sample must survive a smaller sample that still
+        # holds the episodes it names
+        rest = [e for e in ctx.episode_ids() if e not in flagged]
+        if len(rest) >= 4:
+            keep = set(flagged) | set(rest[::2])
+            out.append(("half-sample", lambda: probes.keep_episodes(ctx, keep)))
+    return out
+
+
+def _demote(result, why: str) -> None:
+    for f in result.findings:
+        if f.severity >= Severity.WARN:
+            f.severity = Severity.INFO
+            f.message += f" [published as INFO: {why}]"
+    result.summary = (result.summary + f" [published as INFO: {why}]").strip()
+
+
+def robustness_gate(ctx, rep, prior: dict | None, gate: TransitionGate | None,
+                    repo_id: str = "", probe: bool = True) -> None:
+    """Apply the gate to a fresh report in place (see the block comment)."""
+    from kinema import probes
+    from kinema.report import flagged_episodes
+
+    if gate is None:
+        return
+    by_id = {c.id: c for c in ALL_CHECKS}
+    small = (ctx.state is None or getattr(ctx.state, "nbytes", 0) <= PROBE_MAX_BYTES) and \
+        (ctx.action is None or getattr(ctx.action, "nbytes", 0) <= PROBE_MAX_BYTES) and \
+        not isinstance(ctx.state, np.memmap) and not isinstance(ctx.action, np.memmap)
+    cfg = CheckConfig()
+    for r in rep.results:
+        now = r.verdict.name
+        before = (prior or {}).get(r.check_id)
+        if _RANK.get(now, 0) < 2 or (before is not None and _RANK.get(before, 0) >= _RANK.get(now, 0)):
+            continue  # not a WARN/FAIL, or not newly one
+        r.details = dict(r.details or {})
+        if probe and small and r.check_id not in _NOT_PROBED and r.check_id in by_id:
+            base = probes.signature(r)
+            for name, make in _nightly_probes(ctx, flagged_episodes(r)):
+                try:
+                    moved = probes.signature(by_id[r.check_id].run(make(), cfg))
+                except Exception:  # noqa: BLE001 - a probe that cannot run proves nothing
+                    continue
+                if moved != base:
+                    r.details["robustness"] = {"unstable_under": name, "was": now,
+                                               "probe_verdict": moved[0]}
+                    _demote(r, f"verdict not robust under the {name} probe")
+                    gate.note("unstable", {"id": repo_id, "check": r.check_id, "was": now, "probe": name})
+                    break
+            else:
+                r.details["robustness"] = {"probed": [n for n, _ in _nightly_probes(ctx, flagged_episodes(r))]}
+            if r.details.get("robustness", {}).get("unstable_under"):
+                continue
+        else:
+            r.details["robustness"] = {"probed": [], "skipped": "large or memory-mapped load"
+                                       if not small else "not probed"}
+        if not gate.admit(r.check_id):
+            r.details["robustness"]["held"] = True
+            _demote(r, f"held for review - more than {gate.cap} new {r.check_id} "
+                       "WARN/FAIL verdicts this run")
+            gate.note("held", {"id": repo_id, "check": r.check_id, "was": now})
+
+
+def audit_one(repo_id: str, max_episodes: int, cap_bytes: int,
+              prior: dict | None = None, gate: "TransitionGate | None" = None,
+              probe: bool = True) -> DatasetReport:
     import shutil
     import tempfile
 
@@ -1123,6 +1233,7 @@ def audit_one(repo_id: str, max_episodes: int, cap_bytes: int) -> DatasetReport:
                 rep.results.append(check.run(ctx, cfg))
             except Exception as e:  # noqa: BLE001
                 rep.results.append(check.skip(f"check crashed: {type(e).__name__}: {e}"))
+        robustness_gate(ctx, rep, prior, gate, repo_id=repo_id, probe=probe)
         return rep
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -1632,6 +1743,10 @@ def main() -> int:
                     help="rediscover when the worklist is older than this (0: never expires)")
     ap.add_argument("--discover-only", action="store_true",
                     help="refresh the worklist (and stored rows' discovery state), audit nothing")
+    ap.add_argument("--transition-cap", type=int, default=10,
+                    help="publish at most N new WARN/FAIL verdicts per check per run; the rest are held as INFO (0 = no cap)")
+    ap.add_argument("--no-probes", action="store_true",
+                    help="skip the robustness probes on new WARN/FAIL verdicts (the cap still applies)")
     ap.add_argument("--hard-deadline", type=float, default=0,
                     help="seconds from start after which in-flight audits are abandoned and the "
                          "run writes what it has and exits (keep below the shell timeout)")
@@ -1708,6 +1823,12 @@ def main() -> int:
 
     from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 
+    # the board's current per-check verdicts: the gate judges only verdicts
+    # that rise against them (a fresh board has none, so everything is new)
+    prior_verdicts = {e["id"]: {c["id"]: c.get("verdict") for c in e["report"].get("checks", [])}
+                      for e in entries if e.get("report")}
+    gate = TransitionGate(args.transition_cap)
+
     def process(d):
         slug = d["id"].replace("/", "--")
         entry = {**d, "slug": slug, "engine": engine,
@@ -1719,7 +1840,9 @@ def main() -> int:
                 entry["sampled"] = True  # metadata-only audit, never downloads
                 rep = audit_rlds(d)
             else:
-                rep = audit_one(d["id"], args.max_episodes, args.size_cap_mb * 1024 * 1024)
+                rep = audit_one(d["id"], args.max_episodes, args.size_cap_mb * 1024 * 1024,
+                                prior=prior_verdicts.get(d["id"]), gate=gate,
+                                probe=not args.no_probes and not is_heavy(d))
             entry["report"] = report_to_dict(rep)
             (out / "dataset" / f"{slug}.html").write_text(render_dataset_page(
                 rep, rlds_ref=(d.get("rlds_bucket", RLDS_BUCKETS[0][0]), d.get("rlds_prefix", ""))
@@ -1822,6 +1945,14 @@ def main() -> int:
     generated = f"{dt.datetime.now(dt.timezone.utc):%Y-%m-%d %H:%M UTC}"
     _write(out, entries, generated, max_episodes=args.max_episodes)
     n_ok = sum(1 for e in entries if e.get("report"))
+    # what the gate kept off the scored board this run: a workflow artifact
+    # for review, never published (the rows themselves show the INFO note)
+    if gate.held or gate.unstable:
+        Path("held-transitions.json").write_text(json.dumps(
+            {"generated": generated, "cap": gate.cap, "admitted": gate.admitted,
+             "held": gate.held, "unstable": gate.unstable}, indent=1))
+    print(f"robustness gate: {sum(gate.admitted.values())} new WARN/FAIL verdict(s) published, "
+          f"{len(gate.unstable)} not robust under a probe, {len(gate.held)} held by the cap", flush=True)
     print(f"done: {n_ok}/{len(entries)} audited -> {out}/index.html")
     if abandoned:
         # worker threads are still blocked in downloads; a normal interpreter

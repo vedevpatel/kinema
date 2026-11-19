@@ -99,6 +99,38 @@ not rollout success; success floors for every arm in the v1.1 protocol
 (clean 2%/4%/2% at 20k steps), so MSE is the outcome metric and no
 success-rate re-check is pending.
 
+## Robustness gate
+
+How a false positive is kept off the public board, without a human in the
+loop. Every false positive the November 2026 board runs surfaced was
+introduced by a change and found only after it was public; most were
+artifacts of the representation (an absolute threshold meeting data at
+another scale), the episode order, or a small sample.
+
+- **On every push** (`tests/test_invariance.py`, `tests/test_corpus.py`):
+  every check's verdict and flagged episodes must survive metamorphic probes
+  (`src/kinema/probes.py`) - a unit change (x0.001, x57.3, x1000), re-zeroed
+  encoders (one per-joint offset on command and measurement), and shuffled
+  or reversed episode order - over the synthetic defects, an edge-shapes
+  fixture of the shapes real data punished, and an adjudicated corpus of
+  real-data extracts (`tests/data/corpus/`, pinned revisions) that must keep
+  their checked verdicts. A budget test keeps the suite under 45 s.
+- **On the board** (`scripts/leaderboard.py`): a NEW WARN/FAIL - a check
+  whose verdict rose against the row's current board verdict - is re-run
+  under the unit probes, the reversed order and, on a sampled load, half the
+  sample (keeping the episodes it names). A verdict that moves publishes as
+  INFO, saying which probe moved it. Each check publishes at most 10 new
+  WARN/FAIL verdicts per run (`--transition-cap`); the rest publish as INFO,
+  held for review, and are listed in `held-transitions.json`, a workflow
+  artifact. Probes run only on light, in-RAM loads (arrays <= 64 MB) and
+  never re-read video; heavy rows get the cap without the probes.
+
+The gate decides robustness, not truth: a false positive that is stable
+under every probe - the rule's notion of a defect is simply wrong for that
+data, as with the parked-joint rows - still needs the corpus (each
+adjudicated case becomes a test) and the cap (which bounds how many rows a
+bad rule can reach in one run).
+
 ## Harm table
 
 The GPU table is `docs/harm-table.json`, rendered as `harm-table.html`, with raw
