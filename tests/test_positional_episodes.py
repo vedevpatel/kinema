@@ -47,3 +47,11 @@ def test_unordered_catalogue_is_not_matched_by_position(tmp_path):
     _recatalogue(root, [450010 + 10 * k for k in reversed(range(12))])
     with pytest.raises(DatasetError):
         load_dataset(str(root))
+
+
+def test_diagnosis_names_the_positional_cause(tmp_path):
+    from kinema.diagnose import diagnose
+    root = make_dataset(tmp_path / "m", episodes=12)
+    _recatalogue(root, [450010 + 10 * k for k in range(12)])
+    out = diagnose(str(root), "pi0", "episodes not loading")
+    assert "positional-episode-index" in [c["cause_id"] for c in out["causes"]]

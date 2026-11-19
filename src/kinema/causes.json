@@ -279,6 +279,23 @@
       "explanation": "The per-episode stats reproduce a naive float32 accumulation bitwise while disagreeing with the data in float64: the converter computed stats in f32 and its rounding error is stored as if it were data statistics. On constant channels this fabricates a nonzero std and DC-offsets the mean, so a pipeline normalizing from these stats feeds {policy} the converter's rounding error. The data itself is fine.",
       "docs_section": "stats-f32-fingerprint",
       "next_step": "Recompute the stats from the data in float64 (LeRobot aggregation or the converter's stats step with an f64 accumulator) and retrain; the episodes themselves need no repair."
+    },
+    {
+      "id": "positional-episode-index",
+      "cluster": "metadata-integrity",
+      "title": "Metadata and frames number episodes differently",
+      "indicates": {
+        "check_id": "dropped-frames",
+        "min_severity": "WARN",
+        "message_contains": "matched by position"
+      },
+      "confidence": {
+        "FAIL": "high",
+        "WARN": "medium"
+      },
+      "explanation": "meta/episodes catalogues one set of episode ids while the frames carry another (0..N-1 by position). LeRobot's default positional lookup still trains on it, but selecting episodes by index loads nothing or the wrong episodes, and any tool keyed on episode_index - splits, filters, per-episode stats - silently disagrees with what {policy} trained on.",
+      "docs_section": "dropped-frames",
+      "next_step": "Rewrite one side so they agree: renumber meta/episodes to 0..N-1 (keeping the source ids in a separate column) or rewrite the frames' episode_index to the catalogued ids, then re-run kinema check."
     }
   ],
   "blind_spots": [
