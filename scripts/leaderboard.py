@@ -1010,6 +1010,33 @@ def _video_single_shard(targets: list[str], sizes: dict[str, int],
     return budgetable[len(budgetable) // 2]
 
 
+# Heavy rows (multi-GB on the Hub: GR00T sim tasks load 130-190k frames of
+# ~200 dims each) queue next to each other by lane, and 8 of them in flight
+# at once exhausted the runner and killed the run (2026-11-19, 06:25 UTC).
+# At most HEAVY_SLOTS run concurrently; light rows fill the other workers.
+HEAVY_BYTES = 2 * 1024 ** 3
+HEAVY_SLOTS = 2
+
+
+def is_heavy(d: dict) -> bool:
+    return (d.get("data_bytes") or 0) >= HEAVY_BYTES
+
+
+def next_row(it, deferred: list, in_flight: list) -> dict | None:
+    """The next row to submit, or None. A heavy row with no free heavy slot
+    is deferred (order kept) and the next light row goes instead; deferred
+    rows go first once a slot frees."""
+    heavy_now = sum(1 for d in in_flight if is_heavy(d))
+    if deferred and heavy_now < HEAVY_SLOTS:
+        return deferred.pop(0)
+    for d in it:
+        if is_heavy(d) and heavy_now >= HEAVY_SLOTS:
+            deferred.append(d)
+            continue
+        return d
+    return None
+
+
 def audit_one(repo_id: str, max_episodes: int, cap_bytes: int) -> DatasetReport:
     import shutil
     import tempfile
@@ -1720,13 +1747,13 @@ def main() -> int:
     try:
         pending = {}
         it = iter(todo)
+        deferred: list[dict] = []  # heavy rows waiting for a heavy slot
 
         def submit_next() -> bool:
             if args.time_budget and time.monotonic() - started >= args.time_budget:
                 return False
-            try:
-                d = next(it)
-            except StopIteration:
+            d = next_row(it, deferred, list(pending.values()))
+            if d is None:
                 return False
             pending[pool.submit(process, d)] = d
             return True

@@ -1152,3 +1152,26 @@ def test_range_read_drops_truncated_episodes_and_refuses_a_fragment(tmp_path):
         lb._complete_episodes(pa.table({"episode_index": [1] * 120}), {1: 300})
     # unknown lengths (no catalogue entry) are kept, not guessed at
     assert lb._complete_episodes(t, None).num_rows == 420
+
+
+def test_heavy_rows_never_exceed_their_slots():
+    # GR00T-sim rows queued together exhausted the runner: at most
+    # HEAVY_SLOTS heavy rows in flight, light rows keep the workers busy,
+    # and every row is eventually submitted
+    lb = _load_leaderboard()
+    rows = ([{"id": f"h{i}", "data_bytes": 5 * 1024 ** 3} for i in range(8)]
+            + [{"id": f"l{i}", "data_bytes": 10} for i in range(8)])
+    it, deferred, in_flight, submitted = iter(rows), [], [], []
+    while True:
+        while len(in_flight) < 8:  # fill the pool
+            d = lb.next_row(it, deferred, in_flight)
+            if d is None:
+                break
+            in_flight.append(d)
+            submitted.append(d["id"])
+            assert sum(lb.is_heavy(x) for x in in_flight) <= lb.HEAVY_SLOTS
+        if not in_flight:
+            break
+        in_flight.pop(0)  # oldest finishes
+    assert sorted(submitted) == sorted(d["id"] for d in rows)
+    assert submitted[:8] == ["h0", "h1", "l0", "l1", "l2", "l3", "l4", "l5"]

@@ -82,7 +82,12 @@ jobs:
             --time-budget 2400 --hard-deadline 3000 --out docs &
           pid=$!
           while kill -0 "$pid" 2>/dev/null; do
-            for _ in $(seq 60); do kill -0 "$pid" 2>/dev/null || break; sleep 10; done
+            for i in $(seq 60); do
+              kill -0 "$pid" 2>/dev/null || break
+              # memory trail: a killed runner leaves no other evidence
+              [ $((i % 6)) -eq 0 ] && echo "mem: $(free -m | awk '/Mem:/ {print $3 " MB used, " $7 " MB available"}')"
+              sleep 10
+            done
             kill -0 "$pid" 2>/dev/null && { checkpoint && echo "checkpoint pushed" || echo "checkpoint failed"; }
           done
           wait "$pid"
