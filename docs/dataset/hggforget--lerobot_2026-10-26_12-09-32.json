@@ -6,16 +6,16 @@
   "fps": 30.0,
   "truncated": true,
   "video_audited": 5,
-  "score": 81,
-  "score_model": "tiered-v2",
+  "score": 68,
+  "score_model": "tiered-v3",
   "verdict": "WARN",
   "checks": [
     {
       "id": "stats-drift",
       "title": "Stats drift (stored normalization stats vs actual data)",
       "verdict": "PASS",
-      "weight": 10,
-      "weight_basis": "placeholder",
+      "weight": 6,
+      "weight_basis": "measured",
       "summary": "data matches per-episode stats of the loaded episodes (worst 0% of the FAIL threshold)",
       "skipped": false,
       "skip_reason": "",
@@ -40,8 +40,8 @@
       "id": "dropped-frames",
       "title": "Dropped / duplicated frames",
       "verdict": "INFO",
-      "weight": 8,
-      "weight_basis": "placeholder",
+      "weight": 2,
+      "weight_basis": "measured",
       "summary": "frame_index contiguous; episode lengths match the data",
       "skipped": false,
       "skip_reason": "",
@@ -454,7 +454,7 @@
       "title": "Action saturation (commands clipped at the limits)",
       "verdict": "PASS",
       "weight": 6,
-      "weight_basis": "placeholder",
+      "weight_basis": "measured",
       "summary": "no continuous action dim pinned at a limit above 5% (14 dims checked)",
       "skipped": false,
       "skip_reason": "",
@@ -465,15 +465,99 @@
     {
       "id": "nan-and-normalization",
       "title": "NaN / Inf and normalization hazards",
-      "verdict": "PASS",
+      "verdict": "WARN",
       "weight": 10,
       "weight_basis": "placeholder",
-      "summary": "no NaN/Inf; all dims have usable variance",
+      "summary": "2 dim(s) whose normalization a few extreme frames dominate",
       "skipped": false,
       "skip_reason": "",
       "details": {},
-      "findings": [],
-      "charge": 0
+      "findings": [
+        {
+          "severity": "WARN",
+          "message": "observation.state dim 14: 78 frame(s) in 22 episode(s) (e.g. [145, 218, 508, 581, 798]) lie far outside the rest (up to 0; 98% of frames within [0.9393, 0.9612]) and inflate the std 8.8x (0.0752 vs 0.008505 without them) - mean/std normalization squashes every other frame. Glitch frames, or a different robot/unit mixed in: drop or fix those episodes, or normalize by quantiles",
+          "episode_index": null,
+          "details": {
+            "kind": "dominating-outliers",
+            "feature": "observation.state",
+            "dim": 14,
+            "frames": 78,
+            "episodes": [
+              145,
+              218,
+              508,
+              581,
+              798,
+              1016,
+              1161,
+              1234,
+              1307,
+              1379,
+              1452,
+              1597,
+              1670,
+              1742,
+              2033,
+              2105,
+              2178,
+              2250,
+              2323,
+              2541,
+              2686,
+              2758
+            ],
+            "std_all": 0.0751963617662429,
+            "std_core": 0.008505139537143826,
+            "bulk": [
+              0.9392850995063782,
+              0.9611852765083313
+            ],
+            "worst": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "action dim 14: 80 frame(s) in 21 episode(s) (e.g. [145, 218, 508, 581, 798]) lie far outside the rest (up to 0; 98% of frames within [0.9397, 0.9612]) and inflate the std 8.8x (0.07612 vs 0.008691 without them) - mean/std normalization squashes every other frame. Glitch frames, or a different robot/unit mixed in: drop or fix those episodes, or normalize by quantiles",
+          "episode_index": null,
+          "details": {
+            "kind": "dominating-outliers",
+            "feature": "action",
+            "dim": 14,
+            "frames": 80,
+            "episodes": [
+              145,
+              218,
+              508,
+              581,
+              798,
+              1016,
+              1161,
+              1234,
+              1307,
+              1379,
+              1452,
+              1670,
+              1742,
+              2033,
+              2105,
+              2178,
+              2250,
+              2323,
+              2541,
+              2686,
+              2758
+            ],
+            "std_all": 0.07612030455859527,
+            "std_core": 0.008691213598101866,
+            "bulk": [
+              0.9397000074386597,
+              0.9611852765083313
+            ],
+            "worst": 0.0
+          }
+        }
+      ],
+      "charge": 10
     },
     {
       "id": "duplicate-and-leakage",
@@ -492,8 +576,8 @@
       "id": "outlier-episodes",
       "title": "Outlier episodes (duration, jerk, velocity, static, end-pose)",
       "verdict": "WARN",
-      "weight": 3,
-      "weight_basis": "placeholder",
+      "weight": 6,
+      "weight_basis": "measured",
       "summary": "1 episode(s) to review, 6 mild, of 40; worst: [0, 2831, 145, 1089, 1960, 2686, 2758]",
       "skipped": false,
       "skip_reason": "",
@@ -861,7 +945,7 @@
           }
         }
       ],
-      "charge": 3
+      "charge": 6
     },
     {
       "id": "embedded-images",
