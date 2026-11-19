@@ -197,14 +197,70 @@ class NanAndNormalizationCheck(Check):
                         details={"feature": feat, "dim": int(j), "std": float(std[j])},
                     )
                 )
+            for f in _dominating_outliers(ctx, feat, arr):
+                res.findings.append(f)
         if not res.findings:
             res.summary = "no NaN/Inf; all dims have usable variance"
         else:
+            kinds = [f.details.get("kind") for f in res.findings]
             n_bad = sum(1 for f in res.findings if f.severity == Severity.FAIL)
-            n_tiny = sum(1 for f in res.findings if f.severity == Severity.WARN)
+            n_dom = kinds.count("dominating-outliers")
+            n_tiny = sum(1 for f in res.findings if f.severity == Severity.WARN) - n_dom
             n_const = sum(1 for f in res.findings if f.severity == Severity.INFO)
             res.summary = ", ".join(x for x in (
                 f"{n_bad} feature(s) with NaN/Inf" if n_bad else "",
+                f"{n_dom} dim(s) whose normalization a few extreme frames dominate" if n_dom else "",
                 f"{n_tiny} near-constant dim(s)" if n_tiny else "",
                 f"{n_const} constant dim(s)" if n_const else "") if x)
         return res
+
+
+# A dim's mean/std normalization is set by EVERY frame: a handful of glitch
+# frames far outside the bulk inflates the std and squashes all the others
+# (IPEC-COMMUNITY/dobbe_lerobot: 6 of 5208 episodes hold odometry glitches
+# to z = -132 m; they set z's std at 2.23 against 0.15 for the rest, so
+# normal motion trains at 1/15 of its scale). Flagged only when all hold:
+# the frames lie beyond _FAR_BULKS bulk widths (q01..q99) of the median,
+# are at most _FAR_MAX_FRAC of the dim's frames, and inflate its std by at
+# least _DOM_STD_RATIO. A dim flat in its bulk (a parked joint that moves
+# rarely) is not judged - its rare moves ARE its signal.
+_FAR_BULKS = 20.0
+_FAR_MAX_FRAC = 0.01
+_DOM_STD_RATIO = 3.0
+
+
+def _dominating_outliers(ctx, feat: str, arr: np.ndarray) -> list[Finding]:
+    out: list[Finding] = []
+    for j in range(arr.shape[1]):
+        col = np.asarray(arr[:, j], dtype=np.float64)
+        ok = np.isfinite(col)
+        x = col[ok]
+        if len(x) < 100:
+            continue
+        q01, q50, q99 = np.percentile(x, [1, 50, 99])
+        bulk = q99 - q01
+        if bulk <= 1e-8 * max(1.0, abs(q50)):
+            continue
+        far = np.abs(x - q50) > _FAR_BULKS * bulk
+        n_far = int(far.sum())
+        if n_far == 0 or n_far > _FAR_MAX_FRAC * len(x):
+            continue
+        sd_all, sd_core = float(x.std()), float(x[~far].std())
+        if sd_core <= 0 or sd_all < _DOM_STD_RATIO * sd_core:
+            continue
+        rows = np.flatnonzero(ok)[far]
+        eps = sorted({int(e) for e in ctx.episode_index[rows]})
+        worst = float(x[far][np.argmax(np.abs(x[far] - q50))])
+        out.append(Finding(
+            "nan-and-normalization", Severity.WARN,
+            f"{feat} dim {j}: {n_far} frame(s) in {len(eps)} episode(s) (e.g. {eps[:5]}) lie "
+            f"far outside the rest (up to {worst:.4g}; 98% of frames within "
+            f"[{q01:.4g}, {q99:.4g}]) and inflate the std {sd_all / sd_core:.1f}x "
+            f"({sd_all:.4g} vs {sd_core:.4g} without them) - mean/std normalization squashes "
+            "every other frame. Glitch frames, or a different robot/unit mixed in: drop or "
+            "fix those episodes, or normalize by quantiles",
+            details={"kind": "dominating-outliers", "feature": feat, "dim": int(j),
+                     "frames": n_far, "episodes": eps, "std_all": sd_all, "std_core": sd_core,
+                     "bulk": [float(q01), float(q99)], "worst": worst},
+        ))
+    return out

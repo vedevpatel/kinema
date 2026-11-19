@@ -308,8 +308,23 @@ Knobs: `saturation_warn_fraction` (0.05).
 
 NaN/Inf anywhere (FAIL - one NaN poisons the loss for the whole batch),
 constant dims (INFO - usually padding; if they ever vary at deployment,
-mean/std normalization blows them up), and near-zero-variance dims (WARN -
-normalization amplifies noise).
+mean/std normalization blows them up), near-zero-variance dims (WARN -
+normalization amplifies noise), and dims whose normalization a few extreme
+frames dominate (WARN): frames more than 20 bulk widths (q01..q99) from the
+median, at most 1% of the dim's frames, that inflate its std at least 3x.
+Mean/std normalization then squashes every other frame -
+`IPEC-COMMUNITY/dobbe_lerobot`'s odometry glitches (z = -132 m in a handful
+of its 5208 episodes) inflate the action dims' std up to 21x;
+`lerobot/austin_buds_dataset`'s all-zero state dropout frames inflate
+rotation entries 15-60x. The finding names the episodes. A dim flat in its
+bulk (a parked joint that moves rarely) is not judged: its rare moves are its
+signal. On a sampled load the frames must be in the loaded episodes;
+stats-drift's sampled notes add a hint when the stored range reaches far
+beyond everything loaded.
+
+Validated before shipping: no finding on any of the 36 pinned calibration
+datasets, and 1 of 40 randomly drawn board datasets - a true positive
+(austin_buds' dropout frames).
 
 No knobs.
 

@@ -146,7 +146,7 @@
       "indicates": {
         "check_id": "nan-and-normalization",
         "min_severity": "WARN",
-        "message_contains": "std"
+        "message_contains": "near-zero variance"
       },
       "confidence": {
         "WARN": "medium"
@@ -154,6 +154,23 @@
       "explanation": "A zero-variance dim divides by ~0 during normalization (Inf/NaN batches) or amplifies sensor noise into a full-scale signal the policy wastes capacity fitting.",
       "docs_section": "nan-and-normalization",
       "next_step": "Drop constant dims from the features (and the policy's input dims), or fix the recording so those dims carry signal; then recompute stats."
+    },
+    {
+      "id": "outlier-dominated-normalization",
+      "cluster": "normalization",
+      "title": "A few extreme frames dominate a dim's normalization",
+      "indicates": {
+        "check_id": "nan-and-normalization",
+        "min_severity": "WARN",
+        "message_contains": "inflate the std"
+      },
+      "confidence": {
+        "FAIL": "high",
+        "WARN": "medium"
+      },
+      "explanation": "A handful of frames far outside the rest - glitches, sensor dropouts, or a different robot or unit mixed in - set this dim's std several times larger than the other frames warrant. {policy}'s mean/std normalization then squashes every normal frame into a sliver of its range, so the motion that matters trains at a fraction of its scale.",
+      "docs_section": "nan-and-normalization",
+      "next_step": "Inspect the episodes the finding names; drop or repair the extreme frames (or those episodes), recompute meta/stats.json, and retrain - or normalize with quantiles (q01/q99), which these frames barely move."
     },
     {
       "id": "nan-values",
