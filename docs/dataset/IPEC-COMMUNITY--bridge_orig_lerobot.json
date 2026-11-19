@@ -6,24 +6,24 @@
   "fps": 5.0,
   "truncated": true,
   "video_audited": 5,
-  "score": 76,
+  "score": 86,
   "score_model": "tiered-v2",
   "verdict": "WARN",
   "checks": [
     {
       "id": "stats-drift",
       "title": "Stats drift (stored normalization stats vs actual data)",
-      "verdict": "WARN",
+      "verdict": "INFO",
       "weight": 10,
       "weight_basis": "placeholder",
-      "summary": "worst error 0.0x the FAIL threshold",
+      "summary": "data matches the sample's bootstrap interval and stored range (worst 0% of the FAIL threshold)",
       "skipped": false,
       "skip_reason": "",
       "details": {},
       "findings": [
         {
-          "severity": "WARN",
-          "message": "observation.state.mean: the stored mean is inconsistent with the loaded sample on dim 1 (stored 0.0307253, outside the sample's 99.9% bootstrap interval [0.0319447, 0.0862388] over 40 episodes) - the stored stats look wrong (sampled audit: load the full dataset to confirm)",
+          "severity": "INFO",
+          "message": "observation.state.mean: the stored mean sits outside the loaded sample's 99.9% bootstrap interval on dim 1 (stored 0.0307253, interval [0.0319447, 0.0862388] over 40 episodes) - a gap below the WARN tolerance: descriptive only",
           "episode_index": null,
           "details": {
             "feature": "observation.state",
@@ -32,14 +32,21 @@
             "reference": "bootstrap",
             "episodes": 40,
             "stored": 0.030725326389074326,
+            "gap": 0.013260844866868396,
             "interval": [
               0.031944710071023064,
               0.08623883671971996
             ]
           }
+        },
+        {
+          "severity": "INFO",
+          "message": "sampled subset and no per-episode stats: mean/std checked against the bootstrap sampling distribution of the loaded episodes, plus range containment (a full load is the conclusive audit)",
+          "episode_index": null,
+          "details": {}
         }
       ],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "timestamp-grid",
@@ -52,7 +59,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "dropped-frames",
@@ -72,7 +79,7 @@
           "details": {}
         }
       ],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "calibration-drift",
@@ -150,7 +157,7 @@
         "excluded_joints": {}
       },
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "idle-segments",
@@ -163,7 +170,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 6
+      "charge": 0
     },
     {
       "id": "stuck-actuator",
@@ -176,7 +183,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "action-saturation",
@@ -189,7 +196,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 6
+      "charge": 0
     },
     {
       "id": "nan-and-normalization",
@@ -197,7 +204,7 @@
       "verdict": "INFO",
       "weight": 10,
       "weight_basis": "placeholder",
-      "summary": "",
+      "summary": "1 constant dim(s)",
       "skipped": false,
       "skip_reason": "",
       "details": {},
@@ -212,7 +219,7 @@
           }
         }
       ],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "duplicate-and-leakage",
@@ -225,7 +232,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 2
+      "charge": 0
     },
     {
       "id": "outlier-episodes",
@@ -510,7 +517,7 @@
           }
         }
       ],
-      "charge": 3
+      "charge": 0
     },
     {
       "id": "embedded-images",
@@ -523,7 +530,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "camera-coverage",
@@ -536,7 +543,7 @@
       "skip_reason": "episode videos only partially fetched - camera coverage needs a full video audit",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "episode-file-pointers",
@@ -549,7 +556,7 @@
       "skip_reason": "v2.x layout: one parquet per episode, no shard pointers to check",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "video-file-pointers",
@@ -565,7 +572,7 @@
         "missing": 0
       },
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "task-strings",
@@ -610,7 +617,7 @@
       "skip_reason": "no reward/done fields (position-control datasets rarely have them)",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "visual-quality",
@@ -666,7 +673,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "stats-f32-fingerprint",
@@ -679,7 +686,7 @@
       "skip_reason": "no per-episode stats",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     }
   ]
 }
