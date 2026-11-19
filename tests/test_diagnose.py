@@ -234,3 +234,33 @@ def test_list_checks_from_the_registry():
     for c in checks:
         assert c["docs"].endswith(f"#{c['id']}")
         assert c["title"] and c["description"]
+
+
+# --- clusters beyond normalization / idle / metadata (calibration, video,
+# conditioning, data-quality): their findings used to land only under
+# findings_outside_coverage ------------------------------------------------
+
+def test_new_symptoms_route_to_their_clusters():
+    assert clusters_for_symptom("the arm reaches the wrong position, maybe calibration") == ["calibration"]
+    assert clusters_for_symptom("camera feed looks blurry and dark") == ["video"]
+    assert clusters_for_symptom("it ignores the language instruction") == ["conditioning"]
+    assert clusters_for_symptom("eval looks great but it overfits; maybe duplicate episodes") == ["data-quality"]
+
+
+@pytest.mark.parametrize("defect,cause", [
+    ("calibration-drift", "calibration-offset"),
+    ("action-saturation", "clipped-commands"),
+    ("duplicates", "duplicate-episodes"),
+    ("timestamp-grid", "timestamp-grid-broken"),
+    ("dropped-frames", "metadata-length-mismatch"),
+    ("outlier-episodes", "outlier-episodes"),
+])
+def test_defects_map_to_their_new_causes(tmp_path, defect, cause):
+    root = make_dataset(tmp_path / "ds", episodes=24, defects=[defect])
+    out = diagnose(str(root), "pi0", "the policy fails at inference")
+    ids = [c["cause_id"] for c in out["causes"]]
+    assert cause in ids, (ids, [f["message"][:80] for f in out["coverage"]["findings_outside_coverage"]])
+    # the finding that cause explains is no longer reported as unmapped
+    explained = next(c for c in out["causes"] if c["cause_id"] == cause)
+    unmapped = {f["message"] for f in out["coverage"]["findings_outside_coverage"]}
+    assert not any(e["message"] in unmapped for e in explained["evidence"])
