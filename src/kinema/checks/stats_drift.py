@@ -62,8 +62,21 @@ def _reach_note(stored: dict, actual: dict, d: int) -> str:
             "(a full load measures it)")
 
 
+def noise_floor(actual: dict) -> np.ndarray:
+    """Per dim, the smallest spread that is not float32 accumulation noise:
+    _FLAT_REL of the dim's own magnitude (max |value|). Scale-covariant - a
+    unit change moves the floor with the data - where the old absolute
+    floors (1e-8 sigma / range guards, max(1, |mean|) in the flat line) let
+    millimetre vs metre decide the verdict (tests/test_invariance.py)."""
+    mag = np.maximum(np.abs(actual["min"]), np.abs(actual["max"]))
+    return np.where(np.isfinite(mag), _FLAT_REL * mag, 0.0)
+
+
+_TINY = 1e-300  # division guard only; never a threshold
+
+
 def flat_in_data(actual: dict) -> np.ndarray:
-    return actual["std"] <= _FLAT_REL * np.maximum(1.0, np.abs(actual["mean"]))
+    return actual["std"] <= noise_floor(actual)
 
 
 def _errors(actual: dict, ref: dict) -> tuple[dict[str, np.ndarray], np.ndarray]:
@@ -75,8 +88,9 @@ def _errors(actual: dict, ref: dict) -> tuple[dict[str, np.ndarray], np.ndarray]
     the floor's work.
     """
     rng = np.maximum(ref["max"] - ref["min"], actual["max"] - actual["min"])
-    rng_floor = np.maximum(rng, 1e-8)
-    sigma = np.maximum.reduce([ref["std"], actual["std"], 1e-3 * rng, np.full_like(rng, 1e-8)])
+    floor = np.maximum(noise_floor(actual), _TINY)
+    rng_floor = np.maximum(rng, floor)
+    sigma = np.maximum.reduce([ref["std"], actual["std"], 1e-3 * rng, floor])
     both_flat = flat_in_data(actual)
     raw_mean = np.abs(actual["mean"] - ref["mean"]) / sigma
     out = {
@@ -92,7 +106,9 @@ def _errors(actual: dict, ref: dict) -> tuple[dict[str, np.ndarray], np.ndarray]
         "max": np.abs(actual["max"] - ref["max"]) / rng_floor,
     }
     out["std"] = np.where(
-        both_flat, 0.0, np.abs(actual["std"] - ref["std"]) / np.maximum(ref["std"], 1e-8)
+        # relative to the STORED std, not the noise floor: a stored std 10x
+        # too small is a 10x error even when it sits under the floor
+        both_flat, 0.0, np.abs(actual["std"] - ref["std"]) / np.maximum(ref["std"], _TINY)
     )
     return out, np.where(both_flat, raw_mean, 0.0)
 
@@ -258,7 +274,8 @@ class StatsDriftCheck(Check):
                     # not by multiples: gross corruption is still visible
                     if "std" in stored and stored["std"].shape == actual["std"].shape:
                         sd_s, sd_a = stored["std"], actual["std"]
-                        live = (sd_s > 1e-6) & (sd_a > 1e-6)
+                        nf = noise_floor(actual)
+                        live = (sd_s > nf) & (sd_a > nf) & (sd_a > 0)
                         ratio = np.where(live, np.maximum(sd_s, sd_a) / np.maximum(np.minimum(sd_s, sd_a), 1e-12), 1.0)
                         shift = np.where(live, np.abs(actual["mean"] - stored["mean"]) / np.maximum(sd_s, 1e-12), 0.0)
                         # ...but only in the direction sampling cannot explain.
@@ -320,7 +337,8 @@ class StatsDriftCheck(Check):
                                              "stored_inconsistent": bool(imp[d])},
                                 ))
                     if "min" in stored and "max" in stored and stored["min"].shape == actual["min"].shape:
-                        rng = np.maximum(stored["max"] - stored["min"], 1e-8)
+                        rng = np.maximum(stored["max"] - stored["min"],
+                                         np.maximum(noise_floor(actual), _TINY))
                         over = np.maximum(stored["min"] - actual["min"], actual["max"] - stored["max"]) / rng
                         over = np.where(np.isfinite(over), over, -np.inf)
                         dim = int(np.argmax(over))
