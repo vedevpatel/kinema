@@ -1218,3 +1218,92 @@ def test_one_unservable_data_file_does_not_abort_the_sample(tmp_path, monkeypatc
         lb.DatasetError(f"the Hub cannot serve {n}")) if n.startswith("data/") else None)
     with pytest.raises(lb.DatasetError, match="none of the sampled data files"):
         lb.download_sample("o/r", 10_000, tmp_path, [])
+
+
+# --- robustness gate ----------------------------------------------------------
+
+def _gate_report(lb, ctx, checks):
+    from kinema.checks import CheckConfig
+    from kinema.report import DatasetReport
+    rep = DatasetReport(source="t", format_version="v3.0", episodes=ctx.total_episodes,
+                        frames=ctx.row_count, fps=ctx.fps)
+    rep.results = [c.run(ctx, CheckConfig()) for c in checks]
+    return rep
+
+
+class _AbsoluteThresholdCheck:
+    """A deliberately representation-bound check: WARNs when any state value
+    exceeds 0.5 in absolute units - exactly the bug class the probes catch."""
+    id = "fake-absolute"
+
+    def run(self, ctx, cfg):
+        import numpy as np
+
+        from kinema.checks.base import CheckResult, Finding, Severity
+        res = CheckResult(self.id, "fake")
+        if np.nanmax(np.abs(ctx.state)) > 0.5:
+            res.findings.append(Finding(self.id, Severity.WARN, "big values", details={}))
+        return res
+
+
+def test_gate_demotes_a_verdict_that_moves_under_a_probe(tmp_path, monkeypatch):
+    from kinema.dataset import load_dataset
+    from kinema.fixtures.synth import make_dataset
+    lb = _load_leaderboard()
+    fake = _AbsoluteThresholdCheck()
+    monkeypatch.setattr(lb, "ALL_CHECKS", [*lb.ALL_CHECKS, fake])
+    ctx = load_dataset(str(make_dataset(tmp_path / "f", episodes=12)))
+    rep = _gate_report(lb, ctx, [fake])
+    assert rep.results[0].verdict.name == "WARN"
+    gate = lb.TransitionGate(cap=10)
+    lb.robustness_gate(ctx, rep, prior={}, gate=gate, repo_id="o/r")
+    r = rep.results[0]
+    assert r.verdict.name == "INFO" and r.details["robustness"]["unstable_under"] == "unit-milli"
+    assert "not robust" in r.findings[0].message and gate.unstable[0]["check"] == "fake-absolute"
+
+
+def test_gate_publishes_a_robust_new_verdict_and_ignores_old_ones(tmp_path):
+    from kinema.checks import ALL_CHECKS
+    from kinema.dataset import load_dataset
+    from kinema.fixtures.synth import make_dataset
+    lb = _load_leaderboard()
+    ctx = load_dataset(str(make_dataset(tmp_path / "i", episodes=24, defects=["idle-segments"])))
+    idle = next(c for c in ALL_CHECKS if c.id == "idle-segments")
+    rep = _gate_report(lb, ctx, [idle])
+    gate = lb.TransitionGate(cap=10)
+    lb.robustness_gate(ctx, rep, prior={"idle-segments": "PASS"}, gate=gate)
+    r = rep.results[0]
+    assert r.verdict.name == "WARN" and set(r.details["robustness"]["probed"]) >= {"unit-milli", "order-reversed"}
+    assert gate.admitted == {"idle-segments": 1}
+    # already WARN on the board: not a transition, not touched
+    rep2 = _gate_report(lb, ctx, [idle])
+    lb.robustness_gate(ctx, rep2, prior={"idle-segments": "WARN"}, gate=gate)
+    assert "robustness" not in (rep2.results[0].details or {}) and gate.admitted == {"idle-segments": 1}
+
+
+def test_gate_cap_holds_the_overflow_as_info(tmp_path):
+    from kinema.checks import ALL_CHECKS
+    from kinema.dataset import load_dataset
+    from kinema.fixtures.synth import make_dataset
+    lb = _load_leaderboard()
+    ctx = load_dataset(str(make_dataset(tmp_path / "c", episodes=24, defects=["idle-segments"])))
+    idle = next(c for c in ALL_CHECKS if c.id == "idle-segments")
+    gate = lb.TransitionGate(cap=1)
+    reps = [_gate_report(lb, ctx, [idle]) for _ in range(2)]
+    for i, rep in enumerate(reps):
+        lb.robustness_gate(ctx, rep, prior=None, gate=gate, repo_id=f"o/r{i}", probe=False)
+    assert reps[0].results[0].verdict.name == "WARN"
+    held = reps[1].results[0]
+    assert held.verdict.name == "INFO" and held.details["robustness"]["held"]
+    assert gate.held == [{"id": "o/r1", "check": "idle-segments", "was": "WARN"}]
+
+
+def test_half_sample_probe_only_on_sampled_loads(tmp_path):
+    from kinema.dataset import load_dataset
+    from kinema.fixtures.synth import make_dataset
+    lb = _load_leaderboard()
+    root = make_dataset(tmp_path / "h", episodes=24)
+    full = load_dataset(str(root))
+    sampled = load_dataset(str(root), max_episodes=12)
+    assert "half-sample" not in [n for n, _ in lb._nightly_probes(full, set())]
+    assert "half-sample" in [n for n, _ in lb._nightly_probes(sampled, set())]
