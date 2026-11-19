@@ -6,24 +6,24 @@
   "fps": 30.0,
   "truncated": true,
   "video_audited": 5,
-  "score": 66,
+  "score": 76,
   "score_model": "tiered-v2",
   "verdict": "WARN",
   "checks": [
     {
       "id": "stats-drift",
       "title": "Stats drift (stored normalization stats vs actual data)",
-      "verdict": "WARN",
+      "verdict": "INFO",
       "weight": 10,
       "weight_basis": "placeholder",
-      "summary": "worst error 4.0x the FAIL threshold",
+      "summary": "data matches stored range (worst 0% of the FAIL threshold)",
       "skipped": false,
       "skip_reason": "",
       "details": {},
       "findings": [
         {
           "severity": "INFO",
-          "message": "observation.state.std: the sampled data is off the stored stats by 116.2x on dim 118, but the sample spans only 0.4% of the stored [min, max] - episodes it did not load can explain the gap (load the full dataset to judge)",
+          "message": "observation.state.std: the sampled data is off the stored stats by 116.2x on dim 118, in the direction a 8-episode sample that missed part of the dataset's spread produces - not evidence the stored stats are wrong (load the full dataset to judge)",
           "episode_index": null,
           "details": {
             "feature": "observation.state",
@@ -31,83 +31,17 @@
             "dim": 118,
             "error": 116.23076089337614,
             "reference": "sampled",
-            "range_coverage": 0.0038519766185275872
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "observation.state.mean: the stored mean sits outside the loaded sample's 99.9% bootstrap interval on dim 81 (stored 0.99999, interval [0.998795, 0.998849] over 8 episodes, 1.02 std devs beyond it) - the stored stats look wrong; a sampled audit cannot prove it, load the full dataset to confirm",
-          "episode_index": null,
-          "details": {
-            "feature": "observation.state",
-            "stat": "mean",
-            "dim": 81,
-            "reference": "bootstrap",
-            "episodes": 8,
-            "stored": 0.9999896287918091,
-            "gap": 1.0200806602032244,
-            "interval": [
-              0.9987952613294583,
-              0.9988493646847016
-            ]
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "observation.state.std: the stored std sits outside the loaded sample's 99.9% bootstrap interval on dim 118 (stored 6.91916, interval [0.0503434, 0.0641243] over 8 episodes, 99.1% beyond it) - the stored stats look wrong; a sampled audit cannot prove it, load the full dataset to confirm",
-          "episode_index": null,
-          "details": {
-            "feature": "observation.state",
-            "stat": "std",
-            "dim": 118,
-            "reference": "bootstrap",
-            "episodes": 8,
-            "stored": 6.919159412384033,
-            "gap": 0.9907323568384273,
-            "interval": [
-              0.05034343287266644,
-              0.06412430041201266
-            ]
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "action.mean: the stored mean sits outside the loaded sample's 99.9% bootstrap interval on dim 19 (stored -0.186706, interval [-0.591913, -0.263579] over 8 episodes, 0.13 std devs beyond it) - the stored stats look wrong; a sampled audit cannot prove it, load the full dataset to confirm",
-          "episode_index": null,
-          "details": {
-            "feature": "action",
-            "stat": "mean",
-            "dim": 19,
-            "reference": "bootstrap",
-            "episodes": 8,
-            "stored": -0.1867063194513321,
-            "gap": 0.12619299252695165,
-            "interval": [
-              -0.5919127893335004,
-              -0.26357905896999656
-            ]
+            "sampling_explains": true
           }
         },
         {
           "severity": "INFO",
-          "message": "action.std: the stored std sits outside the loaded sample's 99.9% bootstrap interval on dim 0 (stored 0.0962975, interval [0.0991923, 0.126204] over 8 episodes) - a gap below the WARN tolerance: descriptive only",
+          "message": "sampled subset, too few loaded episodes for a bootstrap reference: only gross mean/std shifts and range containment are checked",
           "episode_index": null,
-          "details": {
-            "feature": "action",
-            "stat": "std",
-            "dim": 0,
-            "reference": "bootstrap",
-            "episodes": 8,
-            "stored": 0.09629750996828079,
-            "gap": 0.03006069030247865,
-            "interval": [
-              0.09919227959233713,
-              0.12620359518107038
-            ]
-          }
+          "details": {}
         }
       ],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "timestamp-grid",
