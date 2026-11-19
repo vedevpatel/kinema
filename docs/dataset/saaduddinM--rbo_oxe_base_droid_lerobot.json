@@ -6,24 +6,24 @@
   "fps": 15.0,
   "truncated": true,
   "video_audited": 5,
-  "score": 74,
+  "score": 94,
   "score_model": "tiered-v2",
   "verdict": "WARN",
   "checks": [
     {
       "id": "stats-drift",
       "title": "Stats drift (stored normalization stats vs actual data)",
-      "verdict": "WARN",
+      "verdict": "INFO",
       "weight": 10,
       "weight_basis": "placeholder",
-      "summary": "worst error 0.0x the FAIL threshold",
+      "summary": "data matches the sample's bootstrap interval and stored range (worst 0% of the FAIL threshold)",
       "skipped": false,
       "skip_reason": "",
       "details": {},
       "findings": [
         {
-          "severity": "WARN",
-          "message": "action.std: the stored std is inconsistent with the loaded sample on dim 1 (stored 0.187108, outside the sample's 99.9% bootstrap interval [0.135666, 0.186078] over 40 episodes) - the stored stats look wrong (sampled audit: load the full dataset to confirm)",
+          "severity": "INFO",
+          "message": "action.std: the stored std sits outside the loaded sample's 99.9% bootstrap interval on dim 1 (stored 0.187108, interval [0.135666, 0.186078] over 40 episodes) - a gap below the WARN tolerance: descriptive only",
           "episode_index": null,
           "details": {
             "feature": "action",
@@ -32,14 +32,21 @@
             "reference": "bootstrap",
             "episodes": 40,
             "stored": 0.18710795774418965,
+            "gap": 0.005503575259595181,
             "interval": [
               0.13566554455432414,
               0.18607819501707534
             ]
           }
+        },
+        {
+          "severity": "INFO",
+          "message": "sampled subset and no per-episode stats: mean/std checked against the bootstrap sampling distribution of the loaded episodes, plus range containment (a full load is the conclusive audit)",
+          "episode_index": null,
+          "details": {}
         }
       ],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "timestamp-grid",
@@ -52,7 +59,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "dropped-frames",
@@ -72,15 +79,15 @@
           "details": {}
         }
       ],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "calibration-drift",
       "title": "Calibration drift (action vs state on still frames)",
-      "verdict": "WARN",
+      "verdict": "INFO",
       "weight": 10,
       "weight_basis": "measured",
-      "summary": "4 joint(s) miscalibrated; not compared: 2 different space, 1 gripper in different units; 4 delta-command dim(s) checked for scale agreement",
+      "summary": "no position-command dims to compare; not compared: 2 different space, 1 gripper in different units; 4 delta-command dim(s) checked for scale agreement",
       "skipped": false,
       "skip_reason": "",
       "details": {
@@ -130,8 +137,8 @@
       },
       "findings": [
         {
-          "severity": "WARN",
-          "message": "delta command 0 (x): the measured steps of its state dim are 0.01x the commanded steps (R^2 0.62) - action and state disagree on scale: a conversion-units bug, or commands the robot cannot follow; anything comparing commands to measured motion inherits the mismatch",
+          "severity": "INFO",
+          "message": "delta command 0 (x): measured state steps are 0.01x the stored commands (R^2 0.62) - normalization or controller scaling may be intentional; no common-unit contract is established, so this ratio alone is not a conversion-error verdict",
           "episode_index": null,
           "details": {
             "joint": 0,
@@ -142,8 +149,8 @@
           }
         },
         {
-          "severity": "WARN",
-          "message": "delta command 1 (y): the measured steps of its state dim are 0.02x the commanded steps (R^2 0.64) - action and state disagree on scale: a conversion-units bug, or commands the robot cannot follow; anything comparing commands to measured motion inherits the mismatch",
+          "severity": "INFO",
+          "message": "delta command 1 (y): measured state steps are 0.02x the stored commands (R^2 0.64) - normalization or controller scaling may be intentional; no common-unit contract is established, so this ratio alone is not a conversion-error verdict",
           "episode_index": null,
           "details": {
             "joint": 1,
@@ -154,8 +161,8 @@
           }
         },
         {
-          "severity": "WARN",
-          "message": "delta command 2 (z): the measured steps of its state dim are 0.02x the commanded steps (R^2 0.53) - action and state disagree on scale: a conversion-units bug, or commands the robot cannot follow; anything comparing commands to measured motion inherits the mismatch",
+          "severity": "INFO",
+          "message": "delta command 2 (z): measured state steps are 0.02x the stored commands (R^2 0.53) - normalization or controller scaling may be intentional; no common-unit contract is established, so this ratio alone is not a conversion-error verdict",
           "episode_index": null,
           "details": {
             "joint": 2,
@@ -166,8 +173,8 @@
           }
         },
         {
-          "severity": "WARN",
-          "message": "delta command 4 (pitch): the measured steps of its state dim are 0.04x the commanded steps (R^2 0.51) - action and state disagree on scale: a conversion-units bug, or commands the robot cannot follow; anything comparing commands to measured motion inherits the mismatch",
+          "severity": "INFO",
+          "message": "delta command 4 (pitch): measured state steps are 0.04x the stored commands (R^2 0.51) - normalization or controller scaling may be intentional; no common-unit contract is established, so this ratio alone is not a conversion-error verdict",
           "episode_index": null,
           "details": {
             "joint": 4,
@@ -178,7 +185,7 @@
           }
         }
       ],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "idle-segments",
@@ -249,7 +256,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "action-saturation",
@@ -262,7 +269,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 6
+      "charge": 0
     },
     {
       "id": "nan-and-normalization",
@@ -270,7 +277,7 @@
       "verdict": "INFO",
       "weight": 10,
       "weight_basis": "placeholder",
-      "summary": "",
+      "summary": "1 constant dim(s)",
       "skipped": false,
       "skip_reason": "",
       "details": {},
@@ -285,7 +292,7 @@
           }
         }
       ],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "duplicate-and-leakage",
@@ -298,7 +305,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 2
+      "charge": 0
     },
     {
       "id": "outlier-episodes",
@@ -653,7 +660,7 @@
           }
         }
       ],
-      "charge": 3
+      "charge": 0
     },
     {
       "id": "embedded-images",
@@ -666,7 +673,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "camera-coverage",
@@ -679,7 +686,7 @@
       "skip_reason": "episode videos only partially fetched - camera coverage needs a full video audit",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "episode-file-pointers",
@@ -692,7 +699,7 @@
       "skip_reason": "v2.x layout: one parquet per episode, no shard pointers to check",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "video-file-pointers",
@@ -708,7 +715,7 @@
         "missing": 0
       },
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "task-strings",
@@ -721,7 +728,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "reward-done",
@@ -734,7 +741,7 @@
       "skip_reason": "no reward/done fields (position-control datasets rarely have them)",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "visual-quality",
@@ -757,7 +764,7 @@
         }
       },
       "findings": [],
-      "charge": 6
+      "charge": 0
     },
     {
       "id": "deployment-readiness",
@@ -770,7 +777,20 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
+    },
+    {
+      "id": "stats-f32-fingerprint",
+      "title": "Stats f32 accumulation fingerprint",
+      "verdict": "SKIP",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "no per-episode stats",
+      "details": {},
+      "findings": [],
+      "charge": 0
     }
   ]
 }
