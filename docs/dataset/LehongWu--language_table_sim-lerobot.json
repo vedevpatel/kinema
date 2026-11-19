@@ -1,0 +1,639 @@
+{
+  "source": "LehongWu/language_table_sim-lerobot",
+  "format_version": "v2.1",
+  "episodes": 40,
+  "frames": 1128,
+  "fps": 10.0,
+  "truncated": true,
+  "video_audited": 5,
+  "score": 100,
+  "score_model": "tiered-v2",
+  "verdict": "INFO",
+  "checks": [
+    {
+      "id": "stats-drift",
+      "title": "Stats drift (stored normalization stats vs actual data)",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "data matches per-episode stats of the loaded episodes (worst 0% of the FAIL threshold)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "timestamp-grid",
+      "title": "Timestamp grid (spacing, monotonic, start at 0)",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "evenly spaced at 10 fps and monotonic",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "dropped-frames",
+      "title": "Dropped / duplicated frames",
+      "verdict": "INFO",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "frame_index contiguous; episode lengths match the data",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "no per-episode video segments in the metadata (v2.x or no videos): video frame counts not cross-checked",
+          "episode_index": null,
+          "details": {}
+        }
+      ],
+      "charge": 0
+    },
+    {
+      "id": "calibration-drift",
+      "title": "Calibration drift (action vs state on still frames)",
+      "verdict": "SKIP",
+      "weight": 10,
+      "weight_basis": "measured",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "no dim where action is a position command for the same joint: 2 different quantities",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "idle-segments",
+      "title": "Idle segments (policy learns to do nothing)",
+      "verdict": "PASS",
+      "weight": 6,
+      "weight_basis": "measured",
+      "summary": "no episode starts idle or idles >= 30%",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "stuck-actuator",
+      "title": "Stuck actuators (joints that never move)",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "measured",
+      "summary": "every joint moves wherever the dataset uses it",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "action-saturation",
+      "title": "Action saturation (commands clipped at the limits)",
+      "verdict": "PASS",
+      "weight": 6,
+      "weight_basis": "placeholder",
+      "summary": "no continuous action dim pinned at a limit above 5% (2 dims checked)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "nan-and-normalization",
+      "title": "NaN / Inf and normalization hazards",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "no NaN/Inf; all dims have usable variance",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "duplicate-and-leakage",
+      "title": "Duplicate episodes / train-eval leakage",
+      "verdict": "PASS",
+      "weight": 2,
+      "weight_basis": "measured",
+      "summary": "no exact, partial or near duplicates",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "outlier-episodes",
+      "title": "Outlier episodes (duration, jerk, velocity, static, end-pose)",
+      "verdict": "INFO",
+      "weight": 3,
+      "weight_basis": "placeholder",
+      "summary": "0 episode(s) to review, 5 mild, of 40; worst: [27849, 78906, 88189, 148528, 157811]; duration/end pose skipped for 40 episodes whose task has < 5 episodes",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "metrics": {
+          "duration_s": {
+            "0": null,
+            "4642": null,
+            "9283": null,
+            "13925": null,
+            "18566": null,
+            "23208": null,
+            "27849": null,
+            "32491": null,
+            "37132": null,
+            "41774": null,
+            "46415": null,
+            "51057": null,
+            "55698": null,
+            "60340": null,
+            "64981": null,
+            "69623": null,
+            "74264": null,
+            "78906": null,
+            "83547": null,
+            "88189": null,
+            "92830": null,
+            "97472": null,
+            "102113": null,
+            "106755": null,
+            "111396": null,
+            "116038": null,
+            "120679": null,
+            "125321": null,
+            "129962": null,
+            "134604": null,
+            "139245": null,
+            "143887": null,
+            "148528": null,
+            "153170": null,
+            "157811": null,
+            "162453": null,
+            "167094": null,
+            "171736": null,
+            "176377": null,
+            "181019": null
+          },
+          "p95_jerk": {
+            "0": null,
+            "4642": null,
+            "9283": null,
+            "13925": null,
+            "18566": null,
+            "23208": null,
+            "27849": null,
+            "32491": null,
+            "37132": null,
+            "41774": null,
+            "46415": null,
+            "51057": null,
+            "55698": null,
+            "60340": null,
+            "64981": null,
+            "69623": null,
+            "74264": null,
+            "78906": null,
+            "83547": null,
+            "88189": null,
+            "92830": null,
+            "97472": null,
+            "102113": null,
+            "106755": null,
+            "111396": null,
+            "116038": null,
+            "120679": null,
+            "125321": null,
+            "129962": null,
+            "134604": null,
+            "139245": null,
+            "143887": null,
+            "148528": null,
+            "153170": null,
+            "157811": null,
+            "162453": null,
+            "167094": null,
+            "171736": null,
+            "176377": null,
+            "181019": null
+          },
+          "peak_velocity": {
+            "0": null,
+            "4642": null,
+            "9283": null,
+            "13925": null,
+            "18566": null,
+            "23208": null,
+            "27849": null,
+            "32491": null,
+            "37132": null,
+            "41774": null,
+            "46415": null,
+            "51057": null,
+            "55698": null,
+            "60340": null,
+            "64981": null,
+            "69623": null,
+            "74264": null,
+            "78906": null,
+            "83547": null,
+            "88189": null,
+            "92830": null,
+            "97472": null,
+            "102113": null,
+            "106755": null,
+            "111396": null,
+            "116038": null,
+            "120679": null,
+            "125321": null,
+            "129962": null,
+            "134604": null,
+            "139245": null,
+            "143887": null,
+            "148528": null,
+            "153170": null,
+            "157811": null,
+            "162453": null,
+            "167094": null,
+            "171736": null,
+            "176377": null,
+            "181019": null
+          },
+          "velocity_spike": {
+            "0": 0.5483947353211186,
+            "4642": 0.8064433314219716,
+            "9283": 0.6480676394703383,
+            "13925": 0.6772530925141486,
+            "18566": 0.5490775534794131,
+            "23208": 1.1008616556914042,
+            "27849": 1.2596756833224791,
+            "32491": 0.7790083335125279,
+            "37132": 0.5847581350955022,
+            "41774": 0.8186449907500228,
+            "46415": 0.6491503677722678,
+            "51057": 0.8600943087871507,
+            "55698": 0.331907906698524,
+            "60340": 0.7793910954628747,
+            "64981": 0.7082450504329467,
+            "69623": 0.6553588155759761,
+            "74264": 0.7611175637966971,
+            "78906": 1.218926575557858,
+            "83547": 0.7660242084458084,
+            "88189": 1.4032087772978628,
+            "92830": 1.1539237926145833,
+            "97472": 0.17135296770786443,
+            "102113": 0.9109073566417817,
+            "106755": 0.8707161331415931,
+            "111396": 0.6643766994205654,
+            "116038": 0.6788697020899255,
+            "120679": 0.8266716113237422,
+            "125321": 0.7280707824397037,
+            "129962": 0.46780551408302373,
+            "134604": 0.829183648387646,
+            "139245": 0.8230504994364962,
+            "143887": 0.7237941969544816,
+            "148528": 1.30854877228559,
+            "153170": 0.668843086922168,
+            "157811": 1.4207066958332832,
+            "162453": 0.7745639761788451,
+            "167094": 0.7692214676082025,
+            "171736": 0.349097597164601,
+            "176377": 0.9376343676727106,
+            "181019": 1.1955561537365136
+          },
+          "static_fraction": {
+            "0": 0.0,
+            "4642": 0.0,
+            "9283": 0.0,
+            "13925": 0.0,
+            "18566": 0.0,
+            "23208": 0.029411764705882353,
+            "27849": 0.03333333333333333,
+            "32491": 0.0,
+            "37132": 0.05454545454545454,
+            "41774": 0.0,
+            "46415": 0.0,
+            "51057": 0.0,
+            "55698": 0.0,
+            "60340": 0.0,
+            "64981": 0.0,
+            "69623": 0.0,
+            "74264": 0.0,
+            "78906": 0.022222222222222223,
+            "83547": 0.0,
+            "88189": 0.0,
+            "92830": 0.03225806451612903,
+            "97472": 0.09090909090909091,
+            "102113": 0.0,
+            "106755": 0.0,
+            "111396": 0.019230769230769232,
+            "116038": 0.0,
+            "120679": 0.0,
+            "125321": 0.0,
+            "129962": 0.0,
+            "134604": 0.0,
+            "139245": 0.0,
+            "143887": 0.0,
+            "148528": 0.03225806451612903,
+            "153170": 0.01639344262295082,
+            "157811": 0.0,
+            "162453": 0.034482758620689655,
+            "167094": 0.03225806451612903,
+            "171736": 0.0,
+            "176377": 0.08333333333333333,
+            "181019": 0.0
+          },
+          "end_pose_deviation": {
+            "0": null,
+            "4642": null,
+            "9283": null,
+            "13925": null,
+            "18566": null,
+            "23208": null,
+            "27849": null,
+            "32491": null,
+            "37132": null,
+            "41774": null,
+            "46415": null,
+            "51057": null,
+            "55698": null,
+            "60340": null,
+            "64981": null,
+            "69623": null,
+            "74264": null,
+            "78906": null,
+            "83547": null,
+            "88189": null,
+            "92830": null,
+            "97472": null,
+            "102113": null,
+            "106755": null,
+            "111396": null,
+            "116038": null,
+            "120679": null,
+            "125321": null,
+            "129962": null,
+            "134604": null,
+            "139245": null,
+            "143887": null,
+            "148528": null,
+            "153170": null,
+            "157811": null,
+            "162453": null,
+            "167094": null,
+            "171736": null,
+            "176377": null,
+            "181019": null
+          }
+        },
+        "flagged": {
+          "27849": [
+            "velocity_spike"
+          ],
+          "78906": [
+            "velocity_spike"
+          ],
+          "88189": [
+            "velocity_spike"
+          ],
+          "148528": [
+            "velocity_spike"
+          ],
+          "157811": [
+            "velocity_spike"
+          ]
+        }
+      },
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "episode 27849: IQR outlier on velocity_spike",
+          "episode_index": 27849,
+          "details": {
+            "metrics": [
+              "velocity_spike"
+            ],
+            "far_out": false
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 78906: IQR outlier on velocity_spike",
+          "episode_index": 78906,
+          "details": {
+            "metrics": [
+              "velocity_spike"
+            ],
+            "far_out": false
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 88189: IQR outlier on velocity_spike",
+          "episode_index": 88189,
+          "details": {
+            "metrics": [
+              "velocity_spike"
+            ],
+            "far_out": false
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 148528: IQR outlier on velocity_spike",
+          "episode_index": 148528,
+          "details": {
+            "metrics": [
+              "velocity_spike"
+            ],
+            "far_out": false
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 157811: IQR outlier on velocity_spike",
+          "episode_index": 157811,
+          "details": {
+            "metrics": [
+              "velocity_spike"
+            ],
+            "far_out": false
+          }
+        }
+      ],
+      "charge": 0
+    },
+    {
+      "id": "embedded-images",
+      "title": "Embedded images in the parquet shards",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "no image features declared",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "camera-coverage",
+      "title": "Per-episode camera coverage",
+      "verdict": "SKIP",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "episode videos only partially fetched - camera coverage needs a full video audit",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "episode-file-pointers",
+      "title": "Episode file pointers (v3 shard metadata)",
+      "verdict": "SKIP",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "v2.x layout: one parquet per episode, no shard pointers to check",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "video-file-pointers",
+      "title": "Video file pointers (metadata vs repo contents)",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "all 181020 metadata-referenced video files exist (the repo file listing)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "referenced": 181020,
+        "missing": 0
+      },
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "task-strings",
+      "title": "Task strings",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "40 episodes, 78647 tasks in meta/tasks; 0 finding(s)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "reward-done",
+      "title": "Reward / done fields",
+      "verdict": "SKIP",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "no reward/done fields (position-control datasets rarely have them)",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "visual-quality",
+      "title": "Visual quality (blur, lighting)",
+      "verdict": "PASS",
+      "weight": 6,
+      "weight_basis": "placeholder",
+      "summary": "2 episodes x 1 camera(s) sampled; median blur image 715",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "median_blur_per_camera": {
+          "image": 714.5506693648888
+        },
+        "median_p95_brightness_per_camera": {
+          "image": 239.0
+        },
+        "median_saturated_fraction_per_camera": {
+          "image": 0.0005208333333333333
+        }
+      },
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "deployment-readiness",
+      "title": "Deployment readiness (would this dataset serve a policy?)",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "no deployment blockers found",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "stats-f32-fingerprint",
+      "title": "Stats f32 accumulation fingerprint",
+      "verdict": "INFO",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "per-episode stats carry naive float32 accumulation (6 episode(s))",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "per-episode stats reproduce naive float32 accumulation bitwise (6 sampled episode(s), observation.state dims [0, 1], action dims [0, 1]): the converter's stats are accumulation-rounded, not data-exact; constant channels get a fabricated std and a DC-offset mean",
+          "episode_index": null,
+          "details": {
+            "episodes": {
+              "observation.state": [
+                41774,
+                88189,
+                181019
+              ],
+              "action": [
+                41774,
+                88189,
+                181019
+              ]
+            },
+            "dims": {
+              "observation.state": [
+                0,
+                1
+              ],
+              "action": [
+                0,
+                1
+              ]
+            }
+          }
+        }
+      ],
+      "charge": 0
+    }
+  ]
+}

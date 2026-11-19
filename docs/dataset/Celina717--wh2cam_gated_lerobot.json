@@ -5,7 +5,7 @@
   "frames": 3035,
   "fps": 10.0,
   "truncated": true,
-  "video_audited": 4,
+  "video_audited": 5,
   "score": 100,
   "score_model": "tiered-v2",
   "verdict": "INFO",
@@ -21,7 +21,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "timestamp-grid",
@@ -34,7 +34,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "dropped-frames",
@@ -54,7 +54,7 @@
           "details": {}
         }
       ],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "calibration-drift",
@@ -102,7 +102,7 @@
         "excluded_joints": {}
       },
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "idle-segments",
@@ -115,7 +115,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 6
+      "charge": 0
     },
     {
       "id": "stuck-actuator",
@@ -128,7 +128,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "action-saturation",
@@ -141,7 +141,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 6
+      "charge": 0
     },
     {
       "id": "nan-and-normalization",
@@ -154,7 +154,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "duplicate-and-leakage",
@@ -167,7 +167,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 2
+      "charge": 0
     },
     {
       "id": "outlier-episodes",
@@ -434,7 +434,7 @@
           }
         }
       ],
-      "charge": 3
+      "charge": 0
     },
     {
       "id": "embedded-images",
@@ -459,7 +459,7 @@
           }
         }
       ],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "camera-coverage",
@@ -472,7 +472,7 @@
       "skip_reason": "no video cameras declared",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "episode-file-pointers",
@@ -485,7 +485,20 @@
       "skip_reason": "v2.x layout: one parquet per episode, no shard pointers to check",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
+    },
+    {
+      "id": "video-file-pointers",
+      "title": "Video file pointers (metadata vs repo contents)",
+      "verdict": "SKIP",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "no video cameras declared",
+      "details": {},
+      "findings": [],
+      "charge": 0
     },
     {
       "id": "task-strings",
@@ -498,7 +511,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "reward-done",
@@ -511,7 +524,7 @@
       "skip_reason": "no reward/done fields (position-control datasets rarely have them)",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "visual-quality",
@@ -524,7 +537,7 @@
       "skip_reason": "pass --video to run (downloads MP4s; needs the video extra)",
       "details": {},
       "findings": [],
-      "charge": 6
+      "charge": 0
     },
     {
       "id": "deployment-readiness",
@@ -537,7 +550,56 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
+    },
+    {
+      "id": "stats-f32-fingerprint",
+      "title": "Stats f32 accumulation fingerprint",
+      "verdict": "INFO",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "per-episode stats carry naive float32 accumulation (10 episode(s))",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "per-episode stats reproduce naive float32 accumulation bitwise (10 sampled episode(s), observation.state dims [0, 1, 2], action dims [0, 1, 2]): the converter's stats are accumulation-rounded, not data-exact; constant channels get a fabricated std and a DC-offset mean",
+          "episode_index": null,
+          "details": {
+            "episodes": {
+              "observation.state": [
+                0,
+                116,
+                232,
+                348,
+                464
+              ],
+              "action": [
+                0,
+                116,
+                232,
+                348,
+                464
+              ]
+            },
+            "dims": {
+              "observation.state": [
+                0,
+                1,
+                2
+              ],
+              "action": [
+                0,
+                1,
+                2
+              ]
+            }
+          }
+        }
+      ],
+      "charge": 0
     }
   ]
 }
