@@ -72,3 +72,19 @@ def test_sampled_load_names_a_stored_range_far_beyond_the_sample(tmp_path):
     hint = [f for f in res.findings if "dominate this dim's normalization" in f.message]
     assert hint and all(f.severity == Severity.INFO for f in hint), [f.message for f in res.findings]
     assert json.dumps(hint[0].details)  # serializable
+
+
+def test_diagnosis_names_the_dominating_outliers_cause(tmp_path):
+    # the MCP layer must not explain it as a constant / near-zero-variance dim
+    from kinema.diagnose import diagnose
+    root = make_dataset(tmp_path / "d", episodes=24)
+
+    def glitch(s, a, ep):
+        s = s.copy()
+        s[np.flatnonzero(ep == 7)[:6], 2] = -132.0
+        return s, a
+    _rewrite_data(root, glitch)
+    out = diagnose(str(root), "pi0", "policy fails")
+    claim = [c["cause_id"] for c in out["causes"]
+             if any("inflate the std" in e["message"] for e in c["evidence"])]
+    assert claim == ["outlier-dominated-normalization"]
