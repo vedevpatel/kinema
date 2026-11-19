@@ -2,13 +2,13 @@
   "source": "physical-intelligence/aloha_pen_uncap_diverse",
   "format_version": "v2.0",
   "episodes": 1,
-  "frames": 100,
+  "frames": 300,
   "fps": 50.0,
   "truncated": true,
   "video_audited": 5,
-  "score": 44,
+  "score": 84,
   "score_model": "tiered-v2",
-  "verdict": "FAIL",
+  "verdict": "WARN",
   "checks": [
     {
       "id": "stats-drift",
@@ -23,28 +23,28 @@
       "findings": [
         {
           "severity": "INFO",
-          "message": "observation.state.std: the sampled data is off the stored stats by 107.5x on dim 4, but the sample spans only 0.5% of the stored [min, max] - episodes it did not load can explain the gap (load the full dataset to judge)",
+          "message": "observation.state.std: the sampled data is off the stored stats by 10.9x on dim 12, in the direction a 1-episode sample that missed part of the dataset's spread produces - not evidence the stored stats are wrong (load the full dataset to judge)",
           "episode_index": null,
           "details": {
             "feature": "observation.state",
             "stat": "std",
-            "dim": 4,
-            "error": 107.54579116341745,
+            "dim": 12,
+            "error": 10.853123962345348,
             "reference": "sampled",
-            "range_coverage": 0.005041998312923169
+            "sampling_explains": true
           }
         },
         {
           "severity": "INFO",
-          "message": "action.std: the sampled data is off the stored stats by 52.1x on dim 4, but the sample spans only 0.8% of the stored [min, max] - episodes it did not load can explain the gap (load the full dataset to judge)",
+          "message": "action.std: the sampled data is off the stored stats by 16.5x on dim 12, in the direction a 1-episode sample that missed part of the dataset's spread produces - not evidence the stored stats are wrong (load the full dataset to judge)",
           "episode_index": null,
           "details": {
             "feature": "action",
             "stat": "std",
-            "dim": 4,
-            "error": 52.08075081955304,
+            "dim": 12,
+            "error": 16.495218924041357,
             "reference": "sampled",
-            "range_coverage": 0.00829186525421741
+            "sampling_explains": true
           }
         },
         {
@@ -72,23 +72,14 @@
     {
       "id": "dropped-frames",
       "title": "Dropped / duplicated frames",
-      "verdict": "FAIL",
+      "verdict": "INFO",
       "weight": 8,
       "weight_basis": "placeholder",
-      "summary": "1 with metadata length mismatches",
+      "summary": "frame_index contiguous; episode lengths match the data",
       "skipped": false,
       "skip_reason": "",
       "details": {},
       "findings": [
-        {
-          "severity": "FAIL",
-          "message": "episode 8: metadata says 300 frames but the data holds 100 rows - episode metadata disagrees with the data",
-          "episode_index": 8,
-          "details": {
-            "meta_length": 300,
-            "rows": 100
-          }
-        },
         {
           "severity": "INFO",
           "message": "no per-episode video segments in the metadata (v2.x or no videos): video frame counts not cross-checked",
@@ -96,113 +87,122 @@
           "details": {}
         }
       ],
-      "charge": 25
+      "charge": 0
     },
     {
       "id": "calibration-drift",
       "title": "Calibration drift (action vs state on still frames)",
-      "verdict": "FAIL",
+      "verdict": "WARN",
       "weight": 10,
       "weight_basis": "measured",
-      "summary": "5 joint(s) miscalibrated; not compared: 3 different space",
+      "summary": "1 joint(s) miscalibrated; not compared: 2 different space",
       "skipped": false,
       "skip_reason": "",
       "details": {
         "per_joint": {
           "0": {
             "joint": 0,
-            "offset_fraction": -0.025735300933071786,
-            "scale_error": -0.07543162956016303,
-            "r2": 0.21921258480800698,
-            "line_vs_step": 0.5607715895690344,
-            "still_frames": 51
+            "offset_fraction": 0.007267021654441666,
+            "scale_error": 0.02650906736693279,
+            "r2": 0.13974716018199873,
+            "line_vs_step": 0.9193347535242775,
+            "still_frames": 167
           },
           "1": {
             "joint": 1,
-            "offset_fraction": 0.0009409840574615325,
-            "scale_error": -0.033649724566491,
-            "r2": 0.8163412676422778,
-            "line_vs_step": 1.269038546752651,
-            "still_frames": 43
+            "offset_fraction": -0.0041889518749651,
+            "scale_error": -0.02942331770975855,
+            "r2": 0.32891502586778,
+            "line_vs_step": 0.9980328445989879,
+            "still_frames": 132
           },
           "2": {
             "joint": 2,
-            "offset_fraction": -0.32156834486053026,
-            "scale_error": 0.026280529086233243,
-            "r2": 0.02428109446332616,
-            "line_vs_step": 0.9747907453966851,
-            "still_frames": 51
+            "offset_fraction": -0.07106620747987996,
+            "scale_error": -0.028740434225313655,
+            "r2": 0.06526141204951885,
+            "line_vs_step": 0.9493912186844946,
+            "still_frames": 184
           },
-          "5": {
-            "joint": 5,
-            "offset_fraction": 0.19473685568575588,
-            "scale_error": -0.15121950414603239,
-            "r2": 0.15920843462896583,
-            "line_vs_step": 0.8041647755953527,
-            "still_frames": 76
+          "3": {
+            "joint": 3,
+            "offset_fraction": -0.004374085019070486,
+            "scale_error": 0.0164718534681031,
+            "r2": 0.17664021562132848,
+            "line_vs_step": 0.8709021978350072,
+            "still_frames": 171
+          },
+          "4": {
+            "joint": 4,
+            "offset_fraction": -0.019976239967200948,
+            "scale_error": 0.03628433333032499,
+            "r2": 0.5390336526377179,
+            "line_vs_step": 0.8433446113394144,
+            "still_frames": 196
           },
           "6": {
             "joint": 6,
-            "offset_fraction": -0.33523750673622466,
-            "scale_error": 0.4775556948409437,
-            "r2": 0.6064572525978634,
-            "line_vs_step": 0.21925988967963966,
-            "still_frames": 46
+            "offset_fraction": -0.07718460857505113,
+            "scale_error": 0.06228279162023717,
+            "r2": 0.1060883414992635,
+            "line_vs_step": 0.3856502239993721,
+            "still_frames": 148
           },
           "7": {
             "joint": 7,
-            "offset_fraction": 0.01917562455623128,
-            "scale_error": -0.027140552263614948,
-            "r2": 0.1808209387395755,
-            "line_vs_step": 0.9684110243577877,
-            "still_frames": 45
+            "offset_fraction": -0.004905522809777385,
+            "scale_error": 0.03021426432256215,
+            "r2": 0.44347466472704733,
+            "line_vs_step": 0.7784285484426884,
+            "still_frames": 160
           },
           "8": {
             "joint": 8,
-            "offset_fraction": 0.006558030702592714,
-            "scale_error": -0.040060422036031045,
-            "r2": 0.859924177206683,
-            "line_vs_step": 0.5895392242757969,
-            "still_frames": 40
+            "offset_fraction": -0.03001484444465638,
+            "scale_error": -0.036730451977714504,
+            "r2": 0.0583376236887021,
+            "line_vs_step": 0.8963992420639874,
+            "still_frames": 136
           },
           "9": {
             "joint": 9,
-            "offset_fraction": -0.09310381613655125,
-            "scale_error": -0.03298348422569442,
-            "r2": 0.09280846403247034,
-            "line_vs_step": 0.6200850003947139,
-            "still_frames": 51
+            "offset_fraction": -0.02562202085747036,
+            "scale_error": -0.011840444630606925,
+            "r2": 0.03785505697151159,
+            "line_vs_step": 0.8606049328333623,
+            "still_frames": 183
           },
           "10": {
             "joint": 10,
-            "offset_fraction": 0.0058041568029207815,
-            "scale_error": -0.018712032779208104,
-            "r2": 0.12955858538554998,
-            "line_vs_step": 0.828207459940406,
-            "still_frames": 49
+            "offset_fraction": 0.002441651404599572,
+            "scale_error": -0.0036086208803634084,
+            "r2": 0.0225979003860991,
+            "line_vs_step": 0.907444986491969,
+            "still_frames": 146
           },
           "11": {
             "joint": 11,
-            "offset_fraction": 0.0027912730942973403,
-            "scale_error": 0.008600743240309615,
-            "r2": 0.06696560155189168,
-            "line_vs_step": 0.7564830648342075,
-            "still_frames": 40
+            "offset_fraction": -0.0071704652601318,
+            "scale_error": -0.020020087790568186,
+            "r2": 0.16472954279577667,
+            "line_vs_step": 0.843883178723095,
+            "still_frames": 162
           },
           "13": {
             "joint": 13,
-            "offset_fraction": -0.34506208824146284,
-            "scale_error": 0.31477588259620304,
-            "r2": 0.5537091011728129,
-            "line_vs_step": 0.23251220897676447,
-            "still_frames": 56
+            "offset_fraction": -0.16691598142404457,
+            "scale_error": 0.3764892376620395,
+            "r2": 0.34772334293874374,
+            "line_vs_step": 0.08460831986238299,
+            "still_frames": 165
           }
         },
         "compared_joints": [
           0,
           1,
           2,
-          5,
+          3,
+          4,
           6,
           7,
           8,
@@ -214,122 +214,55 @@
         "compared_grippers": [],
         "compared_deltas": [],
         "excluded_joints": {
-          "3": "different space",
-          "4": "different space",
+          "5": "different space",
           "12": "different space"
         }
       },
       "findings": [
         {
-          "severity": "INFO",
-          "message": "joint 0: still-frame offset -2.6% of range varies with position but not along a line (a step fits 1.8x as well) - backlash, load, contact or a joint limit rather than calibration",
-          "episode_index": null,
-          "details": {
-            "joint": 0,
-            "offset_fraction": -0.025735300933071786,
-            "scale_error": -0.07543162956016303,
-            "r2": 0.21921258480800698,
-            "line_vs_step": 0.5607715895690344,
-            "still_frames": 51,
-            "kind": "irregular"
-          }
-        },
-        {
-          "severity": "FAIL",
-          "message": "joint 2: commanded and measured position disagree by -32.2% of its range on still frames, the same across its range - leader/follower calibration drift; the policy learns a shifted target",
+          "severity": "WARN",
+          "message": "joint 2: commanded and measured position disagree by -7.1% of its range on still frames, the same across its range - leader/follower calibration drift; the policy learns a shifted target",
           "episode_index": null,
           "details": {
             "joint": 2,
-            "offset_fraction": -0.32156834486053026,
-            "scale_error": 0.026280529086233243,
-            "r2": 0.02428109446332616,
-            "line_vs_step": 0.9747907453966851,
-            "still_frames": 51,
-            "kind": "offset"
-          }
-        },
-        {
-          "severity": "FAIL",
-          "message": "joint 5: commanded and measured position disagree by +19.5% of its range on still frames, the same across its range - leader/follower calibration drift; the policy learns a shifted target",
-          "episode_index": null,
-          "details": {
-            "joint": 5,
-            "offset_fraction": 0.19473685568575588,
-            "scale_error": -0.15121950414603239,
-            "r2": 0.15920843462896583,
-            "line_vs_step": 0.8041647755953527,
-            "still_frames": 76,
+            "offset_fraction": -0.07106620747987996,
+            "scale_error": -0.028740434225313655,
+            "r2": 0.06526141204951885,
+            "line_vs_step": 0.9493912186844946,
+            "still_frames": 184,
             "kind": "offset"
           }
         },
         {
           "severity": "INFO",
-          "message": "joint 6: still-frame offset -33.5% of range varies with position but not along a line (a step fits 4.6x as well) - backlash, load, contact or a joint limit rather than calibration [dim looks like an unnamed gripper or on/off command: not gated]",
+          "message": "joint 6: commanded and measured position disagree by -7.7% of its range on still frames, the same across its range - leader/follower calibration drift; the policy learns a shifted target [dim looks like an unnamed gripper or on/off command: not gated]",
           "episode_index": null,
           "details": {
             "joint": 6,
-            "offset_fraction": -0.33523750673622466,
-            "scale_error": 0.4775556948409437,
-            "r2": 0.6064572525978634,
-            "line_vs_step": 0.21925988967963966,
-            "still_frames": 46,
+            "offset_fraction": -0.07718460857505113,
+            "scale_error": 0.06228279162023717,
+            "r2": 0.1060883414992635,
+            "line_vs_step": 0.3856502239993721,
+            "still_frames": 148,
+            "kind": "offset"
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "joint 13: still-frame offset -16.7% of range varies with position but not along a line (a step fits 11.8x as well) - backlash, load, contact or a joint limit rather than calibration",
+          "episode_index": null,
+          "details": {
+            "joint": 13,
+            "offset_fraction": -0.16691598142404457,
+            "scale_error": 0.3764892376620395,
+            "r2": 0.34772334293874374,
+            "line_vs_step": 0.08460831986238299,
+            "still_frames": 165,
             "kind": "irregular"
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "joint 9: commanded and measured position disagree by -9.3% of its range on still frames, the same across its range - leader/follower calibration drift; the policy learns a shifted target",
-          "episode_index": null,
-          "details": {
-            "joint": 9,
-            "offset_fraction": -0.09310381613655125,
-            "scale_error": -0.03298348422569442,
-            "r2": 0.09280846403247034,
-            "line_vs_step": 0.6200850003947139,
-            "still_frames": 51,
-            "kind": "offset"
-          }
-        },
-        {
-          "severity": "INFO",
-          "message": "joint 13: commanded and measured position disagree by -34.5% of its range on still frames, the same across its range - leader/follower calibration drift; the policy learns a shifted target [dim looks like an unnamed gripper or on/off command: not gated]",
-          "episode_index": null,
-          "details": {
-            "joint": 13,
-            "offset_fraction": -0.34506208824146284,
-            "scale_error": 0.31477588259620304,
-            "r2": 0.5537091011728129,
-            "line_vs_step": 0.23251220897676447,
-            "still_frames": 56,
-            "kind": "offset"
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "gripper 6: even at its free (low) end the measured position sits -49.1% of its range off the command - gripper calibration drift [dim inferred as an unnamed gripper]",
-          "episode_index": null,
-          "details": {
-            "joint": 6,
-            "free_end": "low",
-            "offset_fraction": -0.4914100614265289,
-            "still_frames": 30,
-            "kind": "gripper"
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "gripper 13: even at its free (low) end the measured position sits -50.0% of its range off the command - gripper calibration drift [dim inferred as an unnamed gripper]",
-          "episode_index": null,
-          "details": {
-            "joint": 13,
-            "free_end": "low",
-            "offset_fraction": -0.5003471259218277,
-            "still_frames": 33,
-            "kind": "gripper"
           }
         }
       ],
-      "charge": 25
+      "charge": 10
     },
     {
       "id": "idle-segments",
@@ -363,88 +296,78 @@
       "verdict": "WARN",
       "weight": 6,
       "weight_basis": "placeholder",
-      "summary": "6 dim(s) saturated (+2 informational)",
+      "summary": "7 dim(s) saturated",
       "skipped": false,
       "skip_reason": "",
       "details": {},
       "findings": [
         {
           "severity": "WARN",
-          "message": "action dim 0: 36.4% of commands during motion are pinned at exactly its min (-0.0966408) - clipped commands the policy will imitate",
+          "message": "action dim 0: 12.0% of commands during motion are pinned at exactly its min (-0.0966408) - clipped commands the policy will imitate",
           "episode_index": null,
           "details": {
             "dim": 0,
-            "saturated_fraction": 0.36363636363636365,
+            "saturated_fraction": 0.12040133779264214,
             "side": "min"
           }
         },
         {
           "severity": "WARN",
-          "message": "action dim 1: 38.4% of commands during motion are pinned at exactly its max (-0.434117) - clipped commands the policy will imitate",
+          "message": "action dim 1: 8.7% of commands during motion are pinned at exactly its max (-0.185612) - clipped commands the policy will imitate",
           "episode_index": null,
           "details": {
             "dim": 1,
-            "saturated_fraction": 0.3838383838383838,
-            "side": "max"
-          }
-        },
-        {
-          "severity": "INFO",
-          "message": "action dim 6: 14.1% of commands during motion are pinned at exactly its max (0.401782) - clipped commands the policy will imitate [dim looks like an unnamed gripper, so not gated]",
-          "episode_index": null,
-          "details": {
-            "dim": 6,
-            "saturated_fraction": 0.1414141414141414,
+            "saturated_fraction": 0.08695652173913043,
             "side": "max"
           }
         },
         {
           "severity": "WARN",
-          "message": "action dim 9: 7.1% of commands during motion are pinned at exactly its min (0.938796) - clipped commands the policy will imitate",
+          "message": "action dim 3: 16.7% of commands during motion are pinned at exactly its max (0.0107379) - clipped commands the policy will imitate",
+          "episode_index": null,
+          "details": {
+            "dim": 3,
+            "saturated_fraction": 0.16722408026755853,
+            "side": "max"
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "action dim 7: 15.1% of commands during motion are pinned at exactly its min (-0.078233) - clipped commands the policy will imitate",
+          "episode_index": null,
+          "details": {
+            "dim": 7,
+            "saturated_fraction": 0.1505016722408027,
+            "side": "min"
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "action dim 9: 9.0% of commands during motion are pinned at exactly its min (0.569107) - clipped commands the policy will imitate",
           "episode_index": null,
           "details": {
             "dim": 9,
-            "saturated_fraction": 0.0707070707070707,
+            "saturated_fraction": 0.0903010033444816,
             "side": "min"
           }
         },
         {
           "severity": "WARN",
-          "message": "action dim 10: 6.1% of commands during motion are pinned at exactly its min (-0.00153398) - clipped commands the policy will imitate",
+          "message": "action dim 10: 17.7% of commands during motion are pinned at exactly its min (-0.16567) - clipped commands the policy will imitate",
           "episode_index": null,
           "details": {
             "dim": 10,
-            "saturated_fraction": 0.06060606060606061,
+            "saturated_fraction": 0.17725752508361203,
             "side": "min"
           }
         },
         {
           "severity": "WARN",
-          "message": "action dim 11: 10.1% of commands during motion are pinned at exactly its max (0.0260777) - clipped commands the policy will imitate",
+          "message": "action dim 11: 10.0% of commands during motion are pinned at exactly its max (0.161068) - clipped commands the policy will imitate",
           "episode_index": null,
           "details": {
             "dim": 11,
-            "saturated_fraction": 0.10101010101010101,
-            "side": "max"
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "action dim 12: 9.1% of commands during motion are pinned at exactly its max (0.0230097) - clipped commands the policy will imitate",
-          "episode_index": null,
-          "details": {
-            "dim": 12,
-            "saturated_fraction": 0.09090909090909091,
-            "side": "max"
-          }
-        },
-        {
-          "severity": "INFO",
-          "message": "action dim 13: 14.1% of commands during motion are pinned at exactly its max (0.838515) - clipped commands the policy will imitate [dim looks like an unnamed gripper, so not gated]",
-          "episode_index": null,
-          "details": {
-            "dim": 13,
-            "saturated_fraction": 0.1414141414141414,
+            "saturated_fraction": 0.10033444816053512,
             "side": "max"
           }
         }
