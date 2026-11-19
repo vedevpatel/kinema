@@ -11,9 +11,7 @@ leader and follower arm, episodes that are mostly the robot sitting still, times
 the sampling grid. kinema finds those before you burn the GPU hours.
 
 ```bash
-pip install "git+https://github.com/vedevpatel/kinema"   # this source version (see the note below)
-# or from a checkout: git clone https://github.com/vedevpatel/kinema && pip install -e kinema
-# `pip install kinema` gets PyPI 0.1.0, which predates several checks below
+pip install kinema                         # or latest main: pip install "git+https://github.com/vedevpatel/kinema"
 
 kinema check lerobot/pusht                 # straight off the Hugging Face Hub
 kinema check ./my-dataset --policy pi0     # local dataset, deployment checks for pi0
@@ -21,8 +19,6 @@ kinema check hf://owner/name --json out.json --markdown report.md
 kinema check owner/name@<commit> --video  # pinned revision; + blur/exposure from the MP4s
 kinema check lerobot/droid_1.0.1 --max-episodes 50   # spread sample; downloads only the shards it reads
 ```
-
-The source checkout is `0.1.1.dev0`. Published PyPI `0.1.0` predates some checks and RLDS work described here; use the Git install above for this source version. No new package release is implied.
 
 No `lerobot` dependency. Installs in seconds: `pyarrow`, `numpy`, `huggingface-hub`, `rich`.
 Works on LeRobot **v3.0 and v2.1** layouts, local directories, `.zip`s, and Hub repo ids.
@@ -135,16 +131,15 @@ layer on top of the same checks. Point your MCP client at it:
   "mcpServers": {
     "kinema": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/vedevpatel/kinema", "kinema", "mcp"]
+      "args": ["kinema", "mcp"]
     }
   }
 }
 ```
 
-(The plain `uvx kinema mcp` form runs the published PyPI 0.1.0, which predates
-`similar_datasets` and several checks; use the Git form above for this version. A
-`pip install -e .` checkout works too:
-`"command": "kinema", "args": ["mcp"]`.)
+(For unreleased changes on main, use
+`"args": ["--from", "git+https://github.com/vedevpatel/kinema", "kinema", "mcp"]`. A
+`pip install -e .` checkout works too: `"command": "kinema", "args": ["mcp"]`.)
 
 Four tools:
 
