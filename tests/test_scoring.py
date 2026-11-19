@@ -1,4 +1,4 @@
-"""Health-score model tiered-v2: pins the tier table, the per-check weight
+"""Health-score model tiered-v3: pins the tier table, the per-check weight
 table with its basis labels, the per-check (never per-finding) rule, the
 evidence-gated correlated-check waiver, and the recompute-from-stored path
 the leaderboard migrates through."""
@@ -53,21 +53,21 @@ TIERED_V1 = {
     "stuck-actuator": (10, "measured"),
     "idle-segments": (6, "measured"),
     "duplicate-and-leakage": (2, "measured"),
-    "stats-drift": (10, "placeholder"),
+    "stats-drift": (6, "measured"),
     "nan-and-normalization": (10, "placeholder"),
     "deployment-readiness": (10, "placeholder"),
     "timestamp-grid": (10, "placeholder"),
-    "dropped-frames": (8, "placeholder"),
-    "action-saturation": (6, "placeholder"),
+    "dropped-frames": (2, "measured"),
+    "action-saturation": (6, "measured"),
     "visual-quality": (6, "placeholder"),
-    "outlier-episodes": (3, "placeholder"),
+    "outlier-episodes": (6, "measured"),
     "task-strings": (8, "placeholder"),
     "reward-done": (8, "placeholder"),
 }
 
 
 def test_model_label():
-    assert SCORE_MODEL == "tiered-v2"
+    assert SCORE_MODEL == "tiered-v3"
 
 
 def test_tier_table_is_pinned():
@@ -96,10 +96,12 @@ def test_weight_table_and_basis_are_pinned():
 
 def test_only_measured_weights_moved():
     moved = {cid for cid, w in LEGACY_V0.items() if warn_weight(cid)[0] != w}
-    assert moved == {"calibration-drift", "stuck-actuator", "duplicate-and-leakage"}
+    assert moved == {"calibration-drift", "stuck-actuator", "duplicate-and-leakage",
+                     "stats-drift", "dropped-frames", "outlier-episodes"}
     measured = {c.id for c in ALL_CHECKS if warn_weight(c.id)[1] == "measured"}
-    # idle-segments is measured but its tier-B weight equals its legacy 6
-    assert measured == moved | {"idle-segments"}
+    # idle-segments and action-saturation are measured but their tier-B
+    # weight (saturation capped from A) equals their legacy 6
+    assert measured == moved | {"idle-segments", "action-saturation"}
 
 
 def test_fail_cost_and_floor():
@@ -127,12 +129,12 @@ def test_scoring_is_per_check_not_per_finding():
 
 def test_report_json_labels_model_and_weights():
     d = report_to_dict(_report("duplicate-and-leakage", 3))
-    assert d["score_model"] == "tiered-v2"
+    assert d["score_model"] == "tiered-v3"
     assert d["score"] == 98
     (c,) = d["checks"]
     assert (c["weight"], c["weight_basis"], c["charge"]) == (2, "measured", 2)
     assert "waived_by" not in c and "waiver_evidence" not in c
-    assert "tiered-v2" in render_markdown(_report("idle-segments", 1))
+    assert "tiered-v3" in render_markdown(_report("idle-segments", 1))
 
 
 def _legacy_dict(verdicts: dict[str, str], score: int) -> dict:
@@ -156,9 +158,9 @@ def test_rescore_uses_stored_verdicts_and_is_idempotent():
                       "stats-drift": "PASS", "visual-quality": "SKIP"}, score=90)
     rescore_report_dict(d)
     assert d["score"] == 100 - 6 - 2
-    assert d["score_model"] == "tiered-v2"
+    assert d["score_model"] == "tiered-v3"
     assert [(c["weight"], c["weight_basis"]) for c in d["checks"]] == [
-        (6, "measured"), (2, "measured"), (10, "placeholder"), (6, "placeholder"),
+        (6, "measured"), (2, "measured"), (6, "measured"), (6, "placeholder"),
     ]
     again = rescore_report_dict(copy.deepcopy(d))
     assert again == d
@@ -194,18 +196,18 @@ def test_leaderboard_rescore_site(tmp_path):
 
     board = json.loads((out / "data.json").read_text())
     assert board["generated"] == "2026-11-14 00:01 UTC"  # nothing was re-audited
-    assert board["score_model"] == "tiered-v2"
+    assert board["score_model"] == "tiered-v3"
     by_id = {e["id"]: e for e in board["datasets"]}
     assert by_id["org/ds"]["report"]["score"] == 90
     assert by_id["org/dup"]["report"]["score"] == 98
-    assert all(e["report"]["score_model"] == "tiered-v2" for e in by_id.values() if "report" in e)
+    assert all(e["report"]["score_model"] == "tiered-v3" for e in by_id.values() if "report" in e)
     assert "report" not in by_id["org/gated"]
 
     page = (out / "dataset" / "org--ds.html").read_text()
-    assert "Health score: 90/100" in page and stamp in page and "tiered-v2" in page
+    assert "Health score: 90/100" in page and stamp in page and "tiered-v3" in page
     assert json.loads((out / "dataset" / "org--dup.json").read_text())["score"] == 98
     index = (out / "index.html").read_text()
-    assert "tiered-v2" in index and "legacy-v0" not in index
+    assert "tiered-v3" in index and "legacy-v0" not in index
 
 
 def test_index_labels_unrescored_legacy_rows():
@@ -399,7 +401,7 @@ def test_check_order_invariance():
         shuffled = results[:]
         rng.shuffle(shuffled)
         rep = _pair_report(*shuffled)
-        assert rep.score == base.score == 100 - 10 - 25 - 3
+        assert rep.score == base.score == 100 - 10 - 25 - 6  # outlier-episodes: tier B, capped
         assert rep.charges() == base.charges()
         d = report_to_dict(rep)
         assert {c["id"]: c["charge"] for c in d["checks"]} == {
@@ -421,7 +423,7 @@ def _stored_pair(idle_eps, stuck_eps) -> dict:
 def test_rescore_sets_charge_fields_and_is_idempotent():
     d = _stored_pair([8], [8, 23])
     rescore_report_dict(d)
-    assert d["score"] == 90 and d["score_model"] == "tiered-v2"
+    assert d["score"] == 90 and d["score_model"] == "tiered-v3"
     by_id = {c["id"]: c for c in d["checks"]}
     assert by_id[STUCK]["weight"] == 10
     assert by_id[STUCK]["charge"] == 0
@@ -429,7 +431,7 @@ def test_rescore_sets_charge_fields_and_is_idempotent():
     assert by_id[STUCK]["waiver_evidence"] == {"shared_episodes": 1, "overlap": 0.5}
     assert by_id[IDLE]["charge"] == 10 and "waived_by" not in by_id[IDLE]
     # charge is the actual deduction: a PASS costs 0 (its WARN weight stays in "weight")
-    assert by_id["stats-drift"]["charge"] == 0 and by_id["stats-drift"]["weight"] == 10
+    assert by_id["stats-drift"]["charge"] == 0 and by_id["stats-drift"]["weight"] == 6
     assert "waived_by" not in by_id["stats-drift"]
     again = rescore_report_dict(copy.deepcopy(d))
     assert again == d
