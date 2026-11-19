@@ -147,7 +147,9 @@ Four tools:
   ranks the data causes that explain a failed run, each with check evidence, a
   docs citation and a next step. Every check runs whatever the symptom says;
   the symptom only decides which causes rank first. Policies come from `policies.json`;
-  cause clusters include normalization, idle/static segments and metadata integrity.
+  cause clusters cover normalization, idle/static segments, metadata integrity,
+  calibration and clipping, video and cameras, conditioning (language, timestamps)
+  and data quality (duplicates, leakage, outliers, unreadable files, reward/done).
   RLDS keywords are recognized, but RLDS execution is a separate board lane, not
   the LeRobot MCP loader. Training with a custom
   chunk size or mean/std normalization? Pass `policy_overrides`

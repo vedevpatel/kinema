@@ -88,6 +88,104 @@
         "rlds-step-structure"
       ],
       "surface": "leaderboard RLDS lane only; not executed by LeRobot MCP checks"
+    },
+    "calibration": {
+      "keywords": [
+        "calibrat",
+        "offset",
+        "misalign",
+        "leader arm",
+        "follower arm",
+        "leader/follower",
+        "wrong position",
+        "overshoot",
+        "undershoot",
+        "clipp",
+        "saturat",
+        "joint limit",
+        "misses the target",
+        "reaches past"
+      ],
+      "checks": [
+        "calibration-drift",
+        "action-saturation"
+      ]
+    },
+    "video": {
+      "keywords": [
+        "blur",
+        "dark",
+        "exposure",
+        "overexpos",
+        "underexpos",
+        "black frames",
+        "video",
+        "mp4",
+        "decode",
+        "image quality",
+        "camera feed",
+        "missing camera",
+        "no camera",
+        "camera dropped",
+        "pixels"
+      ],
+      "checks": [
+        "camera-coverage",
+        "visual-quality",
+        "video-file-pointers",
+        "deployment-readiness"
+      ]
+    },
+    "conditioning": {
+      "keywords": [
+        "language",
+        "instruction",
+        "prompt",
+        "task string",
+        "ignores the task",
+        "wrong task",
+        "fps",
+        "frame rate",
+        "control frequency",
+        "control loop",
+        "timestamp",
+        "delta_timestamps",
+        "too fast",
+        "too slow",
+        "out of sync"
+      ],
+      "checks": [
+        "deployment-readiness",
+        "task-strings",
+        "timestamp-grid"
+      ]
+    },
+    "data-quality": {
+      "keywords": [
+        "overfit",
+        "eval looks",
+        "validation",
+        "leak",
+        "duplicate",
+        "jerky",
+        "erratic",
+        "spikes",
+        "spiky",
+        "glitch",
+        "outlier",
+        "reward",
+        "never terminates",
+        "done flag",
+        "dropped frames",
+        "missing frames",
+        "corrupt"
+      ],
+      "checks": [
+        "duplicate-and-leakage",
+        "outlier-episodes",
+        "dropped-frames",
+        "reward-done"
+      ]
     }
   },
   "causes": [
@@ -279,6 +377,326 @@
       "explanation": "The per-episode stats reproduce a naive float32 accumulation bitwise while disagreeing with the data in float64: the converter computed stats in f32 and its rounding error is stored as if it were data statistics. On constant channels this fabricates a nonzero std and DC-offsets the mean, so a pipeline normalizing from these stats feeds {policy} the converter's rounding error. The data itself is fine.",
       "docs_section": "stats-f32-fingerprint",
       "next_step": "Recompute the stats from the data in float64 (LeRobot aggregation or the converter's stats step with an f64 accumulator) and retrain; the episodes themselves need no repair."
+    },
+    {
+      "id": "calibration-offset",
+      "cluster": "calibration",
+      "title": "Leader/follower calibration offset",
+      "indicates": {
+        "check_id": "calibration-drift",
+        "min_severity": "WARN",
+        "message_contains": "leader/follower calibration drift"
+      },
+      "confidence": {
+        "FAIL": "high",
+        "WARN": "medium"
+      },
+      "explanation": "On still frames the commanded and measured positions of a joint disagree by a constant offset: the leader and follower arms were calibrated differently. {policy} learns to command a target shifted by that offset; any change in calibration between recording and deployment (a recalibrated arm, a different follower) makes it reach the wrong place.",
+      "docs_section": "calibration-drift",
+      "next_step": "Recalibrate leader and follower to the same reference and re-record, or correct the offset in the actions (the finding gives it per joint) and retrain; deploy with the same calibration the data was recorded with."
+    },
+    {
+      "id": "calibration-scale",
+      "cluster": "calibration",
+      "title": "Command and measurement drift apart across the range (scale error)",
+      "indicates": {
+        "check_id": "calibration-drift",
+        "min_severity": "WARN",
+        "message_contains": "a scale"
+      },
+      "confidence": {
+        "FAIL": "high",
+        "WARN": "medium"
+      },
+      "explanation": "The gap between command and measurement grows linearly across the joint's range - a gear-ratio or unit error between leader and follower, not a fixed offset. {policy} learns a distorted mapping that is right near one end of the range and wrong at the other.",
+      "docs_section": "calibration-drift",
+      "next_step": "Find the unit or gear-ratio mismatch in the recording or conversion (the finding gives the per-range slope), fix the scale in the actions, and retrain."
+    },
+    {
+      "id": "gripper-calibration",
+      "cluster": "calibration",
+      "title": "Gripper calibration drift at its free end",
+      "indicates": {
+        "check_id": "calibration-drift",
+        "min_severity": "WARN",
+        "message_contains": "even at its free"
+      },
+      "confidence": {
+        "FAIL": "high",
+        "WARN": "medium"
+      },
+      "explanation": "Even at its free end, where nothing blocks it, the gripper's measured position sits off its command: the gripper's calibration differs between leader and follower. Grasps learned from this data close too early or too late.",
+      "docs_section": "calibration-drift",
+      "next_step": "Recalibrate the gripper on both arms and re-record, or correct the gripper offset in the actions and retrain."
+    },
+    {
+      "id": "clipped-commands",
+      "cluster": "calibration",
+      "title": "Commands clipped at a joint limit",
+      "indicates": {
+        "check_id": "action-saturation",
+        "min_severity": "WARN",
+        "message_contains": "clipped"
+      },
+      "confidence": {
+        "FAIL": "high",
+        "WARN": "medium"
+      },
+      "explanation": "A share of commands during motion sit exactly at a joint's limit value - the teleop or converter clipped them. {policy} imitates the clipped trajectory: it learns to push into the limit instead of the motion the operator intended.",
+      "docs_section": "action-saturation",
+      "next_step": "Check the joint limits in the teleop/recording config and the converter; re-record or drop the most-clipped episodes, and retrain."
+    },
+    {
+      "id": "camera-missing-for-episodes",
+      "cluster": "video",
+      "title": "A camera has no video for some episodes",
+      "indicates": {
+        "check_id": "camera-coverage",
+        "min_severity": "WARN",
+        "message_contains": "no video for"
+      },
+      "confidence": {
+        "FAIL": "high",
+        "WARN": "medium"
+      },
+      "explanation": "Some episodes have no video for a declared camera. {policy} training either fails on those episodes or trains them with the camera silently missing, so the vision encoder sees a modality that comes and goes.",
+      "docs_section": "camera-coverage",
+      "next_step": "Restore the missing videos, or exclude the episodes the finding lists from any training that reads that camera."
+    },
+    {
+      "id": "low-visual-quality",
+      "cluster": "video",
+      "title": "Blurry, dark or overexposed camera frames",
+      "indicates": {
+        "check_id": "visual-quality",
+        "min_severity": "WARN"
+      },
+      "confidence": {
+        "FAIL": "high",
+        "WARN": "medium"
+      },
+      "explanation": "A camera's sampled frames are blurry, underexposed or clipped bright in a share of episodes. Low-quality frames measurably hurt training (HF's GIGO study: 20% low-quality data raised training loss ~30%), and a policy trained on them has less visual signal to act on.",
+      "docs_section": "visual-quality",
+      "next_step": "Look at the episodes the finding names; fix focus/exposure and re-record, or drop the worst episodes and retrain."
+    },
+    {
+      "id": "policy-needs-camera",
+      "cluster": "video",
+      "title": "The policy needs camera input this dataset does not have",
+      "indicates": {
+        "check_id": "deployment-readiness",
+        "min_severity": "WARN",
+        "message_contains": "is trained with camera input"
+      },
+      "confidence": {
+        "FAIL": "high",
+        "WARN": "medium"
+      },
+      "explanation": "{policy} is a vision policy but the dataset declares no image or video features: it cannot be trained as configured, or trains blind.",
+      "docs_section": "deployment-readiness",
+      "next_step": "Use a state-only policy for this dataset, or add the camera streams to the recording."
+    },
+    {
+      "id": "policy-needs-language",
+      "cluster": "conditioning",
+      "title": "The policy conditions on language but no episode has a task string",
+      "indicates": {
+        "check_id": "deployment-readiness",
+        "min_severity": "WARN",
+        "message_contains": "conditions on language"
+      },
+      "confidence": {
+        "FAIL": "high",
+        "WARN": "medium"
+      },
+      "explanation": "{policy} conditions on a language instruction, but no episode declares one - training teaches a task-agnostic policy that ignores whatever instruction you give it at inference.",
+      "docs_section": "deployment-readiness",
+      "next_step": "Add task strings to the episodes (meta/tasks and each episode's tasks) and retrain."
+    },
+    {
+      "id": "empty-task-strings",
+      "cluster": "conditioning",
+      "title": "Episodes with empty task strings",
+      "indicates": {
+        "check_id": "task-strings",
+        "min_severity": "WARN",
+        "message_contains": "empty task string"
+      },
+      "confidence": {
+        "FAIL": "high",
+        "WARN": "medium"
+      },
+      "explanation": "A share of episodes carry an empty task string: language-conditioned training learns that '' is a valid instruction for those demonstrations.",
+      "docs_section": "task-strings",
+      "next_step": "Fill in the task strings for the episodes the finding lists, or exclude them from language-conditioned training."
+    },
+    {
+      "id": "dangling-task-index",
+      "cluster": "conditioning",
+      "title": "Frames point at task indices the task table does not define",
+      "indicates": {
+        "check_id": "task-strings",
+        "min_severity": "WARN",
+        "message_contains": "no entry in meta/tasks"
+      },
+      "confidence": {
+        "FAIL": "high",
+        "WARN": "medium"
+      },
+      "explanation": "Frames reference task_index values with no entry in meta/tasks: the instruction for those frames is unrecoverable, and loaders fail or substitute nothing.",
+      "docs_section": "task-strings",
+      "next_step": "Rebuild meta/tasks from the source recordings (or fix the converter that renumbered tasks) so every task_index resolves."
+    },
+    {
+      "id": "timestamp-grid-broken",
+      "cluster": "conditioning",
+      "title": "Timestamps off the sampling grid or non-monotonic",
+      "indicates": {
+        "check_id": "timestamp-grid",
+        "min_severity": "WARN"
+      },
+      "confidence": {
+        "FAIL": "high",
+        "WARN": "medium"
+      },
+      "explanation": "Frames are not evenly spaced at the declared fps, or time runs backwards. delta_timestamps windows and video-frame lookup then sample the wrong frames: {policy} trains on misaligned observation/action windows.",
+      "docs_section": "timestamp-grid",
+      "next_step": "Fix the timestamps (or the declared fps) in the conversion, or drop the episodes the finding names, and retrain."
+    },
+    {
+      "id": "duplicate-episodes",
+      "cluster": "data-quality",
+      "title": "Exact duplicate episodes",
+      "indicates": {
+        "check_id": "duplicate-and-leakage",
+        "min_severity": "WARN",
+        "message_contains": "exact duplicates"
+      },
+      "confidence": {
+        "FAIL": "high",
+        "WARN": "medium"
+      },
+      "explanation": "Episodes with identical action trajectories: they add no diversity, over-weight those demonstrations, and inflate any metric computed across them.",
+      "docs_section": "duplicate-and-leakage",
+      "next_step": "Drop the duplicates the finding lists (keep one per group) and retrain."
+    },
+    {
+      "id": "train-eval-leakage",
+      "cluster": "data-quality",
+      "title": "Duplicate episodes span the declared train/eval splits",
+      "indicates": {
+        "check_id": "duplicate-and-leakage",
+        "min_severity": "WARN",
+        "message_contains": "would be measured on training data"
+      },
+      "confidence": {
+        "FAIL": "high",
+        "WARN": "medium"
+      },
+      "explanation": "The same (or nearly the same) episodes appear in more than one declared split: evaluation is measured on training data, so a good eval score says nothing about generalization.",
+      "docs_section": "duplicate-and-leakage",
+      "next_step": "Move the leaked pairs into one split (or drop them) and re-evaluate before trusting the numbers."
+    },
+    {
+      "id": "copied-segments",
+      "cluster": "data-quality",
+      "title": "Episodes share identical stretches of motion",
+      "indicates": {
+        "check_id": "duplicate-and-leakage",
+        "min_severity": "WARN",
+        "message_contains": "add no diversity"
+      },
+      "confidence": {
+        "FAIL": "high",
+        "WARN": "medium"
+      },
+      "explanation": "Pairs of episodes share identical multi-frame stretches of motion - a splice, a botched merge, or a scripted generator replaying a primitive. Those segments add no diversity and over-weight one motion.",
+      "docs_section": "duplicate-and-leakage",
+      "next_step": "Inspect the pairs the finding lists; drop or re-record copied segments, or accept them knowingly for scripted data."
+    },
+    {
+      "id": "outlier-episodes",
+      "cluster": "data-quality",
+      "title": "A handful of episodes are outliers on duration, end pose or jerk",
+      "indicates": {
+        "check_id": "outlier-episodes",
+        "min_severity": "WARN"
+      },
+      "confidence": {
+        "FAIL": "high",
+        "WARN": "medium"
+      },
+      "explanation": "A few episodes sit far outside the rest on harmful axes (very long/short, a different end pose, jerky motion). Outliers dominate the gradient out of proportion to their count, and are often failed or mislabeled demonstrations.",
+      "docs_section": "outlier-episodes",
+      "next_step": "Review the episodes the finding lists; drop the broken ones and retrain."
+    },
+    {
+      "id": "metadata-length-mismatch",
+      "cluster": "data-quality",
+      "title": "Episode metadata disagrees with the data",
+      "indicates": {
+        "check_id": "dropped-frames",
+        "min_severity": "WARN",
+        "message_contains": "episode metadata disagrees with the data"
+      },
+      "confidence": {
+        "FAIL": "high",
+        "WARN": "medium"
+      },
+      "explanation": "The catalogued length of an episode does not match the rows in the data: loaders that trust the metadata read past the episode, short-change it, or fail outright.",
+      "docs_section": "dropped-frames",
+      "next_step": "Rebuild the episode metadata from the data (or re-convert), then re-run kinema check."
+    },
+    {
+      "id": "unreadable-data-files",
+      "cluster": "data-quality",
+      "title": "Data files that cannot be read",
+      "indicates": {
+        "check_id": "dropped-frames",
+        "min_severity": "WARN",
+        "message_contains": "cannot be read"
+      },
+      "confidence": {
+        "FAIL": "high",
+        "WARN": "medium"
+      },
+      "explanation": "Some data files are corrupt or cannot be fetched: loading the dataset crashes, or those episodes are silently skipped by tools that catch the error.",
+      "docs_section": "dropped-frames",
+      "next_step": "Re-upload or regenerate the files the finding names; until then, the dataset cannot be trained on as a whole."
+    },
+    {
+      "id": "constant-reward",
+      "cluster": "data-quality",
+      "title": "Reward carries no signal",
+      "indicates": {
+        "check_id": "reward-done",
+        "min_severity": "WARN",
+        "message_contains": "reward is constant"
+      },
+      "confidence": {
+        "FAIL": "high",
+        "WARN": "medium"
+      },
+      "explanation": "The reward is the same on every frame: RL or reward-conditioned training gets no learning signal from it.",
+      "docs_section": "reward-done",
+      "next_step": "Recompute the reward in the conversion (or drop the field if you train by imitation only)."
+    },
+    {
+      "id": "never-done",
+      "cluster": "data-quality",
+      "title": "Episodes never terminate",
+      "indicates": {
+        "check_id": "reward-done",
+        "min_severity": "WARN",
+        "message_contains": "done is never True"
+      },
+      "confidence": {
+        "FAIL": "high",
+        "WARN": "medium"
+      },
+      "explanation": "done is never True on any frame: RL training never sees an episode end, so value targets bootstrap forever.",
+      "docs_section": "reward-done",
+      "next_step": "Set done on each episode's last frame in the conversion and retrain."
     }
   ],
   "blind_spots": [
