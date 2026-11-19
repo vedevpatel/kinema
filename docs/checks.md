@@ -323,15 +323,25 @@ Mean/std normalization then squashes every other frame -
 `IPEC-COMMUNITY/dobbe_lerobot`'s odometry glitches (z = -132 m in a handful
 of its 5208 episodes) inflate the action dims' std up to 21x;
 `lerobot/austin_buds_dataset`'s all-zero state dropout frames inflate
-rotation entries 15-60x. The finding names the episodes. A dim flat in its
-bulk (a parked joint that moves rarely) is not judged: its rare moves are its
-signal. On a sampled load the frames must be in the loaded episodes;
-stats-drift's sampled notes add a hint when the stored range reaches far
-beyond everything loaded.
+rotation entries 15-60x; `lerobot/nyu_franka_play_dataset`'s angle
+wrap-arounds (-2*pi jumps) inflate a delta-action dim 7x. The finding names
+the episodes, and says so when every such frame is an episode's first - a
+reset transient (`lerobot/behavior1k-task0045`). Not judged: a dim flat in
+its bulk - a bulk narrower than 0.1% of the dim's own scale (the larger of
+|median| and the farthest frame's distance), i.e. a parked joint that moves
+rarely, whose rare moves are its signal - and dims the constant /
+near-zero-variance rules already report. On a sampled load the frames must
+be in the loaded episodes; stats-drift's sampled notes add a hint when the
+stored range reaches far beyond everything loaded.
 
-Validated before shipping: no finding on any of the 36 pinned calibration
-datasets, and 1 of 40 randomly drawn board datasets - a true positive
-(austin_buds' dropout frames).
+Validation: before merging, no finding on the 36 pinned calibration datasets
+and 1 of 40 random board datasets (austin_buds, a true positive). The first
+board run then flagged 7 of 329 rows: 3 true positives (austin_buds,
+hggforget, nyu_franka_play), 3 parked-dim false positives
+(ucsd_pick_and_place, two GR00T-sim tasks) that an absolute flatness floor
+let through, and behavior1k's reset transients and numerically-zero dims.
+The relative flatness test above clears the false positives and keeps the
+true ones; regression tests carry each shape.
 
 No knobs.
 

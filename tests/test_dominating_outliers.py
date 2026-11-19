@@ -88,3 +88,77 @@ def test_diagnosis_names_the_dominating_outliers_cause(tmp_path):
     claim = [c["cause_id"] for c in out["causes"]
              if any("inflate the std" in e["message"] for e in c["evidence"])]
     assert claim == ["outlier-dominated-normalization"]
+
+
+# --- shapes from the 2026-11-19 board run --------------------------------
+
+def _set_dim(root, fn, feat="state"):
+    def apply(s, a, ep):
+        s, a = s.copy(), a.copy()
+        fn(s if feat == "state" else a, ep)
+        return s, a
+    _rewrite_data(root, apply)
+
+
+def test_parked_dims_with_numeric_noise_are_not_judged(tmp_path):
+    # ucsd dim 5 parked at 0.90 moving in one episode; GR00T dims parked at
+    # 100 flipping to -100; both carry tiny numeric noise in the bulk
+    root = make_dataset(tmp_path / "pk", episodes=24)
+    rng = np.random.default_rng(0)
+
+    def parked(s, ep):
+        s[:, 3] = 0.9 + 1e-6 * rng.normal(size=len(s))
+        s[np.flatnonzero(ep == 5)[:13], 3] = 1.278
+        s[:, 4] = 100.0 + 1e-7 * rng.normal(size=len(s))
+        s[np.flatnonzero(ep == 9)[:8], 4] = -100.0
+    _set_dim(root, parked)
+    assert dom(CHECK.run(load_dataset(str(root)), CheckConfig())) == []
+
+
+def test_dropout_from_a_live_value_is_still_flagged(tmp_path):
+    # hggforget / austin_buds: a live value near 0.95 drops to 0 for a few frames
+    root = make_dataset(tmp_path / "do", episodes=24)
+    rng = np.random.default_rng(1)
+
+    def dropout(s, ep):
+        s[:, 3] = 0.95 + 0.005 * rng.normal(size=len(s))
+        s[np.flatnonzero(ep == 11)[[10, 20, 30]], 3] = 0.0
+    _set_dim(root, dropout)
+    hits = dom(CHECK.run(load_dataset(str(root)), CheckConfig()))
+    assert [(h.details["dim"], h.details["episodes"], h.details["at_episode_start"]) for h in hits] == [(3, [11], False)]
+
+
+def test_reset_transient_is_named_as_one(tmp_path):
+    # behavior1k dim 146: every (here: every other) episode's frame 0 sits far
+    # outside a tight but live bulk
+    root = make_dataset(tmp_path / "rt", episodes=24)
+    rng = np.random.default_rng(2)
+
+    def transient(s, ep):
+        s[:, 3] = -0.0015 + 2e-5 * rng.normal(size=len(s))
+        for e in range(0, 24, 2):
+            s[np.flatnonzero(ep == e)[0], 3] = -0.0083
+    _set_dim(root, transient)
+    hits = dom(CHECK.run(load_dataset(str(root)), CheckConfig()))
+    assert len(hits) == 1 and hits[0].details["at_episode_start"]
+    assert "reset transient" in hits[0].message
+
+
+def test_numerically_zero_dim_is_left_to_the_near_zero_rule(tmp_path):
+    # behavior1k dim 120: std 1e-11 with first-frame spikes - already a
+    # near-zero-variance WARN; not judged twice
+    root = make_dataset(tmp_path / "nz", episodes=24)
+    rng = np.random.default_rng(3)
+
+    def zeroish(s, ep):
+        s[:, 3] = 2e-12 * rng.normal(size=len(s))
+        # dims 102/106: a bulk in [0, 2e-8] (wider than the old absolute
+        # floor) with frame-0 spikes to -0.021
+        s[:, 4] = 2e-8 * rng.random(size=len(s))
+        for e in range(0, 24, 3):
+            s[np.flatnonzero(ep == e)[0], 3] = 5e-11
+            s[np.flatnonzero(ep == e)[0], 4] = -0.021
+    _set_dim(root, zeroish)
+    res = CHECK.run(load_dataset(str(root)), CheckConfig())
+    assert dom(res) == [], [f.message for f in dom(res)]
+    assert any(f.details.get("dim") == 3 and "near-zero variance" in f.message for f in res.findings)
