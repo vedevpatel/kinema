@@ -271,6 +271,7 @@ def probe_rlds_lane(workers: int = 8) -> list[dict]:
                 except Exception as e:  # noqa: BLE001 - one dataset must not stall the lane
                     print(f"rlds/{name}: probe failed in {_bucket} "
                           f"({type(e).__name__}) - skipping", flush=True)
+                    PROBE_ERRORS.add(f"rlds/{name}")
                     return None, task_client.calls
                 return {"id": f"rlds/{name}", "rlds": True, "rlds_prefix": p,
                         "rlds_bucket": _bucket,
@@ -347,6 +348,36 @@ def _probe_rlds_mirror(entry: dict):
     return None, ""
 
 
+# ids whose discovery probe ERRORED this run (rate limit, timeout, outage):
+# their absence from the listing is unknown, not evidence - reconcile_discovery
+# must not count it as a miss. Repo ids for Hub rows, "rlds/<name>" for RLDS,
+# and nested base repos (a failed nested probe hides all of its seats).
+PROBE_ERRORS: set[str] = set()
+_PROBE_RETRY_SLEEPS = (30.0, 90.0)
+
+
+def _transient(exc: BaseException) -> bool:
+    text = f"{type(exc).__name__} {exc}".lower()
+    return any(k in text for k in ("429", "too many requests", "timeout", "timed out",
+                                   "connection", "502", "503", "504", "temporarily"))
+
+
+def _retrying(fn, what: str):
+    """Call fn(); on a transient error back off and retry. Re-raises the last
+    error, so callers can tell 'errored' apart from 'not a LeRobot dataset'."""
+    import time
+
+    for i, pause in enumerate((*_PROBE_RETRY_SLEEPS, None)):
+        try:
+            return fn()
+        except Exception as exc:  # noqa: BLE001 - classified below
+            if pause is None or not _transient(exc):
+                raise
+            print(f"{what}: {type(exc).__name__} - retry {i + 1} in {pause:.0f}s", flush=True)
+            time.sleep(pause)
+    raise RuntimeError("unreachable")
+
+
 def _probe_dataset(api, repo_id: str, downloads: int, likes: int,
                    skip_gated: bool = False) -> dict | None:
     """The board entry for one Hub dataset, or None when it has no LeRobot
@@ -357,8 +388,10 @@ def _probe_dataset(api, repo_id: str, downloads: int, likes: int,
     (top, new) keep showing gated rows; the flagship lane skips them so the
     seat goes to the next auditable dataset."""
     try:
-        info = api.dataset_info(repo_id, files_metadata=True)
-    except Exception:
+        info = _retrying(lambda: api.dataset_info(repo_id, files_metadata=True), repo_id)
+    except Exception as exc:  # noqa: BLE001
+        if _transient(exc):
+            PROBE_ERRORS.add(repo_id)  # unknown, not absent
         return None
     if skip_gated and getattr(info, "gated", None):
         return None
@@ -370,12 +403,14 @@ def _probe_dataset(api, repo_id: str, downloads: int, likes: int,
         from huggingface_hub import list_repo_tree
 
         try:
-            sib = [(f.path, f.size or 0)
-                   for f in list_repo_tree(repo_id, repo_type="dataset", recursive=True)
-                   if hasattr(f, "size")]
+            sib = _retrying(lambda: [(f.path, f.size or 0)
+                                     for f in list_repo_tree(repo_id, repo_type="dataset",
+                                                             recursive=True)
+                                     if hasattr(f, "size")], f"{repo_id} listing")
         except Exception as exc:  # noqa: BLE001 - don't advertise incomplete inventory
             print(f"{repo_id}: complete discovery listing failed ({type(exc).__name__})",
                   flush=True)
+            PROBE_ERRORS.add(repo_id)  # the repo exists; its listing errored
             return None
     if "meta/info.json" not in [n for n, _ in sib]:
         return None
@@ -582,6 +617,7 @@ def find_lerobot_datasets(limit: int, new_lane: int = 0, workers: int = 8) -> li
         except Exception as e:  # noqa: BLE001 - one repo must not stall discovery
             print(f"{nested_repo}: nested probe failed ({type(e).__name__}) - skipping",
                   flush=True)
+            PROBE_ERRORS.add(nested_repo)
             return []
 
     if NESTED_REPO_SEATS:
@@ -1029,7 +1065,8 @@ PRUNE_AFTER_MISSES = 3  # fresh discoveries in a row without the dataset
 
 
 def reconcile_discovery(entries: list[dict], datasets: list[dict],
-                        fresh: bool = False, prune_after: int = PRUNE_AFTER_MISSES) -> list[dict]:
+                        fresh: bool = False, prune_after: int = PRUNE_AFTER_MISSES,
+                        uncertain: set[str] | None = None) -> list[dict]:
     """Merge discovery metadata into stored rows; prune only on evidence.
 
     One omitted probe is not evidence of deletion (a 429, a timeout). A row
@@ -1039,12 +1076,21 @@ def reconcile_discovery(entries: list[dict], datasets: list[dict],
     under half its stored rows is a listing failure, not mass deletion, so
     no miss is counted for that lane at all."""
     current = {d["id"]: d for d in datasets}
+    unknown = uncertain or set()
+
+    def is_uncertain(row_id: str) -> bool:
+        # an errored probe (rate limit, outage) says nothing about the row;
+        # a nested seat is uncertain when its base repo's probe errored
+        return row_id in unknown or row_id.split("//", 1)[0] in unknown
+
     healthy: dict[str, bool] = {}
     if fresh:
         lanes = {e.get("lane") for e in entries}
         for lane in lanes:
             stored = sum(1 for e in entries if e.get("lane") == lane)
-            found = sum(1 for d in datasets if d.get("lane") == lane)
+            found = sum(1 for d in datasets if d.get("lane") == lane) + sum(
+                1 for e in entries if e.get("lane") == lane and e["id"] not in current
+                and is_uncertain(e["id"]))
             healthy[lane] = found >= 0.5 * stored
     out = []
     for old in entries:
@@ -1055,6 +1101,8 @@ def reconcile_discovery(entries: list[dict], datasets: list[dict],
         if fresh:
             if row is not None:
                 merged["discovery_misses"] = 0
+            elif is_uncertain(old["id"]):
+                merged["discovery_uncertain"] = True  # counter left as it was
             elif healthy.get(old.get("lane"), False):
                 merged["discovery_misses"] = int(old.get("discovery_misses") or 0) + 1
                 if merged["discovery_misses"] >= prune_after:
@@ -1513,7 +1561,11 @@ def main() -> int:
                 e for e in prev
                 if e.get("report") or (e.get("reason") and e.get("status") in ("gated", "unsupported", "error"))
             ]
-            entries = reconcile_discovery(entries, datasets, fresh=fresh)
+            entries = reconcile_discovery(entries, datasets, fresh=fresh,
+                                          uncertain=set(PROBE_ERRORS) if fresh else None)
+            if fresh and PROBE_ERRORS:
+                print(f"{len(PROBE_ERRORS)} discovery probe(s) errored: those rows keep "
+                      "their miss counters (an error is not an absence)", flush=True)
             # stored results carry their verdicts: rescore them under the
             # current model so the whole board swaps models in this run
             n_moved = rescore_entries(entries)

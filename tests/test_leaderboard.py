@@ -1056,3 +1056,53 @@ sys.exit(lb.main())
     assert took < 30, f"run outlived its 3 s hard deadline: {took:.0f}s"
     assert "hard deadline: abandoned" in proc.stdout
     assert (out / "data.json").exists()
+
+
+def test_errored_probes_never_count_as_misses():
+    lb = _load_leaderboard()
+    rows = [{'id': f't{i}', 'lane': 'top', 'report': {}} for i in range(10)]
+    rows.append({'id': 'nv/big//task-1', 'lane': 'flagship', 'report': {}})
+    listing = [{'id': f't{i}', 'lane': 'top'} for i in range(2, 10)]
+    state = rows
+    for _ in range(4):  # t0 errored every week, t1 genuinely gone, nested base errored
+        state = lb.reconcile_discovery(state, listing, fresh=True, uncertain={'t0', 'nv/big'})
+    ids = {e['id'] for e in state}
+    assert 't0' in ids and 'nv/big//task-1' in ids  # unknown, kept
+    assert 't1' not in ids  # absent from 3+ healthy fresh discoveries: pruned
+    t0 = next(e for e in state if e['id'] == 't0')
+    assert not t0.get('discovery_misses') and t0['discovery_uncertain']
+
+
+def test_probe_retries_transient_errors_and_records_persistent_ones(monkeypatch):
+    lb = _load_leaderboard()
+    monkeypatch.setattr(lb, '_PROBE_RETRY_SLEEPS', (0.0, 0.0))
+    lb.PROBE_ERRORS.clear()
+
+    class Info:
+        gated = False
+        siblings = [type('S', (), {'rfilename': 'meta/info.json', 'size': 1})(),
+                    type('S', (), {'rfilename': 'data/a.parquet', 'size': 7})()]
+
+    class FlakyApi:
+        calls = 0
+
+        def dataset_info(self, repo_id, files_metadata=True):
+            FlakyApi.calls += 1
+            if FlakyApi.calls < 3:
+                raise RuntimeError('429 Client Error: Too Many Requests')
+            return Info()
+    entry = lb._probe_dataset(FlakyApi(), 'o/flaky', 5, 1)
+    assert entry and entry['data_bytes'] == 7 and FlakyApi.calls == 3
+    assert 'o/flaky' not in lb.PROBE_ERRORS
+
+    class DeadApi:
+        def dataset_info(self, repo_id, files_metadata=True):
+            raise RuntimeError('429 Too Many Requests')
+    assert lb._probe_dataset(DeadApi(), 'o/dead', 5, 1) is None
+    assert 'o/dead' in lb.PROBE_ERRORS
+
+    class NotLeRobot:
+        def dataset_info(self, repo_id, files_metadata=True):
+            raise RuntimeError('404 Repository Not Found')
+    assert lb._probe_dataset(NotLeRobot(), 'o/gone', 5, 1) is None
+    assert 'o/gone' not in lb.PROBE_ERRORS  # a real absence is not "unknown"
