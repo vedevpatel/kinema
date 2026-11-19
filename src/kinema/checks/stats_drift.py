@@ -243,44 +243,63 @@ class StatsDriftCheck(Check):
                         live = (sd_s > 1e-6) & (sd_a > 1e-6)
                         ratio = np.where(live, np.maximum(sd_s, sd_a) / np.maximum(np.minimum(sd_s, sd_a), 1e-12), 1.0)
                         shift = np.where(live, np.abs(actual["mean"] - stored["mean"]) / np.maximum(sd_s, 1e-12), 0.0)
-                        # ...unless the sample never saw the spread: a sample
-                        # covering a sliver of the stored [min, max] missed the
-                        # episodes that hold the rest, and those alone can move
-                        # the mean and std by multiples (GR00T sim: 3 of 200
-                        # episodes hold a joint's excursions to 0; a 6-episode
-                        # sample saw std 0.04 against a correct stored 12.3)
-                        cover = None
-                        if "min" in stored and "max" in stored and stored["min"].shape == actual["min"].shape:
-                            with np.errstate(invalid="ignore", divide="ignore"):
-                                cover = ((actual["max"] - actual["min"])
-                                         / np.maximum(stored["max"] - stored["min"], 1e-12))
+                        # ...but only in the direction sampling cannot explain.
+                        # A sample NARROWER than the stored stats (smaller std,
+                        # or any mean shift) is what a few episodes that missed
+                        # the dataset's spread look like - GR00T sim: 3 of 200
+                        # episodes hold a joint's excursions; 6-episode samples
+                        # saw std 22x-278x under correct stored stats, even
+                        # with a few frames spanning the stored range. That
+                        # direction is INFO, unless the stored stats are
+                        # impossible on their own terms: a std above the stored
+                        # range, or a mean outside [min, max] by > 10% of it
+                        # (GR00T task-0023: std 2.84 on a stored range of 0.32).
+                        # Dims flat in the data are inert and never gate here:
+                        # converter f32 noise can push a near-constant dim's
+                        # stored std close to its range (GR00T dims 80-83: 0.88x).
+                        imp = np.zeros_like(sd_s, dtype=bool)
+                        if "min" in stored and "max" in stored and stored["min"].shape == sd_s.shape:
+                            srng = stored["max"] - stored["min"]
+                            m_s = stored["mean"]
+                            with np.errstate(invalid="ignore"):
+                                imp = ((sd_s > srng) | (m_s < stored["min"] - 0.1 * srng)
+                                       | (m_s > stored["max"] + 0.1 * srng)) & (srng > 0) & ~flat_in_data(actual)
                         for kind, garr, lim, fmt in (("std", ratio, cfg.stats_sample_std_ratio, "{:.1f}x"),
                                                     ("mean", shift, cfg.stats_sample_mean_sigma, "{:.1f} std devs")):
-                            d = int(np.argmax(garr))
-                            if garr[d] > lim:
-                                c = float(cover[d]) if cover is not None and np.isfinite(cover[d]) else 1.0
-                                narrow = c < _SAMPLE_MIN_COVER and (kind == "mean" or sd_a[d] < sd_s[d])
-                                if narrow:
+                            # excused dims are judged apart: the worst EXCUSED
+                            # dim must not hide a gated one behind it
+                            narrow = ((kind == "mean") | (sd_a < sd_s)) & ~imp
+                            for excused in (True, False):
+                                masked = np.where(narrow == excused, garr, -np.inf)
+                                d = int(np.argmax(masked))
+                                if not masked[d] > lim:
+                                    continue
+                                if excused:
                                     res.findings.append(Finding(
                                         self.id, Severity.INFO,
                                         f"{feat}.{kind}: the sampled data is off the stored stats by "
-                                        f"{fmt.format(float(garr[d]))} on dim {d}, but the sample spans "
-                                        f"only {c:.1%} of the stored [min, max] - episodes it did not "
-                                        "load can explain the gap (load the full dataset to judge)",
+                                        f"{fmt.format(float(garr[d]))} on dim {d}, in the direction a "
+                                        f"{len(loaded)}-episode sample that missed part of the dataset's "
+                                        "spread produces - not evidence the stored stats are wrong "
+                                        "(load the full dataset to judge)",
                                         details={"feature": feat, "stat": kind, "dim": d,
                                                  "error": float(garr[d]), "reference": "sampled",
-                                                 "range_coverage": c},
+                                                 "sampling_explains": True},
                                     ))
                                     continue
                                 worst = max(worst, float(garr[d]) / lim)
+                                why = (" - and the stored stats are impossible on their own terms "
+                                       f"(stored std {sd_s[d]:.4g}, mean {stored['mean'][d]:.4g}, "
+                                       f"range [{stored['min'][d]:.4g}, {stored['max'][d]:.4g}])"
+                                       if imp[d] else " - far more than sampling explains")
                                 res.findings.append(Finding(
                                     self.id, Severity.WARN,
                                     f"{feat}.{kind}: the sampled data is off the stored stats by "
-                                    f"{fmt.format(float(garr[d]))} on dim {d} - far more than sampling "
-                                    "explains; the stored stats look wrong (sampled audit: load the "
-                                    "full dataset to confirm)",
+                                    f"{fmt.format(float(garr[d]))} on dim {d}{why}; the stored stats "
+                                    "look wrong (sampled audit: load the full dataset to confirm)",
                                     details={"feature": feat, "stat": kind, "dim": d,
-                                             "error": float(garr[d]), "reference": "sampled"},
+                                             "error": float(garr[d]), "reference": "sampled",
+                                             "stored_inconsistent": bool(imp[d])},
                                 ))
                     if "min" in stored and "max" in stored and stored["min"].shape == actual["min"].shape:
                         rng = np.maximum(stored["max"] - stored["min"], 1e-8)
@@ -340,6 +359,12 @@ class StatsDriftCheck(Check):
                         # units. Dims constant in the data are inert (f32 noise).
                         live_d = ~flat_in_data(actual)
                         sd_norm = np.maximum(np.maximum(stored["std"], actual["std"]), 1e-12)
+                        cov_b = np.ones_like(stored["std"], dtype=float)
+                        if "min" in stored and "max" in stored and stored["min"].shape == actual["min"].shape:
+                            with np.errstate(invalid="ignore", divide="ignore"):
+                                cb = ((actual["max"] - actual["min"])
+                                      / np.maximum(stored["max"] - stored["min"], 1e-12))
+                            cov_b = np.where(np.isfinite(cb), cb, 1.0)
                         for kind, st, lo, hi, warn_tol, fail_tol, denom in (
                                 ("mean", stored["mean"], m_lo, m_hi, cfg.stats_mean_warn_sigma,
                                  cfg.stats_mean_fail_sigma, sd_norm),
@@ -347,6 +372,31 @@ class StatsDriftCheck(Check):
                                  cfg.stats_std_fail, np.maximum(stored["std"], 1e-12))):
                             gap = np.maximum(np.maximum(lo - st, st - hi), 0.0) / denom
                             gap = np.where(live_d & np.isfinite(gap), gap, 0.0)
+                            # a stored value ABOVE the interval (std) or anywhere
+                            # outside it (mean) is what a sample that missed the
+                            # dataset's spread produces: excused, like the gross
+                            # backstop, when the sample spans too little of the
+                            # stored range (kuka: 40 episodes spanning 12% of a
+                            # dim; correct stored std 0.00227 above [0.0010,
+                            # 0.0020]; 300 episodes measure 0.0024)
+                            excused = (cov_b < _SAMPLE_MIN_COVER) & ((kind == "mean") | (st > hi))
+                            ex_gap = np.where(excused, gap, 0.0)
+                            gap = np.where(excused, 0.0, gap)
+                            de = int(np.argmax(ex_gap))
+                            if ex_gap[de] >= warn_tol and ex_gap[de] > gap.max():
+                                res.findings.append(Finding(
+                                    self.id, Severity.INFO,
+                                    f"{feat}.{kind}: the stored {kind} sits outside the loaded "
+                                    f"sample's bootstrap interval on dim {de} (stored {st[de]:.6g}, "
+                                    f"interval [{lo[de]:.6g}, {hi[de]:.6g}] over {E} episodes), but "
+                                    f"the sample spans only {cov_b[de]:.1%} of the stored [min, max] - "
+                                    "episodes it did not load can explain the gap (load the full "
+                                    "dataset to judge)",
+                                    details={"feature": feat, "stat": kind, "dim": de,
+                                             "reference": "bootstrap", "episodes": E,
+                                             "stored": float(st[de]), "gap": float(ex_gap[de]),
+                                             "range_coverage": float(cov_b[de])},
+                                ))
                             d = int(np.argmax(gap))
                             if gap[d] <= 0:
                                 continue

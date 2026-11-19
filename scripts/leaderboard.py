@@ -697,8 +697,60 @@ def _meta_episode_indices(root: Path) -> list[int] | None:
     return None
 
 
+def _meta_episode_lengths(root: Path) -> dict[int, int] | None:
+    """{episode index: catalogued frame count} from an already-downloaded
+    meta/, either format; None when the catalogue has no lengths."""
+    import json as _json
+
+    import pyarrow.parquet as _pq
+
+    ep_dir = root / "meta" / "episodes"
+    jsonl = root / "meta" / "episodes.jsonl"
+    try:
+        if ep_dir.is_dir():
+            files = sorted(ep_dir.glob("**/*.parquet"))
+            if files:
+                out: dict[int, int] = {}
+                for f in files:
+                    t = _pq.read_table(f, columns=["episode_index", "length"]).to_pydict()
+                    out.update(zip(map(int, t["episode_index"]), map(int, t["length"])))
+                return out
+        if jsonl.exists():
+            rows = [_json.loads(line) for line in jsonl.read_text().splitlines() if line.strip()]
+            return {int(r["episode_index"]): int(r["length"]) for r in rows}
+    except Exception:  # noqa: BLE001 - best-effort, like the index reader
+        return None
+    return None
+
+
+def _complete_episodes(table, lengths: dict[int, int] | None):
+    """Drop episodes a partial row-group read cut short. A truncated episode
+    reads as "metadata says 300 frames but the data holds 100" - a
+    dropped-frames FAIL the board itself caused (aloha_pen_uncap_diverse) -
+    and every motion check would audit a fragment. Raises DatasetError when
+    no episode is whole: the honest result is a failed load, not a verdict."""
+    import pyarrow as pa
+    import pyarrow.compute as pc
+
+    if not lengths or table.num_rows == 0:
+        return table
+    vc = pc.value_counts(table.column("episode_index")).to_pylist()
+    whole = [int(v["values"]) for v in vc if lengths.get(int(v["values"])) is not None
+             and v["counts"] >= lengths[int(v["values"])]]
+    unknown = [int(v["values"]) for v in vc if lengths.get(int(v["values"])) is None]
+    keep = whole + unknown
+    if len(keep) == len(vc):
+        return table
+    if not whole:
+        raise DatasetError("range-read sample holds no complete episode "
+                           f"(read {table.num_rows} rows of {len(vc)} episode(s))")
+    return table.filter(pc.is_in(table.column("episode_index"),
+                                 value_set=pa.array(keep, type=table.schema.field("episode_index").type)))
+
+
 def _range_read_parquet(repo_id: str, name: str, dest: Path, episodes: list[int] | None = None,
-                        min_rows: int = 20000, max_bytes: int = 150 * 1024 * 1024) -> None:
+                        min_rows: int = 20000, max_bytes: int = 150 * 1024 * 1024,
+                        lengths: dict[int, int] | None = None, fs=None, path: str | None = None) -> None:
     """Materialize row groups of a remote parquet via HTTP range reads (footer
     first, then only the needed row groups) - no full download. Used when every
     data shard exceeds the sample cap. When episode indices are known, prefer
@@ -708,16 +760,28 @@ def _range_read_parquet(repo_id: str, name: str, dest: Path, episodes: list[int]
     from huggingface_hub import HfFileSystem
     import pyarrow.parquet as pq
 
-    fs = HfFileSystem()
+    fs = fs or HfFileSystem()
     # open via filesystem+path (not a stream handle) so pyarrow issues true
     # range requests instead of buffering the whole remote file
-    pf = pq.ParquetFile(f"datasets/{repo_id}/{name}", filesystem=fs)
+    pf = pq.ParquetFile(path or f"datasets/{repo_id}/{name}", filesystem=fs)
     # project out pixel columns: frames embedded as images dominate these
     # shards, and v0 runs no visual checks
     columns = [
         n for n in pf.schema_arrow.names
         if "image" not in n.lower() and "video" not in n.lower()
     ] or None
+
+    def rg_bytes(rg) -> int:
+        # budget what is actually fetched: the projected columns' compressed
+        # bytes. rg.total_byte_size counts the embedded image columns this
+        # read never touches - one 100-row group of 4-camera ALOHA frames
+        # spent the whole 64 MiB and cut a 300-frame episode to 100 rows
+        if columns is None:
+            return rg.total_byte_size
+        keep = set(columns)
+        return sum(rg.column(j).total_compressed_size for j in range(rg.num_columns)
+                   if rg.column(j).path_in_schema.split(".")[0] in keep)
+
     table = None
     if episodes:
         want = sorted(set(episodes))
@@ -737,7 +801,7 @@ def _range_read_parquet(repo_id: str, name: str, dest: Path, episodes: list[int]
             lo, hi = bounds
             if any(lo <= e <= hi for e in want):
                 groups.append(i)
-                total += rg.total_byte_size
+                total += rg_bytes(rg)
                 if total >= max_bytes:
                     break
         if stats_ok and groups:
@@ -768,10 +832,11 @@ def _range_read_parquet(repo_id: str, name: str, dest: Path, episodes: list[int]
             rg = pf.metadata.row_group(i)
             groups.append(i)
             rows += rg.num_rows
-            total += rg.total_byte_size
+            total += rg_bytes(rg)
             if rows >= min_rows or total >= max_bytes:
                 break
         table = pf.read_row_groups(groups, columns=columns)
+    table = _complete_episodes(table, lengths)
     out = dest / name
     out.parent.mkdir(parents=True, exist_ok=True)
     pq.write_table(table, out)
@@ -847,6 +912,7 @@ def download_sample(repo_id: str, cap_bytes: int, dest: Path) -> tuple[Path, dic
                 base, _pref(prefix, smallest), dest,
                 episodes=_meta_episode_indices(root),
                 max_bytes=min(cap_bytes, 64 * 1024 * 1024),
+                lengths=_meta_episode_lengths(root),
             )
         except Exception as e:  # noqa: BLE001
             msg = f"{type(e).__name__}: {e}"

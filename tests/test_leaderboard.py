@@ -1106,3 +1106,49 @@ def test_probe_retries_transient_errors_and_records_persistent_ones(monkeypatch)
             raise RuntimeError('404 Repository Not Found')
     assert lb._probe_dataset(NotLeRobot(), 'o/gone', 5, 1) is None
     assert 'o/gone' not in lb.PROBE_ERRORS  # a real absence is not "unknown"
+
+
+# --- range-read sampling: embedded-image shards (aloha_pen_uncap_diverse) ---
+
+def _image_shard(path, episodes=3, length=300, rg_rows=100, img_bytes=20_000):
+    import numpy as np
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    n = episodes * length
+    rng = np.random.default_rng(0)
+    t = pa.table({
+        "episode_index": np.repeat(np.arange(episodes), length).astype("int64"),
+        "frame_index": np.tile(np.arange(length), episodes).astype("int64"),
+        "action": [list(map(float, r)) for r in rng.normal(size=(n, 2))],
+        # incompressible pixels: the column the read projects out
+        "observation.images.top": [rng.bytes(img_bytes) for _ in range(n)],
+    })
+    pq.write_table(t, path, row_group_size=rg_rows)
+
+
+def test_range_read_budgets_only_the_columns_it_fetches(tmp_path):
+    import fsspec
+    import pyarrow.parquet as pq
+    lb = _load_leaderboard()
+    src = tmp_path / "episode_000008.parquet"
+    _image_shard(src)
+    # 100 rows x 20 kB of pixels per group: counting image bytes, a 4 MB
+    # budget stops after the first group and cuts episode 0 to 100 rows
+    lb._range_read_parquet("o/r", "data/x.parquet", tmp_path / "out", max_bytes=4_000_000,
+                           lengths={0: 300, 1: 300, 2: 300},
+                           fs=fsspec.filesystem("file"), path=str(src))
+    out = pq.read_table(tmp_path / "out" / "data" / "x.parquet").to_pydict()
+    assert "observation.images.top" not in out
+    assert out["episode_index"].count(0) == 300
+
+
+def test_range_read_drops_truncated_episodes_and_refuses_a_fragment(tmp_path):
+    import pyarrow as pa
+    lb = _load_leaderboard()
+    t = pa.table({"episode_index": [0] * 300 + [1] * 120})
+    kept = lb._complete_episodes(t, {0: 300, 1: 300})
+    assert set(kept.column("episode_index").to_pylist()) == {0}
+    with pytest.raises(lb.DatasetError):
+        lb._complete_episodes(pa.table({"episode_index": [1] * 120}), {1: 300})
+    # unknown lengths (no catalogue entry) are kept, not guessed at
+    assert lb._complete_episodes(t, None).num_rows == 420

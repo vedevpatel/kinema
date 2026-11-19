@@ -244,7 +244,7 @@ def test_small_sample_that_missed_rare_excursions_is_not_wrong_stats(tmp_path):
     assert not set(rare) & set(ctx.episode_ids())
     res = run("stats-drift", ctx)
     assert gated(res) == [], [f.message for f in res.findings]
-    assert any(f.details.get("range_coverage") is not None for f in res.findings)
+    assert any(f.details.get("sampling_explains") for f in res.findings)
 
 
 def test_small_sample_still_flags_a_gross_stored_std_error(tmp_path):
@@ -258,3 +258,28 @@ def test_small_sample_still_flags_a_gross_stored_std_error(tmp_path):
     res = run("stats-drift", load_dataset(str(root), max_episodes=6))
     assert any(f.severity == Severity.WARN and f.details.get("reference") == "sampled"
                for f in res.findings), [f.message for f in res.findings]
+
+
+def test_excused_narrow_dim_does_not_hide_a_gated_one(tmp_path):
+    # dim 0: rare excursions the sample missed (excused, INFO); dim 1: stored
+    # std 10x too large on data the sample spans - must still WARN
+    root = make_dataset(tmp_path / "h", episodes=40)
+    rare = (5, 13, 27)
+
+    def excursion(a, ep):
+        a = a.copy()
+        a[np.isin(ep, rare), 0] += 500.0  # dim 0 now has the larger ratio
+        return a
+    _set_true_stats(root, excursion)
+    _strip_episode_stats(root)
+    p = root / "meta" / "stats.json"
+    stats = json.loads(p.read_text())
+    std = np.asarray(stats["action"]["std"])
+    std[1] *= 10
+    stats["action"]["std"] = std.tolist()
+    p.write_text(json.dumps(stats))
+    res = run("stats-drift", load_dataset(str(root), max_episodes=6))
+    assert any(f.severity == Severity.WARN and f.details.get("dim") == 1 for f in res.findings), \
+        [f.message for f in res.findings]
+    assert any(f.severity == Severity.INFO and f.details.get("dim") == 0
+               and f.details.get("sampling_explains") for f in res.findings)

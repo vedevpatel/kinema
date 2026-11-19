@@ -313,7 +313,22 @@ def _target_data_files(root: Path, max_episodes: int) -> list[str] | None:
         files = {shard_map[ep] for ep in wanted if ep in shard_map}
         return sorted(files) if files else None
     if (root / "meta" / "episodes.jsonl").exists():
-        return [f"data/**/episode_{i:06d}.parquet" for i in sorted(wanted)]
+        # render info.json's data_path: converters pick their own padding
+        # (GR00T-X-Embodiment-Sim writes episode_{episode_index:08d}, and the
+        # hard-coded 6-digit pattern matched nothing - the sampled load failed)
+        try:
+            info = json.loads((root / "meta" / "info.json").read_text())
+        except (OSError, ValueError):
+            info = {}
+        tpl = info.get("data_path")
+        chunk_size = int(info.get("chunks_size") or 1000)
+        out = []
+        for i in sorted(wanted):
+            try:
+                out.append(tpl.format(episode_chunk=i // chunk_size, episode_index=i))
+            except (AttributeError, KeyError, IndexError, ValueError):
+                out.append(f"data/**/episode_{i:06d}.parquet")
+        return out
     return None
 
 

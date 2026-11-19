@@ -131,18 +131,26 @@ per-episode stats of exactly the loaded episodes - never against
 whole-dataset stats - and `stats.json` is checked against the aggregation of
 all per-episode stats, the way LeRobot builds it. A sampled load without
 per-episode stats gets a bootstrap reference once enough episodes are
-loaded (>= 8): the sampling distribution of the pooled mean/std, resampling
-episodes (frames within one are autocorrelated, so the episode is the
-unit). A stored value outside the 99.9% interval WARNs only when it also sits
-beyond the interval by at least the full-load WARN tolerance (0.10 std devs
-for the mean, 5% for the std) - tiny gaps across many dims fire on clean
-data, so a smaller gap is an INFO note. Sampled findings never FAIL: a
-deterministic spread sample cannot prove the stats wrong, only flag them.
-With too few episodes only the gross backstop applies (std off >= 3x, mean
-off >= 2 sigma), and only when the sample spans at least half of the stored
-[min, max]: a sample covering less has not seen the dataset's spread (a few
-episodes holding a joint's excursions move the mean and std by multiples),
-so the gap is an INFO naming the coverage. A full load stays the conclusive
+loaded (>= 20; a percentile bootstrap over fewer is too narrow - 8 LIBERO
+episodes put a correct stored std 31% outside the interval): the sampling
+distribution of the pooled mean/std, resampling episodes (frames within one
+are autocorrelated, so the episode is the unit). A stored value outside the
+99.9% interval WARNs only when it also sits beyond the interval by at least
+the full-load WARN tolerance (0.10 std devs for the mean, 5% for the std) -
+tiny gaps across many dims fire on clean data, so a smaller gap is an INFO
+note - and, when the stored value lies where a sample that missed the
+dataset's spread would put it (a stored std above the interval, or a mean
+outside it), only when the sample spans at least half of the stored
+[min, max]; otherwise the gap is an INFO naming the coverage. Sampled
+findings never FAIL: a deterministic spread sample cannot prove the stats
+wrong, only flag them. With too few episodes only the gross backstop applies
+(std off >= 3x, mean off >= 2 sigma), and only in the direction sampling
+cannot explain: a sample with MORE spread than the stored std, or stored
+stats impossible on their own terms (a std above the stored range, a mean
+outside [min, max] by more than 10% of it). A sample narrower than the
+stored stats is what a few episodes that missed the rare excursions look
+like, so that gap is an INFO. Each kind reports its worst gated dim and its
+worst excused dim separately, so an excused dim never hides a gated one. A full load stays the conclusive
 audit.
 
 Catalogued episodes with no frames are not part of the reference: the data

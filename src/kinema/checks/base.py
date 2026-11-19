@@ -69,7 +69,7 @@ class CheckConfig:
     # of the pooled stats over loaded episodes (the episode is the unit -
     # frames within one are autocorrelated) and flag stored stats outside
     # the (1 - alpha) interval
-    stats_sample_min_episodes: int = 8
+    stats_sample_min_episodes: int = 20  # a percentile bootstrap over fewer episodes is too narrow (libero: 8 episodes put a correct std 31% outside)
     stats_sample_bootstrap: int = 400
     stats_sample_alpha: float = 0.001
     # timestamp-grid

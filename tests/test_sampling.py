@@ -330,3 +330,15 @@ def test_loader_falls_back_to_glob_when_pointed_shards_missing(tmp_path):
     from kinema.dataset import load_dataset
     ctx = load_dataset(str(root))
     assert ctx.row_count == t.num_rows
+
+
+def test_v21_targets_follow_info_data_path_padding(tmp_path):
+    # GR00T-X-Embodiment-Sim names episode_{episode_index:08d}; the old
+    # hard-coded 6-digit pattern matched nothing and the sampled load failed
+    _v21_meta(tmp_path, list(range(100)))
+    (tmp_path / "meta" / "info.json").write_text(json.dumps({
+        "data_path": "data/chunk-{episode_chunk:03d}/episode_{episode_index:08d}.parquet",
+        "chunks_size": 1000}))
+    targets = _target_data_files(tmp_path, 5)
+    assert "data/chunk-000/episode_00000000.parquet" in targets
+    assert "data/chunk-000/episode_00000099.parquet" in targets
