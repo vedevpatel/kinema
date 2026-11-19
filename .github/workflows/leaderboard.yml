@@ -42,11 +42,50 @@ jobs:
         # reads its worklist and only rediscovers when it is >14 days old.
         # time-budget stops new audits at 40 min; hard-deadline abandons
         # in-flight ones at 50 min, well inside the 55 min shell timeout.
-        run: >-
-          timeout 3300 env HF_HUB_ENABLE_HF_TRANSFER=1 HF_TOKEN=${{ secrets.HF_TOKEN }}
-          python scripts/leaderboard.py --limit 200 --max-episodes 250 --workers 16
-          --worklist docs/worklist.json --worklist-max-age-hours 336
-          --time-budget 2400 --hard-deadline 3000 --out docs
+        # Memory: 8 workers x a 512 MiB frame budget per load stays well under
+        # the runner's RAM (16 workers x 1 GiB plus video decode killed the
+        # runner mid-run and lost every audit of that run).
+        # Checkpoints: a killed runner skips every later step, so the board is
+        # pushed every 10 minutes from a separate worktree - only the generated
+        # board files (data.json, index.html, dataset/), never hand-edited docs.
+        env:
+          HF_HUB_ENABLE_HF_TRANSFER: "1"
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          KINEMA_FRAME_BUDGET_BYTES: "536870912"
+        run: |
+          git config --global user.name "Ved Patel"
+          git config --global user.email "130187703+vedevpatel@users.noreply.github.com"
+          checkpoint() {
+            rm -rf /tmp/ckpt
+            git fetch -q origin main && git worktree add -q -f /tmp/ckpt origin/main || return 1
+            mkdir -p /tmp/ckpt/docs/dataset
+            cp docs/data.json docs/index.html /tmp/ckpt/docs/ 2>/dev/null
+            cp -R docs/dataset/. /tmp/ckpt/docs/dataset/ 2>/dev/null
+            (
+              cd /tmp/ckpt || exit 1
+              git add docs/data.json docs/index.html docs/dataset
+              git diff --cached --quiet && exit 0
+              git commit -q -m "leaderboard: audit checkpoint"
+              for attempt in 1 2 3; do
+                git push -q origin HEAD:main && exit 0
+                git pull -q --rebase -X theirs origin main || git rebase --abort
+                sleep 10
+              done
+              exit 1
+            )
+            rc=$?
+            git worktree remove -f /tmp/ckpt
+            return $rc
+          }
+          timeout 3300 python scripts/leaderboard.py --limit 200 --max-episodes 250 --workers 8 \
+            --worklist docs/worklist.json --worklist-max-age-hours 336 \
+            --time-budget 2400 --hard-deadline 3000 --out docs &
+          pid=$!
+          while kill -0 "$pid" 2>/dev/null; do
+            for _ in $(seq 60); do kill -0 "$pid" 2>/dev/null || break; sleep 10; done
+            kill -0 "$pid" 2>/dev/null && { checkpoint && echo "checkpoint pushed" || echo "checkpoint failed"; }
+          done
+          wait "$pid"
       - name: keep the audit results even if the push fails
         if: always()
         uses: actions/upload-artifact@v4
