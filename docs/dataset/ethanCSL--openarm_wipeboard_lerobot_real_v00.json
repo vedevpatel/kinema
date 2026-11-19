@@ -6,7 +6,7 @@
   "fps": 30.0,
   "truncated": false,
   "video_audited": 5,
-  "score": 94,
+  "score": 88,
   "score_model": "tiered-v2",
   "verdict": "WARN",
   "checks": [
@@ -16,12 +16,12 @@
       "verdict": "PASS",
       "weight": 10,
       "weight_basis": "placeholder",
-      "summary": "data matches meta/stats.json (worst 0% of the FAIL threshold)",
+      "summary": "data matches the stored stats (worst 0% of the FAIL threshold)",
       "skipped": false,
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "timestamp-grid",
@@ -34,7 +34,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "dropped-frames",
@@ -47,7 +47,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "calibration-drift",
@@ -283,7 +283,7 @@
           }
         }
       ],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "idle-segments",
@@ -296,7 +296,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 6
+      "charge": 0
     },
     {
       "id": "stuck-actuator",
@@ -309,22 +309,22 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "action-saturation",
       "title": "Action saturation (commands clipped at the limits)",
-      "verdict": "INFO",
+      "verdict": "WARN",
       "weight": 6,
       "weight_basis": "placeholder",
-      "summary": "no continuous action dim pinned at a limit above 5% (16 dims checked)",
+      "summary": "2 dim(s) saturated",
       "skipped": false,
       "skip_reason": "",
       "details": {},
       "findings": [
         {
-          "severity": "INFO",
-          "message": "action dim 14 (RJ8.pos): 55% of commands sit exactly at its max - a gripper or on/off command rather than clipping?",
+          "severity": "WARN",
+          "message": "action dim 14 (RJ8.pos): 54.6% of commands during motion are pinned at exactly its max (0) - clipped commands the policy will imitate",
           "episode_index": null,
           "details": {
             "dim": 14,
@@ -333,8 +333,8 @@
           }
         },
         {
-          "severity": "INFO",
-          "message": "action dim 15 (LJ8.pos): 83% of commands sit exactly at its max - a gripper or on/off command rather than clipping?",
+          "severity": "WARN",
+          "message": "action dim 15 (LJ8.pos): 82.7% of commands during motion are pinned at exactly its max (1.2121) - clipped commands the policy will imitate",
           "episode_index": null,
           "details": {
             "dim": 15,
@@ -356,7 +356,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "duplicate-and-leakage",
@@ -369,7 +369,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 2
+      "charge": 0
     },
     {
       "id": "outlier-episodes",
@@ -458,7 +458,7 @@
         "flagged": {}
       },
       "findings": [],
-      "charge": 3
+      "charge": 0
     },
     {
       "id": "embedded-images",
@@ -471,7 +471,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "camera-coverage",
@@ -484,7 +484,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "episode-file-pointers",
@@ -502,7 +502,7 @@
         "local_shards": 1
       },
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "video-file-pointers",
@@ -518,7 +518,7 @@
         "missing": 0
       },
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "task-strings",
@@ -531,7 +531,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "reward-done",
@@ -544,7 +544,7 @@
       "skip_reason": "no reward/done fields (position-control datasets rarely have them)",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "visual-quality",
@@ -637,7 +637,44 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
+    },
+    {
+      "id": "stats-f32-fingerprint",
+      "title": "Stats f32 accumulation fingerprint",
+      "verdict": "INFO",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "per-episode stats carry naive float32 accumulation (2 episode(s))",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "per-episode stats reproduce naive float32 accumulation bitwise (2 sampled episode(s), observation.state dims [8], action dims [13]): the converter's stats are accumulation-rounded, not data-exact; constant channels get a fabricated std and a DC-offset mean",
+          "episode_index": null,
+          "details": {
+            "episodes": {
+              "observation.state": [
+                9
+              ],
+              "action": [
+                2
+              ]
+            },
+            "dims": {
+              "observation.state": [
+                8
+              ],
+              "action": [
+                13
+              ]
+            }
+          }
+        }
+      ],
+      "charge": 0
     }
   ]
 }

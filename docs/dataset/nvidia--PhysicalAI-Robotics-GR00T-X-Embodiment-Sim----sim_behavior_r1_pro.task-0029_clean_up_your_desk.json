@@ -1,0 +1,517 @@
+{
+  "source": "nvidia/PhysicalAI-Robotics-GR00T-X-Embodiment-Sim//sim_behavior_r1_pro.task-0029_clean_up_your_desk",
+  "format_version": "v2.1",
+  "episodes": 8,
+  "frames": 140963,
+  "fps": 30.0,
+  "truncated": true,
+  "video_audited": 5,
+  "score": 66,
+  "score_model": "tiered-v2",
+  "verdict": "WARN",
+  "checks": [
+    {
+      "id": "stats-drift",
+      "title": "Stats drift (stored normalization stats vs actual data)",
+      "verdict": "WARN",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "worst error 38.7x the FAIL threshold",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "WARN",
+          "message": "observation.state.std: the sampled data is off the stored stats by 116.2x on dim 118 - far more than sampling explains; the stored stats look wrong (sampled audit: load the full dataset to confirm)",
+          "episode_index": null,
+          "details": {
+            "feature": "observation.state",
+            "stat": "std",
+            "dim": 118,
+            "error": 116.23076089337614,
+            "reference": "sampled"
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "observation.state.mean: the stored mean sits outside the loaded sample's 99.9% bootstrap interval on dim 81 (stored 0.99999, interval [0.998795, 0.998849] over 8 episodes, 1.02 std devs beyond it) - the stored stats look wrong; a sampled audit cannot prove it, load the full dataset to confirm",
+          "episode_index": null,
+          "details": {
+            "feature": "observation.state",
+            "stat": "mean",
+            "dim": 81,
+            "reference": "bootstrap",
+            "episodes": 8,
+            "stored": 0.9999896287918091,
+            "gap": 1.0200806602032244,
+            "interval": [
+              0.9987952613294583,
+              0.9988493646847016
+            ]
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "observation.state.std: the stored std sits outside the loaded sample's 99.9% bootstrap interval on dim 118 (stored 6.91916, interval [0.0503434, 0.0641243] over 8 episodes, 99.1% beyond it) - the stored stats look wrong; a sampled audit cannot prove it, load the full dataset to confirm",
+          "episode_index": null,
+          "details": {
+            "feature": "observation.state",
+            "stat": "std",
+            "dim": 118,
+            "reference": "bootstrap",
+            "episodes": 8,
+            "stored": 6.919159412384033,
+            "gap": 0.9907323568384273,
+            "interval": [
+              0.05034343287266644,
+              0.06412430041201266
+            ]
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "action.mean: the stored mean sits outside the loaded sample's 99.9% bootstrap interval on dim 19 (stored -0.186706, interval [-0.591913, -0.263579] over 8 episodes, 0.13 std devs beyond it) - the stored stats look wrong; a sampled audit cannot prove it, load the full dataset to confirm",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "stat": "mean",
+            "dim": 19,
+            "reference": "bootstrap",
+            "episodes": 8,
+            "stored": -0.1867063194513321,
+            "gap": 0.12619299252695165,
+            "interval": [
+              -0.5919127893335004,
+              -0.26357905896999656
+            ]
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action.std: the stored std sits outside the loaded sample's 99.9% bootstrap interval on dim 0 (stored 0.0962975, interval [0.0991923, 0.126204] over 8 episodes) - a gap below the WARN tolerance: descriptive only",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "stat": "std",
+            "dim": 0,
+            "reference": "bootstrap",
+            "episodes": 8,
+            "stored": 0.09629750996828079,
+            "gap": 0.03006069030247865,
+            "interval": [
+              0.09919227959233713,
+              0.12620359518107038
+            ]
+          }
+        }
+      ],
+      "charge": 10
+    },
+    {
+      "id": "timestamp-grid",
+      "title": "Timestamp grid (spacing, monotonic, start at 0)",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "evenly spaced at 30 fps and monotonic",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "dropped-frames",
+      "title": "Dropped / duplicated frames",
+      "verdict": "WARN",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "frame_index unavailable; episode lengths match the data",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "WARN",
+          "message": "frame_index column missing from the frame data - a default LeRobot feature that loaders and tools expect; gap/duplicate-index checks not evaluated (metadata length and video evidence are still checked)",
+          "episode_index": null,
+          "details": {}
+        },
+        {
+          "severity": "INFO",
+          "message": "no per-episode video segments in the metadata (v2.x or no videos): video frame counts not cross-checked",
+          "episode_index": null,
+          "details": {}
+        }
+      ],
+      "charge": 8
+    },
+    {
+      "id": "calibration-drift",
+      "title": "Calibration drift (action vs state on still frames)",
+      "verdict": "SKIP",
+      "weight": 10,
+      "weight_basis": "measured",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "state dim 256 != action dim 23 and no names to pair them by",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "idle-segments",
+      "title": "Idle segments (policy learns to do nothing)",
+      "verdict": "PASS",
+      "weight": 6,
+      "weight_basis": "measured",
+      "summary": "no episode starts idle or idles >= 30%",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "stuck-actuator",
+      "title": "Stuck actuators (joints that never move)",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "measured",
+      "summary": "every joint moves wherever the dataset uses it",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "action-saturation",
+      "title": "Action saturation (commands clipped at the limits)",
+      "verdict": "WARN",
+      "weight": 6,
+      "weight_basis": "placeholder",
+      "summary": "4 dim(s) saturated",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "WARN",
+          "message": "action dim 3: 12.6% of commands during motion are pinned at exactly its min (0.45) - clipped commands the policy will imitate",
+          "episode_index": null,
+          "details": {
+            "dim": 3,
+            "saturated_fraction": 0.12582482813204612,
+            "side": "min"
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "action dim 4: 12.6% of commands during motion are pinned at exactly its max (-0.4) - clipped commands the policy will imitate",
+          "episode_index": null,
+          "details": {
+            "dim": 4,
+            "saturated_fraction": 0.12582482813204612,
+            "side": "max"
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "action dim 8: 5.8% of commands during motion are pinned at exactly its min (-0.1745) - clipped commands the policy will imitate",
+          "episode_index": null,
+          "details": {
+            "dim": 8,
+            "saturated_fraction": 0.05751019243688972,
+            "side": "min"
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "action dim 20: 8.8% of commands during motion are pinned at exactly its min (-1.0472) - clipped commands the policy will imitate",
+          "episode_index": null,
+          "details": {
+            "dim": 20,
+            "saturated_fraction": 0.08845102568586127,
+            "side": "min"
+          }
+        }
+      ],
+      "charge": 6
+    },
+    {
+      "id": "nan-and-normalization",
+      "title": "NaN / Inf and normalization hazards",
+      "verdict": "WARN",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "4 near-constant dim(s), 1 constant dim(s)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "WARN",
+          "message": "observation.state dim 59: std 7.36e-07 - near-zero variance amplifies noise after normalization",
+          "episode_index": null,
+          "details": {
+            "feature": "observation.state",
+            "dim": 59,
+            "std": 7.35637345042295e-07
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "observation.state dim 65: std 1.33e-08 - near-zero variance amplifies noise after normalization",
+          "episode_index": null,
+          "details": {
+            "feature": "observation.state",
+            "dim": 65,
+            "std": 1.3326247442825014e-08
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "observation.state dim 143: std 2.39e-07 - near-zero variance amplifies noise after normalization",
+          "episode_index": null,
+          "details": {
+            "feature": "observation.state",
+            "dim": 143,
+            "std": 2.3855073710691155e-07
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "observation.state dim 144: std 2.54e-07 - near-zero variance amplifies noise after normalization",
+          "episode_index": null,
+          "details": {
+            "feature": "observation.state",
+            "dim": 144,
+            "std": 2.536875362838589e-07
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 6: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 6
+          }
+        }
+      ],
+      "charge": 10
+    },
+    {
+      "id": "duplicate-and-leakage",
+      "title": "Duplicate episodes / train-eval leakage",
+      "verdict": "PASS",
+      "weight": 2,
+      "weight_basis": "measured",
+      "summary": "no exact, partial or near duplicates",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "outlier-episodes",
+      "title": "Outlier episodes (duration, jerk, velocity, static, end-pose)",
+      "verdict": "PASS",
+      "weight": 3,
+      "weight_basis": "placeholder",
+      "summary": "no IQR outliers across 8 episodes",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "metrics": {
+          "duration_s": {
+            "0": 0.7350289851052617,
+            "5": 0.8974010484564392,
+            "10": 0.9055557096496825,
+            "15": 0.9856045266690706,
+            "20": 1.0143954733309295,
+            "26": 1.0811305577899204,
+            "31": 1.0573322608382105,
+            "36": 1.143316783624109
+          },
+          "p95_jerk": {
+            "0": 0.46807473824077467,
+            "5": 0.45016720749165495,
+            "10": 0.4659053450822516,
+            "15": 0.44074077921908805,
+            "20": 0.4479768387641219,
+            "26": 0.4679969885296471,
+            "31": 0.3745568092070504,
+            "36": 0.39769808410687757
+          },
+          "peak_velocity": {
+            "0": 3.9326530162713733,
+            "5": 3.3497918738662396,
+            "10": 3.850203668771491,
+            "15": 3.5982117388271333,
+            "20": 3.010334989747179,
+            "26": 3.721694125024415,
+            "31": 3.9759925805652756,
+            "36": 4.879709298844285
+          },
+          "velocity_spike": {
+            "0": null,
+            "5": null,
+            "10": null,
+            "15": null,
+            "20": null,
+            "26": null,
+            "31": null,
+            "36": null
+          },
+          "static_fraction": {
+            "0": 0.22363951996377085,
+            "5": 0.21810089020771514,
+            "10": 0.24297004227164123,
+            "15": 0.22441742654508612,
+            "20": 0.23702488378452283,
+            "26": 0.2194683908045977,
+            "31": 0.23007503016947373,
+            "36": 0.2356252122858945
+          },
+          "end_pose_deviation": {
+            "0": 0.9998389792981084,
+            "5": 0.999858311246914,
+            "10": 0.9851244303537238,
+            "15": 0.9998204096788468,
+            "20": 0.8045965113425767,
+            "26": 1.0,
+            "31": 0.9997207859766589,
+            "36": 1.0
+          }
+        },
+        "flagged": {}
+      },
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "embedded-images",
+      "title": "Embedded images in the parquet shards",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "no image features declared",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "camera-coverage",
+      "title": "Per-episode camera coverage",
+      "verdict": "SKIP",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "episode videos only partially fetched - camera coverage needs a full video audit",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "episode-file-pointers",
+      "title": "Episode file pointers (v3 shard metadata)",
+      "verdict": "SKIP",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "v2.x layout: one parquet per episode, no shard pointers to check",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "video-file-pointers",
+      "title": "Video file pointers (metadata vs repo contents)",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "all 600 metadata-referenced video files exist (the repo file listing)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "referenced": 600,
+        "missing": 0
+      },
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "task-strings",
+      "title": "Task strings",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "8 episodes, 2 tasks in meta/tasks; 0 finding(s)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "reward-done",
+      "title": "Reward / done fields",
+      "verdict": "SKIP",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "no reward/done fields (position-control datasets rarely have them)",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "visual-quality",
+      "title": "Visual quality (blur, lighting)",
+      "verdict": "SKIP",
+      "weight": 6,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "no video files found for the loaded episodes",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "deployment-readiness",
+      "title": "Deployment readiness (would this dataset serve a policy?)",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "no deployment blockers found",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "stats-f32-fingerprint",
+      "title": "Stats f32 accumulation fingerprint",
+      "verdict": "SKIP",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "no per-episode stats",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    }
+  ]
+}
