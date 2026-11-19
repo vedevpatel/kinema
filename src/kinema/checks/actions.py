@@ -197,7 +197,9 @@ class NanAndNormalizationCheck(Check):
                         details={"feature": feat, "dim": int(j), "std": float(std[j])},
                     )
                 )
-            for f in _dominating_outliers(ctx, feat, arr):
+            # dims the constant / near-zero-variance rules already report are
+            # not judged again (behavior1k: a numerically-zero dim, std 1e-11)
+            for f in _dominating_outliers(ctx, feat, arr, skip=set(zero.tolist()) | set(tiny.tolist())):
                 res.findings.append(f)
         if not res.findings:
             res.summary = "no NaN/Inf; all dims have usable variance"
@@ -223,15 +225,24 @@ class NanAndNormalizationCheck(Check):
 # the frames lie beyond _FAR_BULKS bulk widths (q01..q99) of the median,
 # are at most _FAR_MAX_FRAC of the dim's frames, and inflate its std by at
 # least _DOM_STD_RATIO. A dim flat in its bulk (a parked joint that moves
-# rarely) is not judged - its rare moves ARE its signal.
+# rarely) is not judged - its rare moves ARE its signal. Flat is relative:
+# a bulk narrower than _FLAT_BULK_REL of the dim's own scale (the larger of
+# |median| and the farthest frame's distance from it). An absolute floor let
+# parked dims carrying numeric noise through (2026-11-19 board: ucsd dim 5
+# parked at 0.90, GR00T-sim dims parked at 100 / 55, behavior1k dims at
+# ~2e-8), while dropouts from a live value keep a bulk percent-wide
+# (austin_buds 1.7%, hggforget 2.3% of their scale).
 _FAR_BULKS = 20.0
 _FAR_MAX_FRAC = 0.01
 _DOM_STD_RATIO = 3.0
+_FLAT_BULK_REL = 1e-3
 
 
-def _dominating_outliers(ctx, feat: str, arr: np.ndarray) -> list[Finding]:
+def _dominating_outliers(ctx, feat: str, arr: np.ndarray, skip: set | None = None) -> list[Finding]:
     out: list[Finding] = []
     for j in range(arr.shape[1]):
+        if skip and j in skip:
+            continue
         col = np.asarray(arr[:, j], dtype=np.float64)
         ok = np.isfinite(col)
         x = col[ok]
@@ -239,7 +250,8 @@ def _dominating_outliers(ctx, feat: str, arr: np.ndarray) -> list[Finding]:
             continue
         q01, q50, q99 = np.percentile(x, [1, 50, 99])
         bulk = q99 - q01
-        if bulk <= 1e-8 * max(1.0, abs(q50)):
+        scale = max(abs(q50), float(np.max(np.abs(x - q50))))
+        if bulk <= max(1e-12, _FLAT_BULK_REL * scale):
             continue
         far = np.abs(x - q50) > _FAR_BULKS * bulk
         n_far = int(far.sum())
@@ -251,15 +263,22 @@ def _dominating_outliers(ctx, feat: str, arr: np.ndarray) -> list[Finding]:
         rows = np.flatnonzero(ok)[far]
         eps = sorted({int(e) for e in ctx.episode_index[rows]})
         worst = float(x[far][np.argmax(np.abs(x[far] - q50))])
+        # all at episode starts: a reset transient, not scattered glitches
+        # (behavior1k: every episode's frame 0 sits far outside the bulk)
+        at_start = ctx.frame_index is not None and float(np.mean(ctx.frame_index[rows] <= 1)) >= 0.9
+        why = ("All at episode starts - a reset transient: drop or fix the first frame(s) of each "
+               "episode, or normalize by quantiles" if at_start else
+               "Glitch frames, or a different robot/unit mixed in: drop or fix those episodes, "
+               "or normalize by quantiles")
         out.append(Finding(
             "nan-and-normalization", Severity.WARN,
             f"{feat} dim {j}: {n_far} frame(s) in {len(eps)} episode(s) (e.g. {eps[:5]}) lie "
             f"far outside the rest (up to {worst:.4g}; 98% of frames within "
             f"[{q01:.4g}, {q99:.4g}]) and inflate the std {sd_all / sd_core:.1f}x "
             f"({sd_all:.4g} vs {sd_core:.4g} without them) - mean/std normalization squashes "
-            "every other frame. Glitch frames, or a different robot/unit mixed in: drop or "
-            "fix those episodes, or normalize by quantiles",
+            f"every other frame. {why}",
             details={"kind": "dominating-outliers", "feature": feat, "dim": int(j),
+                     "at_episode_start": bool(at_start),
                      "frames": n_far, "episodes": eps, "std_all": sd_all, "std_core": sd_core,
                      "bulk": [float(q01), float(q99)], "worst": worst},
         ))
