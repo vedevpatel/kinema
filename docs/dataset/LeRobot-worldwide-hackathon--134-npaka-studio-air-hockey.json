@@ -8,7 +8,7 @@
   "video_audited": 5,
   "score": 100,
   "score_model": "tiered-v2",
-  "verdict": "PASS",
+  "verdict": "INFO",
   "checks": [
     {
       "id": "stats-drift",
@@ -16,12 +16,12 @@
       "verdict": "PASS",
       "weight": 10,
       "weight_basis": "placeholder",
-      "summary": "data matches meta/stats.json (worst 0% of the FAIL threshold)",
+      "summary": "data matches the stored stats (worst 0% of the FAIL threshold)",
       "skipped": false,
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "timestamp-grid",
@@ -34,7 +34,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "dropped-frames",
@@ -47,7 +47,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "calibration-drift",
@@ -65,7 +65,7 @@
             "offset_fraction": 0.0012035501473951567,
             "scale_error": -0.03371651609843903,
             "r2": 0.041010502124036896,
-            "line_vs_step": 0.9923761012017243,
+            "line_vs_step": 0.9923751260026006,
             "still_frames": 8940
           },
           "3": {
@@ -73,7 +73,7 @@
             "offset_fraction": 0.0022866753521707194,
             "scale_error": -0.007066147971425277,
             "r2": 0.0013102666420377052,
-            "line_vs_step": 0.9970391988389973,
+            "line_vs_step": 0.9970578844253402,
             "still_frames": 9739
           },
           "5": {
@@ -99,7 +99,7 @@
         }
       },
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "idle-segments",
@@ -112,7 +112,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 6
+      "charge": 0
     },
     {
       "id": "stuck-actuator",
@@ -125,7 +125,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "action-saturation",
@@ -138,7 +138,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 6
+      "charge": 0
     },
     {
       "id": "nan-and-normalization",
@@ -151,7 +151,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
     },
     {
       "id": "duplicate-and-leakage",
@@ -164,7 +164,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 2
+      "charge": 0
     },
     {
       "id": "outlier-episodes",
@@ -265,7 +265,7 @@
         "flagged": {}
       },
       "findings": [],
-      "charge": 3
+      "charge": 0
     },
     {
       "id": "embedded-images",
@@ -278,7 +278,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "camera-coverage",
@@ -291,7 +291,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "episode-file-pointers",
@@ -309,7 +309,7 @@
         "local_shards": 1
       },
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "video-file-pointers",
@@ -325,7 +325,7 @@
         "missing": 0
       },
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "task-strings",
@@ -338,7 +338,7 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "reward-done",
@@ -351,7 +351,7 @@
       "skip_reason": "no reward/done fields (position-control datasets rarely have them)",
       "details": {},
       "findings": [],
-      "charge": 8
+      "charge": 0
     },
     {
       "id": "visual-quality",
@@ -374,7 +374,7 @@
         }
       },
       "findings": [],
-      "charge": 6
+      "charge": 0
     },
     {
       "id": "deployment-readiness",
@@ -387,7 +387,62 @@
       "skip_reason": "",
       "details": {},
       "findings": [],
-      "charge": 10
+      "charge": 0
+    },
+    {
+      "id": "stats-f32-fingerprint",
+      "title": "Stats f32 accumulation fingerprint",
+      "verdict": "INFO",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "per-episode stats carry naive float32 accumulation (10 episode(s))",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "per-episode stats reproduce naive float32 accumulation bitwise (10 sampled episode(s), observation.state dims [0, 1, 2, 3, 4]..., action dims [0, 1, 2, 3, 4]...): the converter's stats are accumulation-rounded, not data-exact; constant channels get a fabricated std and a DC-offset mean",
+          "episode_index": null,
+          "details": {
+            "episodes": {
+              "observation.state": [
+                0,
+                2,
+                5,
+                8,
+                11
+              ],
+              "action": [
+                0,
+                2,
+                5,
+                8,
+                11
+              ]
+            },
+            "dims": {
+              "observation.state": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5
+              ],
+              "action": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5
+              ]
+            }
+          }
+        }
+      ],
+      "charge": 0
     }
   ]
 }
