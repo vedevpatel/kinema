@@ -50,7 +50,60 @@ CASES = {
     # stats.json says min -24.4 - stats never updated after it was recorded.
     "mendelbeans_stale_stats": dict(repo="MendelBeans/lerobot_dataset_put_pen_in_the_holder_20261118_215903",
                                     episodes=[51], spread=10, keep_stats=True, partial=True),
+    # The cases below load the exact data files the 2026-11-20 board sampled
+    # (scripts/leaderboard.py download_sample) at the revision it read, then
+    # keep `keep` episodes and the listed state / action dims.
+    #
+    # must NOT flag: dominating outliers. joint_qvel[0,1,5] (state 84/85/89;
+    # base_qvel 253-255 is a byte-exact copy) reads ~1e-7 while the base
+    # moves at ~0.25 m/s - uncorrelated with d(base_qpos)/dt - and its
+    # spikes form a continuous heavy tail with as many frames at 10-20 bulk
+    # widths as beyond 20. No frame_index column (the loader fills zeros):
+    # the board called them reset transients; they sit mid-episode.
+    "groot_basevel_tail": dict(
+        repo="nvidia/PhysicalAI-Robotics-GR00T-X-Embodiment-Sim",
+        subpath="sim_behavior_r1_pro.task-0013_loading_the_car",
+        revision="ea7ac0b68f87da62f1e726771bba0fe74300802f",
+        files=[f"data/chunk-000/episode_{e:08d}.parquet" for e in (0, 5, 10, 15, 20, 26, 31, 36, 41)],
+        keep=[0, 15, 26, 36], state_dims=[84, 85, 89], action_dims=[0]),
+    # must NOT flag: dominating outliers. State dim 146 (robot_ori_sin[0] in
+    # the R1Pro layout): single-frame spikes scattered mid-episode, a
+    # continuous tail out of a 4e-5-wide bulk. No frame_index column; the
+    # board and docs named these reset transients.
+    "behavior1k_tilt_tail": dict(
+        repo="lerobot/behavior1k-task0045",
+        revision="27458fab90baf767109b214c9b3fa4f82e9bc97f",
+        files=[f"data/chunk-000/file-{i:03d}.parquet" for i in (0, 1, 2, 3, 5)],
+        keep=[450010, 450060, 450110, 450150, 450200, 450300], state_dims=[140, 146, 150], action_dims=[0]),
+    # MUST flag: dominating outliers on state and action dim 14. A live
+    # value near 0.95 drops to 0 for a few frames in some episodes.
+    "hggforget_dropout": dict(
+        repo="hggforget/lerobot_2026-10-26_12-09-32",
+        revision="1debf8fce5cee8efd9ee9898ed607c68fe19e25d",
+        files="board", state_dims=[0, 1, 2, 14], action_dims=[0, 1, 2, 14]),
 }
+
+
+def _load_files(spec: dict):
+    """Load the named data files (or the board's file spread, files="board")
+    of a pinned revision, with the full meta/, as the board does."""
+    from huggingface_hub import list_repo_tree, snapshot_download
+
+    sub = spec.get("subpath", "")
+    pre = f"{sub}/" if sub else ""
+    files = spec["files"]
+    if files == "board":  # download_sample's even spread of 40 files
+        names = sorted(f.path[len(pre):] for f in list_repo_tree(
+            spec["repo"], repo_type="dataset", recursive=True, revision=spec["revision"],
+            path_in_repo=f"{pre}data") if hasattr(f, "size"))
+        n = len(names)
+        files = [names[i] for i in sorted({round(i * (n - 1) / 39) for i in range(40)} if n > 40 else range(n))]
+    local = Path(snapshot_download(spec["repo"], repo_type="dataset", revision=spec["revision"],
+                                   allow_patterns=[f"{pre}meta/**", *(pre + f for f in files)]))
+    root = local / sub if sub else local
+    ctx = load_dataset(str(root), max_episodes=250)
+    src = f"{spec['repo']}{'//' + sub if sub else ''}@{spec['revision']}"
+    return ctx, src
 
 
 def _revision(repo: str) -> str:
@@ -64,9 +117,11 @@ def _far(x: np.ndarray) -> np.ndarray:
 
 
 def build(name: str, spec: dict) -> Path:
-    rev = _revision(spec["repo"])
-    src = f"{spec['repo']}@{rev}"
-    if "episodes" in spec:
+    src = f"{spec['repo']}@{spec.get('revision') or _revision(spec['repo'])}"
+    if "files" in spec:
+        ctx, src = _load_files(spec)
+        keep = spec.get("keep") or ctx.episode_ids()
+    elif "episodes" in spec:
         ctx = load_dataset(src, max_episodes=spec["spread"])
         have = set(ctx.episode_ids())
         missing = [e for e in spec["episodes"] if e not in have]
@@ -97,6 +152,11 @@ def build(name: str, spec: dict) -> Path:
         "action_names": np.array([str(n) for n in (ctx.action_names or [f"a{i}" for i in range(ctx.action.shape[1])])]),
         "source": np.array(src),
     }
+    if ctx.present_columns is not None and "frame_index" not in ctx.present_columns:
+        # the loader zero-fills a missing frame_index: keep each frame's real
+        # position (for timestamps) and mark the column absent, as it is
+        out["frame_index"] = np.concatenate([np.arange(len(ctx.rows_for(e))) for e in keep]).astype(np.int32)
+        out["no_frame_index"] = np.int8(1)
     if spec.get("keep_stats"):
         keys = ctx.feature_keys
         if not ctx.stats_json:
@@ -128,6 +188,11 @@ def build(name: str, spec: dict) -> Path:
                 out[k] = v[:, d]
             elif k.startswith("stats_") or k in ("state_names", "action_names"):
                 out[k] = v[d]
+    for short in ("state", "action"):  # separate cuts per feature
+        if spec.get(f"{short}_dims"):
+            d = np.asarray(spec[f"{short}_dims"])
+            out[short] = out[short][:, d]
+            out[f"{short}_names"] = out[f"{short}_names"][d]
     path = HERE / f"{name}.npz"
     np.savez_compressed(path, **out)
     print(f"{name}: {src} | {len(keep)} episodes, {len(rows)} frames | {path.stat().st_size / 1024:.0f} KB")

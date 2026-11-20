@@ -70,6 +70,27 @@ def _nyu(ctx):
     assert 10 in {f.details["dim"] for f in hits}
 
 
+def _groot_basevel(ctx):
+    # a heavy tail is not a handful of glitches: the frames beyond 20 bulk
+    # widths continue a tail as dense at 10-20 (dims 84/85/89 of the source)
+    hits = _dominating(C["nan-and-normalization"].run(ctx, CFG), "observation.state")
+    assert not hits, [f.message for f in hits]
+
+
+def _behavior1k_tilt(ctx):
+    # mid-episode single-frame spikes continuing the bulk's tail (dim 146)
+    hits = _dominating(C["nan-and-normalization"].run(ctx, CFG), "observation.state")
+    assert not hits, [f.message for f in hits]
+
+
+def _hggforget(ctx):
+    # dropouts to 0 from a live ~0.95 on dim 14 (extract dim 3), state and action
+    res = C["nan-and-normalization"].run(ctx, CFG)
+    for feat in ("observation.state", "action"):
+        hits = _dominating(res, feat)
+        assert [h.details["dim"] for h in hits] == [3] and not hits[0].details["at_episode_start"], feat
+
+
 def _mendelbeans(ctx):
     res = C["stats-drift"].run(ctx, CFG)
     assert res.verdict == Severity.FAIL, res.summary
@@ -83,6 +104,9 @@ EXPECT = {
     "austin_dropout": _austin,
     "nyu_wrap": _nyu,
     "mendelbeans_stale_stats": _mendelbeans,
+    "groot_basevel_tail": _groot_basevel,
+    "behavior1k_tilt_tail": _behavior1k_tilt,
+    "hggforget_dropout": _hggforget,
 }
 
 

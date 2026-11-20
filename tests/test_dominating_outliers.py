@@ -1,6 +1,7 @@
 """Glitch frames that set a dim's normalization (IPEC-COMMUNITY/dobbe_lerobot:
 odometry glitches to z = -132 m in 6 of 5208 episodes inflate z's std 15x)."""
 import numpy as np
+import pytest
 
 from kinema.checks import ALL_CHECKS, CheckConfig, Severity
 from kinema.dataset import load_dataset
@@ -162,3 +163,150 @@ def test_numerically_zero_dim_is_left_to_the_near_zero_rule(tmp_path):
     res = CHECK.run(load_dataset(str(root)), CheckConfig())
     assert dom(res) == [], [f.message for f in dom(res)]
     assert any(f.details.get("dim") == 3 and "near-zero variance" in f.message for f in res.findings)
+
+
+# --- heavy tails vs separated populations (2026-11-20 board) ---------------
+# GR00T-sim joint_qvel / base_qvel and behavior1k dim 146: frames beyond 20
+# bulk widths that continue a tail as dense just inside the cut - the tip of
+# a continuum, not a handful of glitches. Built at board-like frame counts
+# (the decision counts frames per octave; a 1440-frame fixture is too thin
+# to show a tail and falls back to flagging). Every shape runs at several
+# unit scales: the rule is in bulk widths and frame counts only.
+
+from corpus import write_case  # noqa: E402
+
+SCALES = (1e-6, 1e-3, 1.0, 180 / np.pi, 1e3, 1e6)
+_EPS, _LEN = 40, 1500
+
+
+def _case(tmp_path, state, *, no_frame_index=False):
+    n = _EPS * _LEN
+    ep = np.repeat(np.arange(_EPS), _LEN).astype(np.int32)
+    c = {"state": state.astype(np.float64), "action": np.zeros((n, 1)),
+         "episode_index": ep, "frame_index": np.tile(np.arange(_LEN), _EPS).astype(np.int32),
+         "fps": np.float64(30.0), "state_names": np.array([f"s{i}" for i in range(state.shape[1])]),
+         "action_names": np.array(["a0"])}
+    if no_frame_index:
+        c["no_frame_index"] = np.int8(1)
+    return load_dataset(str(write_case(tmp_path / "ds", c)))
+
+
+def _live(rng):
+    # an ordinary moving joint: smooth per-episode motion plus sensor noise
+    t = np.arange(_EPS * _LEN) / _LEN
+    return np.sin(2 * np.pi * t + rng.uniform(0, 6)) + 0.01 * rng.normal(size=len(t))
+
+
+def _heavy_tail(rng):
+    # 0.6% spikes whose magnitudes are log-uniform from the bulk out to
+    # ~100 bulk widths: every octave holds about as many frames as the next
+    x = rng.normal(size=_EPS * _LEN)
+    k = rng.random(len(x)) < 0.006
+    x[k] = rng.choice([-1, 1], k.sum()) * 10 ** rng.uniform(0.3, 2.7, k.sum())
+    return x
+
+
+def _old_rule_fires(x):
+    # the shape must sit inside the detection zone the cut-at-20 rule used,
+    # or a test that it is not flagged proves nothing
+    q01, q50, q99 = np.percentile(x, [1, 50, 99])
+    far = np.abs(x - q50) > 20 * (q99 - q01)
+    return 0 < far.sum() <= 0.01 * len(x) and x.std() >= 3 * x[~far].std()
+
+
+def _hits(ctx, dim):
+    return [f for f in dom(CHECK.run(ctx, CheckConfig())) if f.details["dim"] == dim]
+
+
+@pytest.mark.parametrize("scale", SCALES)
+def test_a_heavy_tail_is_not_a_handful_of_glitches(tmp_path, scale):
+    # also the "legitimate sparse signal" of impulsive channels: contact
+    # forces whose spikes come in every size
+    rng = np.random.default_rng(10)
+    tail = _heavy_tail(rng)
+    assert _old_rule_fires(tail)
+    ctx = _case(tmp_path, np.stack([_live(rng), tail * scale, (tail + 3.0) * scale], axis=1))
+    assert not _hits(ctx, 1) and not _hits(ctx, 2), [f.message for f in dom(CHECK.run(ctx, CheckConfig()))]
+
+
+@pytest.mark.parametrize("scale", SCALES)
+def test_near_zero_padding_jitter_is_not_judged(tmp_path, scale):
+    # GR00T base_qvel: a padding-like channel at ~1e-7 whose jitter is
+    # heavy-tailed - above the near-zero rule, not flat enough to be parked
+    rng = np.random.default_rng(11)
+    pad = 1e-7 * _heavy_tail(rng)
+    assert _old_rule_fires(pad)
+    ctx = _case(tmp_path, np.stack([_live(rng) * scale, pad * scale], axis=1))
+    assert not _hits(ctx, 1)
+
+
+@pytest.mark.parametrize("scale", SCALES)
+def test_glitches_on_a_heavy_tailed_channel_are_still_found(tmp_path, scale):
+    # the cut walks out past the tail and finds the separated population
+    rng = np.random.default_rng(12)
+    x = _heavy_tail(rng)
+    # ~400 bulk widths: past the tail (which ends near 100) but inside the
+    # parked rule's 1000-width ceiling (see test_parked_exemption_...)
+    glitch = np.concatenate([3 * _LEN + np.arange(100, 108), 17 * _LEN + np.arange(50, 56),
+                             29 * _LEN + np.arange(700, 706)])
+    x[glitch] = 2000.0
+    hits = _hits(_case(tmp_path, np.stack([_live(rng), x * scale], axis=1)), 1)
+    assert len(hits) == 1
+    assert hits[0].details["frames"] == len(glitch) and hits[0].details["episodes"] == [3, 17, 29]
+    assert hits[0].details["cut_bulks"] > 20 and not hits[0].details["at_episode_start"]
+
+
+@pytest.mark.parametrize("scale", SCALES)
+def test_real_extreme_glitches_are_found_at_every_unit_scale(tmp_path, scale):
+    # dobbe (one far value), austin/hggforget (dropouts to 0 from a live
+    # value) and a glitch population spread over three decades of distance
+    rng = np.random.default_rng(13)
+    n = _EPS * _LEN
+    odo = _live(rng)
+    odo[np.r_[5 * _LEN + np.arange(10, 25), 22 * _LEN + np.arange(400, 415)]] = -132.0
+    drop = 0.95 + 0.005 * _live(rng)
+    drop[rng.choice(n, 30, replace=False)] = 0.0
+    spread = _live(rng)
+    sp = rng.choice(n, 25, replace=False)
+    spread[sp] = rng.choice([-1, 1], 25) * 10 ** rng.uniform(1.7, 2.7, 25)
+    ctx = _case(tmp_path, np.stack([odo, drop, spread], axis=1) * scale)
+    assert {f.details["dim"] for f in dom(CHECK.run(ctx, CheckConfig()))} == {0, 1, 2}
+    assert _hits(ctx, 0)[0].details["episodes"] == [5, 22]
+
+
+def test_parked_exemption_still_holds_beside_the_tail_rule(tmp_path):
+    # a padding dim at exactly 0 with three frames at 5.0, and a joint parked
+    # at 0.9 moving once: flat in their bulk, so not judged at all
+    rng = np.random.default_rng(14)
+    pad = np.zeros(_EPS * _LEN)
+    pad[[100, 200, 300]] = 5.0
+    parked = 0.9 + 1e-6 * rng.normal(size=_EPS * _LEN)
+    parked[7 * _LEN + 10: 7 * _LEN + 60] = 1.278
+    ctx = _case(tmp_path, np.stack([_live(rng), pad, parked], axis=1))
+    assert not _hits(ctx, 1) and not _hits(ctx, 2)
+
+
+@pytest.mark.xfail(strict=True, reason="known gap: a smooth excursion of a jittery-but-idle channel "
+                   "(GR00T task-0028's one 10 s grasp, gripper bulk 0.16% of its range) is separated "
+                   "and not parked, so it is still flagged; see docs/checks.md")
+def test_a_smooth_burst_on_an_idle_channel_is_its_signal(tmp_path):
+    rng = np.random.default_rng(15)
+    x = 0.0497 + 2e-5 * rng.normal(size=_EPS * _LEN)
+    s = 2 * _LEN + 6959 % _LEN
+    x[s:s + 300] = 0.0497 * (1 - np.sin(np.linspace(0, np.pi, 300)))  # close and reopen
+    assert _old_rule_fires(x)
+    assert not _hits(_case(tmp_path, np.stack([_live(rng), x], axis=1)), 1)
+
+
+def test_a_missing_frame_index_is_not_read_as_episode_starts(tmp_path):
+    # GR00T-sim / behavior1k ship no frame_index column; the loader's zero
+    # fill made every glitch an "episode start". Position comes from time
+    # order instead, both ways round.
+    rng = np.random.default_rng(16)
+    mid, first = _live(rng), _live(rng)
+    mid[np.arange(20) * _LEN + 700] = 200.0
+    first[np.arange(0, _EPS, 2) * _LEN] = 200.0
+    ctx = _case(tmp_path, np.stack([mid, first], axis=1), no_frame_index=True)
+    assert ctx.present_columns is not None and "frame_index" not in ctx.present_columns
+    assert not _hits(ctx, 0)[0].details["at_episode_start"]
+    assert _hits(ctx, 1)[0].details["at_episode_start"] and "reset transient" in _hits(ctx, 1)[0].message

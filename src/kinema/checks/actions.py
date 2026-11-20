@@ -232,14 +232,67 @@ class NanAndNormalizationCheck(Check):
 # parked at 0.90, GR00T-sim dims parked at 100 / 55, behavior1k dims at
 # ~2e-8), while dropouts from a live value keep a bulk percent-wide
 # (austin_buds 1.7%, hggforget 2.3% of their scale).
+#
+# The far frames must also be a population of their own, not the tip of a
+# heavy tail the cut happens to slice: glitches, dropouts and wrap-arounds
+# jump, leaving the band just inside the cut empty, while a heavy-tailed
+# channel populates every octave out to its extreme (2026-11-20 board:
+# GR00T-sim base_qvel - a channel uncorrelated with the base's real motion
+# - and behavior1k dim 146 hold as many frames at 10-20 bulk widths as in
+# any octave beyond 20; austin_buds, hggforget and nyu_franka_play hold
+# none, dobbe 0-2). While the octave inside the cut holds at least
+# _SHOULDER_FRAC as many frames as the fullest octave beyond it (less
+# sqrt(n) counting noise, so one or two frames are no evidence of a
+# tail), the cut moves out an octave; a separated population further out
+# (real glitches on a heavy-tailed channel) is still found and judged
+# against everything inside it. Moving the cut out only adds frames to the
+# core, so this never flags a dim the 20-width cut alone would not.
 _FAR_BULKS = 20.0
 _FAR_MAX_FRAC = 0.01
 _DOM_STD_RATIO = 3.0
 _FLAT_BULK_REL = 1e-3
+_SHOULDER_FRAC = 0.25
+
+
+def _separated_cut(z: np.ndarray, n: int) -> float | None:
+    """The innermost cut (in bulk widths, _FAR_BULKS * 2**k) beyond which the
+    frames are separated from the bulk's tail, or None when there is none
+    or the far frames are too many to be glitches."""
+    cut = _FAR_BULKS
+    while True:
+        zf = z[z > cut]
+        if len(zf) == 0 or len(zf) > _FAR_MAX_FRAC * n:
+            return None
+        # per-octave counts on both sides: a far set spread over several
+        # octaves is compared octave for octave, not summed against one
+        densest = int(np.bincount(np.floor(np.log2(zf / cut)).astype(np.int64)).max())
+        shoulder = int(np.count_nonzero((z > cut / 2) & (z <= cut)))
+        if shoulder - np.sqrt(shoulder) < _SHOULDER_FRAC * densest:
+            return cut
+        cut *= 2
+
+
+def _episode_position(ctx) -> np.ndarray | None:
+    """Each row's position within its episode: frame_index when the data
+    carries a real one, else the row's rank in time order. GR00T-sim and
+    behavior1k ship no frame_index column and the loader fills zeros, which
+    made every frame look like an episode's first."""
+    fi = ctx.frame_index
+    if fi is None:
+        return None
+    present = ctx.present_columns is None or "frame_index" in ctx.present_columns
+    if present and len(fi) and int(fi.max()) != int(fi.min()):
+        return fi
+    pos = np.zeros(len(ctx.episode_index), dtype=np.int64)
+    for e in np.unique(ctx.episode_index):
+        r = ctx.rows_for(int(e))
+        pos[r] = np.arange(len(r))
+    return pos
 
 
 def _dominating_outliers(ctx, feat: str, arr: np.ndarray, skip: set | None = None) -> list[Finding]:
     out: list[Finding] = []
+    position = None
     for j in range(arr.shape[1]):
         if skip and j in skip:
             continue
@@ -253,10 +306,12 @@ def _dominating_outliers(ctx, feat: str, arr: np.ndarray, skip: set | None = Non
         scale = max(abs(q50), float(np.max(np.abs(x - q50))))
         if bulk <= max(1e-12, _FLAT_BULK_REL * scale):
             continue
-        far = np.abs(x - q50) > _FAR_BULKS * bulk
-        n_far = int(far.sum())
-        if n_far == 0 or n_far > _FAR_MAX_FRAC * len(x):
+        z = np.abs(x - q50) / bulk
+        cut = _separated_cut(z, len(x))
+        if cut is None:
             continue
+        far = z > cut
+        n_far = int(far.sum())
         sd_all, sd_core = float(x.std()), float(x[~far].std())
         if sd_core <= 0 or sd_all < _DOM_STD_RATIO * sd_core:
             continue
@@ -264,8 +319,9 @@ def _dominating_outliers(ctx, feat: str, arr: np.ndarray, skip: set | None = Non
         eps = sorted({int(e) for e in ctx.episode_index[rows]})
         worst = float(x[far][np.argmax(np.abs(x[far] - q50))])
         # all at episode starts: a reset transient, not scattered glitches
-        # (behavior1k: every episode's frame 0 sits far outside the bulk)
-        at_start = ctx.frame_index is not None and float(np.mean(ctx.frame_index[rows] <= 1)) >= 0.9
+        if position is None:
+            position = _episode_position(ctx)
+        at_start = position is not None and float(np.mean(position[rows] <= 1)) >= 0.9
         why = ("All at episode starts - a reset transient: drop or fix the first frame(s) of each "
                "episode, or normalize by quantiles" if at_start else
                "Glitch frames, or a different robot/unit mixed in: drop or fix those episodes, "
@@ -280,6 +336,6 @@ def _dominating_outliers(ctx, feat: str, arr: np.ndarray, skip: set | None = Non
             details={"kind": "dominating-outliers", "feature": feat, "dim": int(j),
                      "at_episode_start": bool(at_start),
                      "frames": n_far, "episodes": eps, "std_all": sd_all, "std_core": sd_core,
-                     "bulk": [float(q01), float(q99)], "worst": worst},
+                     "bulk": [float(q01), float(q99)], "worst": worst, "cut_bulks": float(cut)},
         ))
     return out

@@ -356,24 +356,66 @@ Mean/std normalization then squashes every other frame -
 of its 5208 episodes) inflate the action dims' std up to 21x;
 `lerobot/austin_buds_dataset`'s all-zero state dropout frames inflate
 rotation entries 15-60x; `lerobot/nyu_franka_play_dataset`'s angle
-wrap-arounds (-2*pi jumps) inflate a delta-action dim 7x. The finding names
-the episodes, and says so when every such frame is an episode's first - a
-reset transient (`lerobot/behavior1k-task0045`). Not judged: a dim flat in
-its bulk - a bulk narrower than 0.1% of the dim's own scale (the larger of
-|median| and the farthest frame's distance), i.e. a parked joint that moves
-rarely, whose rare moves are its signal - and dims the constant /
-near-zero-variance rules already report. On a sampled load the frames must
-be in the loaded episodes; stats-drift's sampled notes add a hint when the
-stored range reaches far beyond everything loaded.
+wrap-arounds (-2*pi jumps) inflate a delta-action dim 7x.
+
+The far frames must be a population of their own, not the tip of a heavy
+tail that the 20-width cut happens to slice. Glitches, dropouts and
+wrap-arounds jump, leaving the octave just inside the cut, 10-20 bulk
+widths, (nearly) empty; a heavy-tailed channel fills every octave out to its
+extreme. While that octave holds at least a quarter as many frames as the
+fullest octave beyond the cut (after a sqrt(n) counting allowance, so one or
+two frames are no evidence of a tail), the cut moves out an octave (40, 80,
+...) and the test repeats. A separated population further out - real
+glitches on a heavy-tailed channel - is still found and judged against
+everything inside it; a tail that never separates is not judged. The
+finding's `cut_bulks` detail records the cut used. All of it is in bulk
+widths and frame counts, so it is unit-free.
+
+The finding names the episodes, and says so when every such frame is an
+episode's first - a reset transient. Position within an episode is the
+frame_index when the data carries one, else the frame's rank in time order:
+GR00T-sim and behavior1k ship no frame_index column, and the loader's zero
+fill once made every such frame read as an episode start.
+
+Not judged: a dim flat in its bulk - a bulk narrower than 0.1% of the dim's
+own scale (the larger of |median| and the farthest frame's distance), i.e. a
+parked joint that moves rarely, whose rare moves are its signal - and dims
+the constant / near-zero-variance rules already report. On a sampled load
+the frames must be in the loaded episodes; stats-drift's sampled notes add a
+hint when the stored range reaches far beyond everything loaded.
+
+Known gaps. Because the flatness scale includes the farthest frame, frames
+more than ~1000 bulk widths out make any bulk look flat: one episode
+recorded in mm inside a metre dataset is not judged (one in cm is). And a
+smooth excursion of a jittery-but-idle channel - GR00T-sim task-0028's
+single 10 s grasp, the gripper's open bulk 0.16% of its range - is separated
+and not parked, so it is still flagged (an `xfail` regression holds the
+shape). Every true positive below enters and leaves its excursion in one
+frame while that grasp passes through intermediate values, which a future
+rule could use; one real example is too few to validate it on.
 
 Validation: before merging, no finding on the 36 pinned calibration datasets
 and 1 of 40 random board datasets (austin_buds, a true positive). The first
 board run then flagged 7 of 329 rows: 3 true positives (austin_buds,
 hggforget, nyu_franka_play), 3 parked-dim false positives
 (ucsd_pick_and_place, two GR00T-sim tasks) that an absolute flatness floor
-let through, and behavior1k's reset transients and numerically-zero dims.
-The relative flatness test above clears the false positives and keeps the
-true ones; regression tests carry each shape.
+let through, and behavior1k's numerically-zero dims plus spikes then read as
+reset transients. The relative flatness test above cleared the parked-dim
+false positives.
+
+The 2026-11-20 board then held 26 findings on 9 rows. Raw-data review: the
+14 on GR00T-sim tasks 0013 / 0021 / 0027 sit on joint_qvel[0,1,5] and its
+byte-exact copy base_qvel - a channel at ~1e-7 m/s while the base moves at
+~0.25 m/s, uncorrelated with d(base_qpos)/dt - and, with behavior1k-task0045
+dim 146, form continuous tails, all labelled reset transients by the zero
+fill though they sit mid-episode. The separation test clears those 15. The
+pinned calibration list is unchanged, and austin_buds, hggforget,
+nyu_franka_play and dobbe keep every finding, bit for bit (each is separated
+at the first cut). Still flagged: task-0007's joint efforts (+25 at a limit,
+with runs from -23 at most episode starts - real transients that set the
+std 29x) and task-0028's grasp (the gap above). Frozen extracts of GR00T
+task-0013, behavior1k-task0045 and hggforget joined the corpus and the
+invariance suite.
 
 No knobs.
 
