@@ -126,7 +126,11 @@ def compare_rows(prev: dict | None, cur: dict, checks_prev: list[str], checks_cu
         return {**out, "label": "still-not-audited"}
     if prev["status"] != "audited":
         return {**out, "label": "audit-recovered"}
-    if cur.get("audited_at") and cur.get("audited_at") == prev.get("audited_at"):
+    if not cur.get("audited_at"):
+        # every audit since change tracking records audited_at, so a row
+        # without one still carries a legacy audit: provably not re-audited
+        return {**out, "label": "not-re-audited", "note": "legacy audit, no recorded audit time"}
+    if cur.get("audited_at") == prev.get("audited_at"):
         return {**out, "label": "not-re-audited"}
 
     causes = []

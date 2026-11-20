@@ -168,3 +168,24 @@ def test_history_writes_on_the_real_board(tmp_path):
     entries = json.loads(board.read_text())["datasets"]
     doc = _lb().write_history(tmp_path, entries, "2026-11-20 23:07 UTC")
     assert len(doc["rows"]) == len(entries)
+
+
+def test_untouched_legacy_rows_are_not_re_audited_not_stable():
+    # rows audited before change tracking carry no audited_at, revision or sample
+    legacy = _entry(rev=None, audited=None)
+    legacy["sample"] = None
+    ch = _cmp(legacy, legacy)
+    assert ch["label"] == "not-re-audited" and "legacy" in ch["note"]
+
+
+def test_bootstrap_re_audit_of_a_legacy_row_is_labelled_by_what_is_unknown():
+    # the old side has no revision and no sample fingerprint: a moved verdict
+    # cannot be attributed - ambiguous, never a resolution
+    legacy = _entry(rev=None, audited=None)
+    legacy["sample"] = None
+    fresh = _entry(rev="bbb", verdicts=("PASS", "PASS", "PASS"), audited="2026-11-21T01:00:00Z")
+    ch = _cmp(legacy, fresh)
+    assert ch["label"] == "ambiguous" and "revision-unknown" in ch["changed"]
+    assert "ambiguous" in _gone(ch)
+    steady = _cmp(legacy, _entry(rev="bbb", audited="2026-11-21T01:00:00Z"))
+    assert steady["label"] == "stable"
