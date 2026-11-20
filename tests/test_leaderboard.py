@@ -194,7 +194,7 @@ def test_audit_one_falls_back_to_single_shard_when_spread_over_cap(tmp_path, mon
         sizes[f"videos/zzz.phantom/chunk-{i:03d}/file-000.mp4"] = lb.VIDEO_CAP_BYTES - 1
     downloaded = []
 
-    def fake_download_sample(repo_id, cap_bytes, dest, unservable=None):
+    def fake_download_sample(repo_id, cap_bytes, dest, unservable=None, revision=None):
         for rel in real_sizes:
             if rel.startswith(("meta/", "data/")):
                 tgt = dest / rel
@@ -202,7 +202,7 @@ def test_audit_one_falls_back_to_single_shard_when_spread_over_cap(tmp_path, mon
                 shutil.copy2(root / rel, tgt)
         return dest, sizes
 
-    def fake_hub_download(repo_id, rel, dest):
+    def fake_hub_download(repo_id, rel, dest, revision=None):
         downloaded.append(rel)
         tgt = dest / rel
         tgt.parent.mkdir(parents=True, exist_ok=True)
@@ -210,6 +210,7 @@ def test_audit_one_falls_back_to_single_shard_when_spread_over_cap(tmp_path, mon
         return tgt
 
     monkeypatch.setattr(lb, "download_sample", fake_download_sample)
+    monkeypatch.setattr(lb, "resolve_revision", lambda repo: "c0ffee" * 6 + "c0ff")
     monkeypatch.setattr(lb, "_hub_download", fake_hub_download)
     rep = lb.audit_one("org/ds", 250, 50 * 1000 * 1000)
     assert rep.video_audited == 5
@@ -265,7 +266,7 @@ def test_audit_one_runs_visual_quality_on_downloaded_videos(tmp_path, monkeypatc
 
     import shutil
 
-    def fake_download_sample(repo_id, cap_bytes, dest, unservable=None):
+    def fake_download_sample(repo_id, cap_bytes, dest, unservable=None, revision=None):
         for rel in sizes:
             if rel.startswith(("meta/", "data/")):
                 tgt = dest / rel
@@ -273,13 +274,14 @@ def test_audit_one_runs_visual_quality_on_downloaded_videos(tmp_path, monkeypatc
                 shutil.copy2(root / rel, tgt)
         return dest, sizes
 
-    def fake_hub_download(repo_id, rel, dest):
+    def fake_hub_download(repo_id, rel, dest, revision=None):
         tgt = dest / rel
         tgt.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(root / rel, tgt)
         return tgt
 
     monkeypatch.setattr(lb, "download_sample", fake_download_sample)
+    monkeypatch.setattr(lb, "resolve_revision", lambda repo: "c0ffee" * 6 + "c0ff")
     monkeypatch.setattr(lb, "_hub_download", fake_hub_download)
     rep = lb.audit_one("org/ds", 250, 50 * 1000 * 1000)
     assert rep.video_audited == 5
@@ -403,7 +405,7 @@ def test_download_sample_skips_dual_layout_leftovers(monkeypatch, tmp_path):
                         lambda *a, **k: iter(tree))
     downloaded = []
 
-    def fake_dl(rid, name, dest):
+    def fake_dl(rid, name, dest, revision=None):
         downloaded.append(name)
         p = Path(dest) / name
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -559,7 +561,7 @@ def test_download_sample_nested_filters_siblings_and_prefixes_fetches(monkeypatc
                         lambda *a, **k: iter(tree))
     downloaded = []
 
-    def fake_dl(rid, name, dest):
+    def fake_dl(rid, name, dest, revision=None):
         downloaded.append((rid, name))
         p = Path(dest) / name
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -900,7 +902,7 @@ def test_nested_sample_lists_only_target_prefix(monkeypatch, tmp_path):
                      types.SimpleNamespace(path="task/data/file-0.parquet", size=1)])
 
     monkeypatch.setattr("huggingface_hub.list_repo_tree", tree)
-    def download(rid, name, dest):
+    def download(rid, name, dest, revision=None):
         p = dest / name
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text("{}")
@@ -1204,7 +1206,7 @@ def test_one_unservable_data_file_does_not_abort_the_sample(tmp_path, monkeypatc
         types.SimpleNamespace(path=p, size=10) for p in files])
     got = []
 
-    def fake_dl(repo, name, dest):
+    def fake_dl(repo, name, dest, revision=None):
         if name.endswith("episode_000000.parquet"):
             raise lb.DatasetError(f"the Hub cannot serve {name}: Xet storage has no data for it")
         got.append(name)
@@ -1214,7 +1216,7 @@ def test_one_unservable_data_file_does_not_abort_the_sample(tmp_path, monkeypatc
     assert [n for n, _ in unservable] == ["data/chunk-000/episode_000000.parquet"]
     assert "data/chunk-000/episode_000002.parquet" in got
     # nothing servable at all is still a failed load
-    monkeypatch.setattr(lb, "_hub_download", lambda r, n, d: (_ for _ in ()).throw(
+    monkeypatch.setattr(lb, "_hub_download", lambda r, n, d, revision=None: (_ for _ in ()).throw(
         lb.DatasetError(f"the Hub cannot serve {n}")) if n.startswith("data/") else None)
     with pytest.raises(lb.DatasetError, match="none of the sampled data files"):
         lb.download_sample("o/r", 10_000, tmp_path, [])
