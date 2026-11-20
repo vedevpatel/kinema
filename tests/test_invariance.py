@@ -23,8 +23,11 @@ from kinema.dataset import load_dataset
 from kinema.fixtures.synth import KNOWN_DEFECTS, make_dataset
 
 CFG = CheckConfig()
-_STARTED = time.monotonic()
-# per-push CI budget for this whole module (about 13 s on a laptop)
+# set when this module's first test starts, not at import: collection imports
+# every module first, so an import-time clock also counted every test file
+# that sorts before this one
+_STARTED: list[float] = []
+# per-push CI budget for this whole module (about 30 s on a laptop)
 _BUDGET_S = 45.0
 
 # checks whose verdict legitimately depends on the representation itself
@@ -39,6 +42,12 @@ from corpus import cases as corpus_cases  # noqa: E402
 # synthetic fixtures, the edge shapes, and every adjudicated real-data case
 FIXTURES = ["clean", *KNOWN_DEFECTS, "delta-actions", "edge-shapes",
             *(f"corpus:{c}" for c in corpus_cases())]
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _module_clock():
+    _STARTED.append(time.monotonic())
+    yield
 
 
 @pytest.fixture(scope="module")
@@ -137,5 +146,5 @@ def test_probes_change_the_numbers_but_not_the_rows(loaded):
 def test_zz_suite_stays_within_budget():
     # runs last (file order): a fixture or probe that makes the suite slow
     # fails here instead of quietly taxing every push
-    elapsed = time.monotonic() - _STARTED
+    elapsed = time.monotonic() - _STARTED[0]
     assert elapsed < _BUDGET_S, f"invariance suite took {elapsed:.0f}s (budget {_BUDGET_S:.0f}s)"

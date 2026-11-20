@@ -48,7 +48,14 @@ def _stats(x: np.ndarray) -> dict:
 
 
 def materialize(root: Path, name: str) -> Path:
-    c = load_case(name)
+    return write_case(root, load_case(name))
+
+
+def write_case(root: Path, c: dict) -> Path:
+    """Write case arrays (the npz fields above) as a LeRobot v3 dataset.
+    no_frame_index: the source ships no frame_index column (GR00T-sim,
+    behavior1k); frame_index then holds each frame's position, used only for
+    the timestamps, and the column is left out as in the source."""
     ep = c["episode_index"].astype(np.int64)
     fi = c["frame_index"].astype(np.int64)
     fps = float(c["fps"])
@@ -70,6 +77,8 @@ def materialize(root: Path, name: str) -> Path:
         "task_index": np.zeros(len(ep), dtype=np.int64),
         "observation.state": [list(r) for r in arrays["state"]],
     }
+    if "no_frame_index" in c:
+        del table["frame_index"]
     pq.write_table(pa.table(table), root / "data" / "chunk-000" / "file-000.parquet")
 
     info_p = root / "meta" / "info.json"
