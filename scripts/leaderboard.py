@@ -321,7 +321,7 @@ def audit_rlds(entry: dict) -> DatasetReport:
     ds = RldsDataset.probe(client, entry["rlds_prefix"])
     mirror, mirror_bucket = _probe_rlds_mirror(entry)
     results = run_rlds_checks(ds, client, mirror=mirror, mirror_bucket=mirror_bucket)
-    return DatasetReport(
+    rep = DatasetReport(
         source=entry["id"],
         format_version=f"rlds-{ds.version}",
         episodes=ds.episodes,
@@ -330,6 +330,8 @@ def audit_rlds(entry: dict) -> DatasetReport:
         results=results,
         video_audited=VIDEO_AUDIT_MARK,
     )
+    rep.audit_meta = {"revision": rlds_revision(ds), "sample": None}
+    return rep
 
 
 def _probe_rlds_mirror(entry: dict):
@@ -638,14 +640,14 @@ def find_lerobot_datasets(limit: int, new_lane: int = 0, workers: int = 8) -> li
         {**e, "lane": "rlds"} for e in rlds]
 
 
-def _classic_resolve_download(repo_id: str, name: str, dest: Path) -> None:
+def _classic_resolve_download(repo_id: str, name: str, dest: Path, revision: str | None = None) -> None:
     """Plain HTTP GET on the classic resolve endpoint - the fallback when the
     Xet CAS backend cannot reconstruct a file (upstream 404s)."""
     import os
     import shutil
     import urllib.request
 
-    url = f"https://huggingface.co/datasets/{repo_id}/resolve/main/{name}"
+    url = f"https://huggingface.co/datasets/{repo_id}/resolve/{revision or 'main'}/{name}"
     req = urllib.request.Request(url)
     tok = os.environ.get("HF_TOKEN")
     if tok:
@@ -656,16 +658,16 @@ def _classic_resolve_download(repo_id: str, name: str, dest: Path) -> None:
         shutil.copyfileobj(r, w)
 
 
-def _hub_download(repo_id: str, name: str, dest: Path) -> None:
+def _hub_download(repo_id: str, name: str, dest: Path, revision: str | None = None) -> None:
     from huggingface_hub import hf_hub_download
 
     try:
-        hf_hub_download(repo_id, name, repo_type="dataset", local_dir=str(dest))
+        hf_hub_download(repo_id, name, repo_type="dataset", local_dir=str(dest), revision=revision)
     except Exception as e:  # noqa: BLE001
         msg = f"{type(e).__name__}: {e}"
         if "reconstruction" in msg or "cas-server" in msg or "Xet" in msg:
             try:
-                _classic_resolve_download(repo_id, name, dest)
+                _classic_resolve_download(repo_id, name, dest, revision)
             except Exception:
                 # both endpoints failed: the Hub cannot serve this file at all,
                 # so any loader (LeRobot included) fails on it. Name the file -
@@ -758,7 +760,8 @@ def _complete_episodes(table, lengths: dict[int, int] | None):
 
 def _range_read_parquet(repo_id: str, name: str, dest: Path, episodes: list[int] | None = None,
                         min_rows: int = 20000, max_bytes: int = 150 * 1024 * 1024,
-                        lengths: dict[int, int] | None = None, fs=None, path: str | None = None) -> None:
+                        lengths: dict[int, int] | None = None, fs=None, path: str | None = None,
+                        revision: str | None = None) -> None:
     """Materialize row groups of a remote parquet via HTTP range reads (footer
     first, then only the needed row groups) - no full download. Used when every
     data shard exceeds the sample cap. When episode indices are known, prefer
@@ -771,7 +774,8 @@ def _range_read_parquet(repo_id: str, name: str, dest: Path, episodes: list[int]
     fs = fs or HfFileSystem()
     # open via filesystem+path (not a stream handle) so pyarrow issues true
     # range requests instead of buffering the whole remote file
-    pf = pq.ParquetFile(path or f"datasets/{repo_id}/{name}", filesystem=fs)
+    at = f"@{revision}" if revision else ""
+    pf = pq.ParquetFile(path or f"datasets/{repo_id}{at}/{name}", filesystem=fs)
     # project out pixel columns: frames embedded as images dominate these
     # shards, and v0 runs no visual checks
     columns = [
@@ -850,7 +854,8 @@ def _range_read_parquet(repo_id: str, name: str, dest: Path, episodes: list[int]
     pq.write_table(table, out)
 
 def download_sample(repo_id: str, cap_bytes: int, dest: Path,
-                    unservable: list | None = None) -> tuple[Path, dict[str, int]]:
+                    unservable: list | None = None,
+                    revision: str | None = None) -> tuple[Path, dict[str, int]]:
     """meta/** in full plus data files in name order until cap_bytes.
 
     v3 shards hold many episodes per file, so the first shard(s) are a
@@ -876,7 +881,7 @@ def download_sample(repo_id: str, cap_bytes: int, dest: Path,
     sib = [
         (f.path, f.size or 0)
         for f in list_repo_tree(base, repo_type="dataset", recursive=True,
-                                path_in_repo=prefix or None)
+                                path_in_repo=prefix or None, revision=revision)
         if hasattr(f, "size")  # RepoFile, not RepoFolder
     ]
     if prefix:
@@ -886,7 +891,7 @@ def download_sample(repo_id: str, cap_bytes: int, dest: Path,
     # meta always comes down first: every branch needs it, both to audit and
     # to target range reads at row groups overlapping catalogued episodes
     for name in picked:
-        _hub_download(base, _pref(prefix, name), dest)
+        _hub_download(base, _pref(prefix, name), dest, revision)
     budget = cap_bytes
     data_files = sorted((n, sz) for n, sz in sib if n.startswith("data/"))
     # v3 shard pointers are authoritative: skip stale dual-layout leftovers
@@ -922,11 +927,12 @@ def download_sample(repo_id: str, cap_bytes: int, dest: Path,
                 episodes=_meta_episode_indices(root),
                 max_bytes=min(cap_bytes, 64 * 1024 * 1024),
                 lengths=_meta_episode_lengths(root),
+                revision=revision,
             )
         except Exception as e:  # noqa: BLE001
             msg = f"{type(e).__name__}: {e}"
             if "reconstruction" in msg or "cas-server" in msg or "Xet" in msg:
-                _classic_resolve_download(base, _pref(prefix, smallest), dest)
+                _classic_resolve_download(base, _pref(prefix, smallest), dest, revision)
                 return root, sizes
             raise DatasetError(
                 f"smallest data shard is {ssize / 1e6:.0f} MB and range-read "
@@ -940,7 +946,7 @@ def download_sample(repo_id: str, cap_bytes: int, dest: Path,
     got = 0
     for name in chosen:
         try:
-            _hub_download(base, _pref(prefix, name), dest)
+            _hub_download(base, _pref(prefix, name), dest, revision)
             got += 1
         except DatasetError as e:
             if unservable is None or "cannot serve" not in str(e):
@@ -1060,6 +1066,87 @@ def next_row(it, deferred: list, in_flight: list) -> dict | None:
     return None
 
 
+# --- dataset change tracking (docs/checks.md, "Change tracking") -------------
+
+def _digest(items) -> str:
+    import hashlib
+
+    return hashlib.sha1("\n".join(map(str, items)).encode()).hexdigest()[:12]
+
+
+def resolve_revision(repo: str) -> str | None:
+    """The Hub commit a dataset is at right now; None if it cannot be
+    resolved (the audit then records the revision as unknown, never guesses)."""
+    from huggingface_hub import HfApi
+
+    try:
+        return _retrying(lambda: HfApi().dataset_info(repo).sha, f"{repo} revision")
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def revision_staleness(entries: list[dict], current: set[str],
+                       workers: int = 8) -> tuple[set[str], set[str]]:
+    """(changed, unknown) among the current rows: Hub datasets whose commit
+    moved since their audit, and audits that recorded no revision. RLDS and
+    gated rows are not probed (no commits / no access). A probe that errors
+    leaves the row current - an error is not a change."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    rows = [e for e in entries if e["id"] in current and e.get("report")
+            and not e.get("rlds") and not e["id"].startswith("rlds/")]
+    unknown = {e["id"] for e in rows if not e.get("revision")}
+    known = [e for e in rows if e.get("revision")]
+
+    def probe(e):
+        return e["id"], e["revision"], resolve_revision(e["id"].split("//", 1)[0])
+
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        results = list(ex.map(probe, known))
+    changed = {i for i, was, now in results if now and now != was}
+    return changed, unknown
+
+
+def write_history(out: Path, entries: list[dict], generated: str) -> dict:
+    """Today's snapshot (last run of the UTC day wins) compared with the
+    latest earlier day, plus docs/history/index.json - kinema.history."""
+    from kinema.history import compare, snapshot
+
+    hist = out / "history"
+    hist.mkdir(parents=True, exist_ok=True)
+    date = generated[:10]
+    checks = sorted({c["id"] for e in entries for c in (e.get("report") or {}).get("checks", [])})
+    cur = snapshot(entries, checks, date, generated)
+    earlier = sorted(p for p in hist.glob("????-??-??.json") if p.stem < date)
+    prev = json.loads(earlier[-1].read_text()) if earlier else None
+    doc = {**cur, **compare(prev, cur)}
+    tmp = hist / f".{date}.json.tmp"
+    tmp.write_text(json.dumps(doc, separators=(",", ":"), default=str))
+    tmp.replace(hist / f"{date}.json")
+    index_p = hist / "index.json"
+    index = json.loads(index_p.read_text()) if index_p.exists() else {"days": {}}
+    index["days"][date] = {"compared_to": doc["compared_to"], "summary": doc["summary"],
+                           "rows": len(cur["rows"])}
+    index_p.write_text(json.dumps(index, indent=1, sort_keys=True))
+    return doc
+
+
+def sample_signature(episodes, videos) -> dict:
+    """What the audit actually read: same revision + same engine + same
+    signature means a verdict change has no innocent explanation."""
+    eps = sorted(int(e) for e in episodes)
+    vids = sorted(videos or [])
+    return {"episodes": len(eps), "episodes_digest": _digest(eps),
+            "videos": len(vids), "videos_digest": _digest(vids) if vids else None}
+
+
+def rlds_revision(ds) -> str:
+    """RLDS buckets have no commits: the revision is a digest of the shard
+    inventory and dataset_info the audit read."""
+    inv = sorted((str(n), int(sz)) for n, sz in (getattr(ds, "raw_shards", None) or []))
+    return "gcs:" + _digest([json.dumps(getattr(ds, "info", {}) or {}, sort_keys=True, default=str), *inv])
+
+
 # --- robustness gate (docs/checks.md, "Robustness gate") --------------------
 # A NEW WARN/FAIL - a check whose verdict rose against the row's current
 # board verdict - is re-run under metamorphic probes (kinema.probes) before
@@ -1177,7 +1264,11 @@ def audit_one(repo_id: str, max_episodes: int, cap_bytes: int,
     dest = tmp_dir
     try:
         unservable: list = []
-        dest, sizes = download_sample(repo_id, cap_bytes, dest, unservable)
+        # one revision for the whole audit: listing, data, range reads and
+        # videos all come from the same commit, so the audit describes exactly
+        # it even if the dataset is pushed to mid-run
+        revision = resolve_revision(base)
+        dest, sizes = download_sample(repo_id, cap_bytes, dest, unservable, revision=revision)
         targets_all = _target_video_files(dest, max_episodes) or []
         subset = _video_subsample(targets_all, sizes, VIDEO_SAMPLE_FILES, VIDEO_CAP_BYTES)
         if subset is None and targets_all:
@@ -1190,14 +1281,16 @@ def audit_one(repo_id: str, max_episodes: int, cap_bytes: int,
                       f"{VIDEO_CAP_BYTES / 1e6:.0f} MB cap - falling back to "
                       f"single shard {single}", flush=True)
         video = False
+        fetched_videos: list[str] = []
         if subset:
             got = 0
             for rel in subset:
                 try:
                     # dest is the nested root after download_sample; fetch
                     # through the temp dir's top to land back at dest/rel
-                    _hub_download(base, _pref(prefix, rel), tmp_dir)
+                    _hub_download(base, _pref(prefix, rel), tmp_dir, revision)
                     got += 1
+                    fetched_videos.append(rel)
                 except Exception as e:  # noqa: BLE001
                     print(f"{repo_id}: video fetch failed for {rel}: "
                           f"{type(e).__name__} - skipping the file", flush=True)
@@ -1234,6 +1327,8 @@ def audit_one(repo_id: str, max_episodes: int, cap_bytes: int,
             except Exception as e:  # noqa: BLE001
                 rep.results.append(check.skip(f"check crashed: {type(e).__name__}: {e}"))
         robustness_gate(ctx, rep, prior, gate, repo_id=repo_id, probe=probe)
+        rep.audit_meta = {"revision": revision,
+                          "sample": sample_signature(ctx.episode_ids(), fetched_videos)}
         return rep
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -1246,8 +1341,19 @@ def _waiver_note(charge: dict) -> str:
     return f" <span class=dim>(charge waived - same episodes as {esc(up)})</span>"
 
 
+def _revision_note(source: str, revision: str | None) -> str:
+    if not revision:
+        return "dataset revision: unknown (audited before revisions were recorded)"
+    if revision.startswith("gcs:"):
+        return f"dataset revision: shard-inventory digest <code>{esc(revision[4:])}</code>"
+    base = source.split("//", 1)[0]
+    return (f"dataset revision: <a href='https://huggingface.co/datasets/{esc(base)}/tree/{esc(revision)}'>"
+            f"<code>{esc(revision[:12])}</code></a>")
+
+
 def render_dataset_page(rep: DatasetReport, audited: str | None = None,
-                        rlds_ref: tuple[str, str] | None = None) -> str:
+                        rlds_ref: tuple[str, str] | None = None,
+                        revision: str | None = None) -> str:
     charges = rep.charges()  # the same waiver the stored charge/waived_by fields record
     rows = "".join(
         f"<tr><td><code>{esc(r.check_id)}</code></td>"
@@ -1278,6 +1384,7 @@ def render_dataset_page(rep: DatasetReport, audited: str | None = None,
         f"{rep.frames} frames | fps {esc(rep.fps or '?')}"
         f"{' | sampled subset' if rep.truncated else ''}"
         f" | <a href='{esc(hub_url)}'>hub</a></p>"
+        f"<p class=dim>{_revision_note(rep.source, revision)}</p>"
         f"<h2>Health score: {rep.score}/100</h2>"
         f"<table><tr><th>check</th><th>verdict</th><th>summary</th></tr>{rows}</table>"
         f"<h2>Warnings &amp; failures</h2><ul>{''.join(findings) or '<li>none</li>'}</ul>"
@@ -1680,6 +1787,7 @@ def rewrite_dataset_pages(out: Path, entries: list[dict]) -> None:
         for name, text in (
             (f"{e['slug']}.json", json.dumps(e["report"], separators=(",", ":"), default=str)),
             (f"{e['slug']}.html", render_dataset_page(rep, audited=m.group(1) if m else "unknown",
+                                                       revision=e.get("revision"),
                                                        rlds_ref=(e.get("rlds_bucket", RLDS_BUCKETS[0][0]),
                                                                  e.get("rlds_prefix", ""))
                                                        if e["id"].startswith("rlds/") else None)),
@@ -1743,6 +1851,8 @@ def main() -> int:
                     help="rediscover when the worklist is older than this (0: never expires)")
     ap.add_argument("--discover-only", action="store_true",
                     help="refresh the worklist (and stored rows' discovery state), audit nothing")
+    ap.add_argument("--no-revision-probe", action="store_true",
+                    help="skip the nightly check for datasets that changed upstream since their audit")
     ap.add_argument("--transition-cap", type=int, default=10,
                     help="publish at most N new WARN/FAIL verdicts per check per run; the rest are held as INFO (0 = no cap)")
     ap.add_argument("--no-probes", action="store_true",
@@ -1786,6 +1896,7 @@ def main() -> int:
     entries = []
     data_json = out / "data.json"
     done_ids: set[str] = set()
+    unknown_rev: set[str] = set()
     if data_json.exists():
         try:
             prev = json.loads(data_json.read_text()).get("datasets", [])
@@ -1807,6 +1918,13 @@ def main() -> int:
             }
             n_stale = sum(1 for e in entries if e["id"] not in done_ids)
             print(f"resuming: {len(done_ids)} current, {n_stale} stale (engine {engine})")
+            # a current row is still stale when its dataset moved upstream,
+            # or when its audit predates recorded revisions
+            if not args.discover_only and not args.no_revision_probe:
+                changed_rev, unknown_rev = revision_staleness(entries, done_ids)
+                done_ids -= changed_rev | unknown_rev
+                print(f"revisions: {len(changed_rev)} dataset(s) changed upstream, "
+                      f"{len(unknown_rev)} audit(s) with no recorded revision queued", flush=True)
         except Exception:
             entries, done_ids, n_moved = [], set(), 0
         if n_moved:
@@ -1844,9 +1962,13 @@ def main() -> int:
                                 prior=prior_verdicts.get(d["id"]), gate=gate,
                                 probe=not args.no_probes and not is_heavy(d))
             entry["report"] = report_to_dict(rep)
+            meta = getattr(rep, "audit_meta", None) or {}
+            entry["revision"] = meta.get("revision")  # None: unknown, never guessed
+            entry["sample"] = meta.get("sample")
+            entry["audited_at"] = f"{dt.datetime.now(dt.timezone.utc):%Y-%m-%dT%H:%M:%SZ}"
             (out / "dataset" / f"{slug}.html").write_text(render_dataset_page(
                 rep, rlds_ref=(d.get("rlds_bucket", RLDS_BUCKETS[0][0]), d.get("rlds_prefix", ""))
-                if d.get("rlds") else None))
+                if d.get("rlds") else None, revision=entry["revision"]))
             (out / "dataset" / f"{slug}.json").write_text(json.dumps(entry["report"], indent=2, default=str))
             print(f"    {d['id']}: score {rep.score}/100 ({rep.verdict.name})", flush=True)
         except DatasetError as e:
@@ -1869,7 +1991,10 @@ def main() -> int:
                 "repo_scope", "rlds", "rlds_prefix", "rlds_bucket", "version"}}
             d.setdefault("data_bytes", 0)
             todo.append(d)
-    todo.sort(key=lambda d: d["id"] not in stale_ids)  # stale results first
+    # stale results first (engine, error, dataset changed upstream); audits
+    # that only lack a recorded revision after them; never-audited rows last
+    todo.sort(key=lambda d: 0 if d["id"] in stale_ids and d["id"] not in unknown_rev
+              else 1 if d["id"] in unknown_rev else 2)
     max_pending = max(1, args.workers) * 2
 
     def record(entry) -> None:
@@ -1945,6 +2070,13 @@ def main() -> int:
     generated = f"{dt.datetime.now(dt.timezone.utc):%Y-%m-%d %H:%M UTC}"
     _write(out, entries, generated, max_episodes=args.max_episodes)
     n_ok = sum(1 for e in entries if e.get("report"))
+    try:
+        hist = write_history(out, entries, generated)
+        print(f"history: {hist['date']} vs {hist['compared_to'] or 'nothing earlier (first snapshot)'}"
+              + (": " + ", ".join(f"{n} {k}" for k, n in sorted(hist["summary"].items()))
+                 if hist["summary"] else ""), flush=True)
+    except Exception as e:  # noqa: BLE001 - history must never sink the board
+        print(f"history: not written ({type(e).__name__}: {e})", flush=True)
     # what the gate kept off the scored board this run: a workflow artifact
     # for review, never published (the rows themselves show the INFO note)
     if gate.held or gate.unstable:

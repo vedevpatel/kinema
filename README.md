@@ -218,6 +218,11 @@ itself is refreshed weekly by the `leaderboard-discover` workflow into
 fresh discoveries in a row:
 **[vedevpatel.github.io/kinema](https://vedevpatel.github.io/kinema/)**
 
+Every audit records the exact dataset revision it read, and the board keeps a
+compact daily history in `docs/history/` whose comparisons separate a changed
+dataset from a changed checker, a different sample or a failed audit
+([docs/checks.md](docs/checks.md#change-tracking)).
+
 A new WARN or FAIL reaches the board only if it survives the robustness gate:
 it is re-run with the data rescaled, episodes reordered and (on sampled loads) the sample halved,
 and a verdict that moves publishes as INFO; each check publishes at most 10 new

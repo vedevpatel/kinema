@@ -131,6 +131,49 @@ data, as with the parked-joint rows - still needs the corpus (each
 adjudicated case becomes a test) and the cap (which bounds how many rows a
 bad rule can reach in one run).
 
+## Change tracking
+
+The board records what it audited and keeps a daily history, so a change
+in a dataset's findings can be told apart from a change in the checker.
+
+- **Revision.** Every Hub audit resolves the dataset's commit once and reads
+  the listing, data, range reads and videos at that commit; the row stores
+  it as `revision` and the dataset page links it. RLDS rows store a digest
+  of the shard inventory and dataset_info they read (`gcs:...`). Audits
+  from before revisions were recorded show `revision: null` (unknown) and
+  are re-audited at low priority. Each night the board also checks every
+  current row's upstream commit and re-audits the ones that moved.
+- **Sample.** Each row stores what the audit read: the number of episodes
+  and a digest of which, and the same for video files.
+- **History.** `docs/history/YYYY-MM-DD.json` holds one snapshot per UTC
+  day (the last run of the day wins): per row the revision, engine, audit
+  time, sample, score, a verdict letter per check (P/I/W/F/S), WARN/FAIL
+  counts and a digest of the gated findings' identities - no messages,
+  about 370 bytes a row. `docs/history/index.json` lists the days.
+- **Comparisons.** Each day's file compares every row with the latest
+  earlier day and labels the change by what differs between the two
+  audits:
+
+| label | meaning |
+| --- | --- |
+| `dataset-changed` | only the revision differs |
+| `checker-changed` | only the engine differs |
+| `sample-changed` | only the episodes or video files read differ |
+| `coverage-changed` | a check ran in one audit and was skipped in the other |
+| `revision-unknown` | a verdict moved and one side's revision is unknown |
+| `ambiguous` | more than one of the above differs |
+| `unexplained` | nothing differs and a verdict still moved - a determinism bug |
+| `stable` | verdicts held (what changed anyway is listed, e.g. a new revision) |
+| `not-re-audited` | the row was not audited again; nothing to compare |
+| `audit-failed` / `now-gated` | no audit this time: earlier findings are unknown, not resolved |
+| `audit-recovered`, `new-row`, `row-removed`, `still-not-audited` | as named |
+
+A finding that disappears is worded by its cause - "not flagged on the new
+revision", "no longer flagged by the updated checker", "not flagged in this
+sample", "not checked this run" - and never called fixed: a new revision
+with a finding gone is evidence the dataset changed, not proof the defect
+was repaired.
+
 ## Harm table
 
 The GPU table is `docs/harm-table.json`, rendered as `harm-table.html`, with raw
