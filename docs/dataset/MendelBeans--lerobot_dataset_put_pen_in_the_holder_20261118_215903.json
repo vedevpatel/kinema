@@ -1,12 +1,12 @@
 {
   "source": "MendelBeans/lerobot_dataset_put_pen_in_the_holder_20261118_215903",
   "format_version": "v3.0",
-  "episodes": 52,
-  "frames": 18709,
+  "episodes": 82,
+  "frames": 29852,
   "fps": 30.0,
-  "truncated": false,
+  "truncated": true,
   "video_audited": 5,
-  "score": 57,
+  "score": 0,
   "score_model": "tiered-v3",
   "verdict": "FAIL",
   "checks": [
@@ -16,72 +16,72 @@
       "verdict": "FAIL",
       "weight": 6,
       "weight_basis": "measured",
-      "summary": "worst error 5.2x the FAIL threshold",
+      "summary": "worst error 4.9x the FAIL threshold",
       "skipped": false,
       "skip_reason": "",
       "details": {},
       "findings": [
         {
           "severity": "FAIL",
-          "message": "observation.state.min: meta/stats.json is off by 51.6% of the range on dim 0 (stored -24.3516, data -53.4506). Normalization at training and inference will disagree.",
+          "message": "observation.state.min: meta/stats.json is off by 48.9% of the range on dim 0 (stored -25.8462, aggregated per-episode stats (82 episodes) -53.4506). Normalization at training and inference will disagree.",
           "episode_index": null,
           "details": {
             "feature": "observation.state",
             "stat": "min",
             "dim": 0,
-            "error": 0.5155763292054254,
+            "error": 0.4890965887768431,
             "unit": "of range",
             "reference": "meta/stats.json"
           }
         },
         {
           "severity": "WARN",
-          "message": "observation.state.std: meta/stats.json is off by 22.4% on dim 0 (stored 3.63979, data 4.45342). Normalization at training and inference will disagree.",
+          "message": "observation.state.std: meta/stats.json is off by 12.0% on dim 0 (stored 4.0376, aggregated per-episode stats (82 episodes) 4.52235). Normalization at training and inference will disagree.",
           "episode_index": null,
           "details": {
             "feature": "observation.state",
             "stat": "std",
             "dim": 0,
-            "error": 0.22354015477651773,
+            "error": 0.12005914166511208,
             "unit": "relative",
             "reference": "meta/stats.json"
           }
         },
         {
           "severity": "FAIL",
-          "message": "action.min: meta/stats.json is off by 50.9% of the range on dim 0 (stored -24.7033, data -53.8901). Normalization at training and inference will disagree.",
+          "message": "action.min: meta/stats.json is off by 48.6% of the range on dim 0 (stored -26.022, aggregated per-episode stats (82 episodes) -53.8901). Normalization at training and inference will disagree.",
           "episode_index": null,
           "details": {
             "feature": "action",
             "stat": "min",
             "dim": 0,
-            "error": 0.5092024554933255,
+            "error": 0.4861963136403667,
             "unit": "of range",
             "reference": "meta/stats.json"
           }
         },
         {
           "severity": "WARN",
-          "message": "action.max: meta/stats.json is off by 5.7% of the range on dim 5 (stored 28.2504, data 29.9358). Normalization at training and inference will disagree.",
+          "message": "action.max: meta/stats.json is off by 1.1% of the range on dim 5 (stored 29.6148, aggregated per-episode stats (82 episodes) 29.9358). Normalization at training and inference will disagree.",
           "episode_index": null,
           "details": {
             "feature": "action",
             "stat": "max",
             "dim": 5,
-            "error": 0.05691060327192882,
+            "error": 0.010840124109699072,
             "unit": "of range",
             "reference": "meta/stats.json"
           }
         },
         {
           "severity": "WARN",
-          "message": "action.std: meta/stats.json is off by 22.5% on dim 0 (stored 3.66127, data 4.48461). Normalization at training and inference will disagree.",
+          "message": "action.std: meta/stats.json is off by 12.0% on dim 0 (stored 4.07327, aggregated per-episode stats (82 episodes) 4.56292). Normalization at training and inference will disagree.",
           "episode_index": null,
           "details": {
             "feature": "action",
             "stat": "std",
             "dim": 0,
-            "error": 0.22487766567857365,
+            "error": 0.12020868667777758,
             "unit": "relative",
             "reference": "meta/stats.json"
           }
@@ -92,28 +92,218 @@
     {
       "id": "timestamp-grid",
       "title": "Timestamp grid (spacing, monotonic, start at 0)",
-      "verdict": "PASS",
+      "verdict": "FAIL",
       "weight": 10,
       "weight_basis": "placeholder",
-      "summary": "evenly spaced at 30 fps and monotonic",
+      "summary": "3/82 episodes flagged; worst spacing deviation 0% of a period (episode 0)",
       "skipped": false,
       "skip_reason": "",
-      "details": {},
-      "findings": [],
-      "charge": 0
+      "details": {
+        "robustness": {
+          "probed": [
+            "unit-milli",
+            "unit-kilo",
+            "order-reversed",
+            "half-sample"
+          ]
+        }
+      },
+      "findings": [
+        {
+          "severity": "FAIL",
+          "message": "episode 50: 358 non-monotonic timestamp(s) (equal or decreasing) - temporal window sampling breaks here",
+          "episode_index": 50,
+          "details": {}
+        },
+        {
+          "severity": "FAIL",
+          "message": "episode 51: 360 non-monotonic timestamp(s) (equal or decreasing) - temporal window sampling breaks here",
+          "episode_index": 51,
+          "details": {}
+        },
+        {
+          "severity": "FAIL",
+          "message": "episode 52: 360 non-monotonic timestamp(s) (equal or decreasing) - temporal window sampling breaks here",
+          "episode_index": 52,
+          "details": {}
+        }
+      ],
+      "charge": 25
     },
     {
       "id": "dropped-frames",
       "title": "Dropped / duplicated frames",
-      "verdict": "PASS",
+      "verdict": "FAIL",
       "weight": 2,
       "weight_basis": "measured",
-      "summary": "frame_index contiguous; episode lengths and video segments match the data",
+      "summary": "3 with duplicate indices; 5 with metadata length mismatches; 10 video segment mismatch(es); 30 episode index(es) catalogued twice",
       "skipped": false,
       "skip_reason": "",
-      "details": {},
-      "findings": [],
-      "charge": 0
+      "details": {
+        "robustness": {
+          "probed": [
+            "unit-milli",
+            "unit-kilo",
+            "order-reversed",
+            "half-sample"
+          ]
+        }
+      },
+      "findings": [
+        {
+          "severity": "FAIL",
+          "message": "30 episode index(es) catalogued more than once in the metadata: 50 (x2), 51 (x2), 52 (x2), 53 (x2), 54 (x2), 55 (x2), 56 (x2), 57 (x2)... - typical of merged recording sessions that each restarted at 0; frames of different episodes share one index",
+          "episode_index": null,
+          "details": {
+            "duplicates": {
+              "50": 2,
+              "51": 2,
+              "52": 2,
+              "53": 2,
+              "54": 2,
+              "55": 2,
+              "56": 2,
+              "57": 2,
+              "58": 2,
+              "59": 2,
+              "60": 2,
+              "61": 2,
+              "62": 2,
+              "63": 2,
+              "64": 2,
+              "65": 2,
+              "66": 2,
+              "67": 2,
+              "68": 2,
+              "69": 2,
+              "70": 2,
+              "71": 2,
+              "72": 2,
+              "73": 2,
+              "74": 2,
+              "75": 2,
+              "76": 2,
+              "77": 2,
+              "78": 2,
+              "79": 2
+            }
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 50: 358 duplicated frame_index value(s)",
+          "episode_index": 50,
+          "details": {}
+        },
+        {
+          "severity": "FAIL",
+          "message": "episode 50: metadata says 358 frames but the data holds 718 rows - episode metadata disagrees with the data",
+          "episode_index": 50,
+          "details": {
+            "meta_length": 358,
+            "rows": 718
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 51: 360 duplicated frame_index value(s)",
+          "episode_index": 51,
+          "details": {}
+        },
+        {
+          "severity": "FAIL",
+          "message": "episode 51: metadata says 360 frames but the data holds 720 rows - episode metadata disagrees with the data",
+          "episode_index": 51,
+          "details": {
+            "meta_length": 360,
+            "rows": 720
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 52: 360 duplicated frame_index value(s)",
+          "episode_index": 52,
+          "details": {}
+        },
+        {
+          "severity": "FAIL",
+          "message": "episode 52: metadata says 360 frames but the data holds 720 rows - episode metadata disagrees with the data",
+          "episode_index": 52,
+          "details": {
+            "meta_length": 360,
+            "rows": 720
+          }
+        },
+        {
+          "severity": "FAIL",
+          "message": "episode 80: metadata says 360 frames but the data holds 0 rows - episode metadata disagrees with the data",
+          "episode_index": 80,
+          "details": {
+            "meta_length": 360,
+            "rows": 0
+          }
+        },
+        {
+          "severity": "FAIL",
+          "message": "episode 81: metadata says 360 frames but the data holds 0 rows - episode metadata disagrees with the data",
+          "episode_index": 81,
+          "details": {
+            "meta_length": 360,
+            "rows": 0
+          }
+        },
+        {
+          "severity": "FAIL",
+          "message": "camera observation.images.robot: 3 episode(s) whose video segment is shorter than the data (e.g. episode 50: 358 video frames, 718 rows) - frame lookups past the segment end fail",
+          "episode_index": null,
+          "details": {
+            "camera": "observation.images.robot",
+            "episodes": [
+              50,
+              51,
+              52
+            ]
+          }
+        },
+        {
+          "severity": "FAIL",
+          "message": "camera observation.images.side: 3 episode(s) whose video segment is shorter than the data (e.g. episode 50: 358 video frames, 718 rows) - frame lookups past the segment end fail",
+          "episode_index": null,
+          "details": {
+            "camera": "observation.images.side",
+            "episodes": [
+              50,
+              51,
+              52
+            ]
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "camera observation.images.robot: 2 episode(s) whose video segment is longer than the data (e.g. episode 80: 360 video frames, 0 rows) - images and states may be misaligned",
+          "episode_index": null,
+          "details": {
+            "camera": "observation.images.robot",
+            "episodes": [
+              80,
+              81
+            ]
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "camera observation.images.side: 2 episode(s) whose video segment is longer than the data (e.g. episode 80: 360 video frames, 0 rows) - images and states may be misaligned",
+          "episode_index": null,
+          "details": {
+            "camera": "observation.images.side",
+            "episodes": [
+              80,
+              81
+            ]
+          }
+        }
+      ],
+      "charge": 25
     },
     {
       "id": "calibration-drift",
@@ -121,56 +311,56 @@
       "verdict": "PASS",
       "weight": 10,
       "weight_basis": "measured",
-      "summary": "5 joint(s) + 1 gripper(s) agree; worst offset +1.4% of range (joint 5)",
+      "summary": "5 joint(s) + 1 gripper(s) agree; worst offset +1.3% of range (joint 5)",
       "skipped": false,
       "skip_reason": "",
       "details": {
         "per_joint": {
           "0": {
             "joint": 0,
-            "offset_fraction": 0.00024228385815749449,
-            "scale_error": -0.008275732436615125,
-            "r2": 0.007349165456737694,
-            "line_vs_step": 0.9797959240371756,
-            "still_frames": 14208
+            "offset_fraction": 0.0007318928001672505,
+            "scale_error": -0.0034078540939442587,
+            "r2": 0.0011523520353337036,
+            "line_vs_step": 0.996051836873691,
+            "still_frames": 22025
           },
           "1": {
             "joint": 1,
-            "offset_fraction": -0.0015628892257114318,
-            "scale_error": -0.005475057287369588,
-            "r2": 0.1381910963940607,
-            "line_vs_step": 0.8583432116271008,
-            "still_frames": 8837
+            "offset_fraction": -0.0016174866561678373,
+            "scale_error": -0.006113792254955099,
+            "r2": 0.07640280690481238,
+            "line_vs_step": 0.9632289141183352,
+            "still_frames": 13941
           },
           "2": {
             "joint": 2,
-            "offset_fraction": -0.005422957903913059,
-            "scale_error": 0.0046010539394526085,
-            "r2": 0.06197127761700272,
-            "line_vs_step": 0.909624640648542,
-            "still_frames": 10235
+            "offset_fraction": -0.005515667773345617,
+            "scale_error": 0.004376705050679693,
+            "r2": 0.038520507842715324,
+            "line_vs_step": 0.9576297502508432,
+            "still_frames": 16080
           },
           "3": {
             "joint": 3,
-            "offset_fraction": -0.001582386821303707,
-            "scale_error": 0.018789757911388188,
-            "r2": 0.12225989734881126,
-            "line_vs_step": 0.9483693411223693,
-            "still_frames": 12221
+            "offset_fraction": -0.0010655323894112067,
+            "scale_error": 0.018624205537642182,
+            "r2": 0.08996526548655914,
+            "line_vs_step": 0.9699057430910146,
+            "still_frames": 18817
           },
           "4": {
             "joint": 4,
-            "offset_fraction": -0.0012853297783774283,
-            "scale_error": 0.029650511514714893,
-            "r2": 0.1966783972620405,
-            "line_vs_step": 0.7708311231605601,
-            "still_frames": 13108
+            "offset_fraction": -0.0007454229627084922,
+            "scale_error": 0.023659720176078498,
+            "r2": 0.14421300314668828,
+            "line_vs_step": 0.8900211494862527,
+            "still_frames": 20709
           },
           "5": {
             "joint": 5,
             "free_end": "high",
-            "offset_fraction": 0.014083093961547829,
-            "still_frames": 399,
+            "offset_fraction": 0.013361764714532945,
+            "still_frames": 458,
             "kind": "gripper"
           }
         },
@@ -196,7 +386,7 @@
       "verdict": "WARN",
       "weight": 6,
       "weight_basis": "measured",
-      "summary": "29/52 episodes flagged; worst 44% idle",
+      "summary": "43/80 episodes flagged; worst 39% idle",
       "skipped": false,
       "skip_reason": "",
       "details": {},
@@ -242,17 +432,6 @@
             "idle_fraction": 0.30833333333333335,
             "idle_runs": 1,
             "leading_idle_s": 3.7,
-            "trailing_idle_s": 0.0
-          }
-        },
-        {
-          "severity": "WARN",
-          "message": "episode 6: starts idle for 2.7s (teaches waiting at the start)",
-          "episode_index": 6,
-          "details": {
-            "idle_fraction": 0.22408963585434175,
-            "idle_runs": 1,
-            "leading_idle_s": 2.6666666666666665,
             "trailing_idle_s": 0.0
           }
         },
@@ -500,23 +679,188 @@
         },
         {
           "severity": "WARN",
-          "message": "episode 50: 44% of frames idle in runs >= 2s; starts idle for 5.3s (teaches waiting at the start)",
-          "episode_index": 50,
+          "message": "episode 53: 39% of frames idle in runs >= 2s; starts idle for 2.6s (teaches waiting at the start); ends with 2.1s idle",
+          "episode_index": 53,
           "details": {
-            "idle_fraction": 0.44166666666666665,
+            "idle_fraction": 0.39166666666666666,
+            "idle_runs": 2,
+            "leading_idle_s": 2.566666666666667,
+            "trailing_idle_s": 2.1333333333333333
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 54: 32% of frames idle in runs >= 2s; starts idle for 3.9s (teaches waiting at the start)",
+          "episode_index": 54,
+          "details": {
+            "idle_fraction": 0.325,
             "idle_runs": 1,
-            "leading_idle_s": 5.3,
+            "leading_idle_s": 3.9,
             "trailing_idle_s": 0.0
           }
         },
         {
           "severity": "WARN",
-          "message": "episode 51: 35% of frames idle in runs >= 2s; starts idle for 4.2s (teaches waiting at the start)",
-          "episode_index": 51,
+          "message": "episode 55: starts idle for 2.6s (teaches waiting at the start)",
+          "episode_index": 55,
           "details": {
-            "idle_fraction": 0.3527777777777778,
+            "idle_fraction": 0.21666666666666667,
             "idle_runs": 1,
-            "leading_idle_s": 4.233333333333333,
+            "leading_idle_s": 2.6,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 56: 32% of frames idle in runs >= 2s; starts idle for 3.8s (teaches waiting at the start)",
+          "episode_index": 56,
+          "details": {
+            "idle_fraction": 0.31666666666666665,
+            "idle_runs": 1,
+            "leading_idle_s": 3.8,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 61: starts idle for 2.0s (teaches waiting at the start)",
+          "episode_index": 61,
+          "details": {
+            "idle_fraction": 0.16991643454038996,
+            "idle_runs": 1,
+            "leading_idle_s": 2.033333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 62: starts idle for 2.6s (teaches waiting at the start)",
+          "episode_index": 62,
+          "details": {
+            "idle_fraction": 0.21944444444444444,
+            "idle_runs": 1,
+            "leading_idle_s": 2.6333333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 65: starts idle for 2.5s (teaches waiting at the start)",
+          "episode_index": 65,
+          "details": {
+            "idle_fraction": 0.20555555555555555,
+            "idle_runs": 1,
+            "leading_idle_s": 2.466666666666667,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 67: starts idle for 2.7s (teaches waiting at the start)",
+          "episode_index": 67,
+          "details": {
+            "idle_fraction": 0.225,
+            "idle_runs": 1,
+            "leading_idle_s": 2.7,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 69: starts idle for 2.9s (teaches waiting at the start)",
+          "episode_index": 69,
+          "details": {
+            "idle_fraction": 0.2388888888888889,
+            "idle_runs": 1,
+            "leading_idle_s": 2.8666666666666667,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 70: starts idle for 2.7s (teaches waiting at the start)",
+          "episode_index": 70,
+          "details": {
+            "idle_fraction": 0.2222222222222222,
+            "idle_runs": 1,
+            "leading_idle_s": 2.6666666666666665,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 71: starts idle for 2.4s (teaches waiting at the start)",
+          "episode_index": 71,
+          "details": {
+            "idle_fraction": 0.19722222222222222,
+            "idle_runs": 1,
+            "leading_idle_s": 2.3666666666666667,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 72: starts idle for 2.7s (teaches waiting at the start)",
+          "episode_index": 72,
+          "details": {
+            "idle_fraction": 0.2222222222222222,
+            "idle_runs": 1,
+            "leading_idle_s": 2.6666666666666665,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 74: starts idle for 3.5s (teaches waiting at the start)",
+          "episode_index": 74,
+          "details": {
+            "idle_fraction": 0.28888888888888886,
+            "idle_runs": 1,
+            "leading_idle_s": 3.466666666666667,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 75: starts idle for 3.0s (teaches waiting at the start)",
+          "episode_index": 75,
+          "details": {
+            "idle_fraction": 0.25,
+            "idle_runs": 1,
+            "leading_idle_s": 3.0,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 76: starts idle for 3.0s (teaches waiting at the start)",
+          "episode_index": 76,
+          "details": {
+            "idle_fraction": 0.24722222222222223,
+            "idle_runs": 1,
+            "leading_idle_s": 2.966666666666667,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 77: starts idle for 3.4s (teaches waiting at the start)",
+          "episode_index": 77,
+          "details": {
+            "idle_fraction": 0.28055555555555556,
+            "idle_runs": 1,
+            "leading_idle_s": 3.3666666666666667,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 78: 31% of frames idle in runs >= 2s; starts idle for 3.7s (teaches waiting at the start)",
+          "episode_index": 78,
+          "details": {
+            "idle_fraction": 0.30833333333333335,
+            "idle_runs": 1,
+            "leading_idle_s": 3.7,
             "trailing_idle_s": 0.0
           }
         }
@@ -581,7 +925,7 @@
       "verdict": "WARN",
       "weight": 6,
       "weight_basis": "measured",
-      "summary": "5 episode(s) to review, 5 mild, of 52; worst: [30, 51, 5, 32, 50, 2, 35, 39, 44, 48]",
+      "summary": "6 episode(s) to review, 5 mild, of 80; worst: [50, 51, 52, 30, 5, 32, 31, 35, 39, 44]",
       "skipped": false,
       "skip_reason": "",
       "details": {
@@ -637,116 +981,200 @@
             "47": 1.0,
             "48": 1.0,
             "49": 1.0,
-            "50": 1.0,
-            "51": 1.0
+            "50": 1.9944444444444445,
+            "51": 2.0,
+            "52": 2.0,
+            "53": 1.0,
+            "54": 1.0,
+            "55": 1.0,
+            "56": 1.0,
+            "57": 0.9944444444444445,
+            "58": 0.9972222222222222,
+            "59": 0.9722222222222222,
+            "60": 1.0,
+            "61": 0.9972222222222222,
+            "62": 1.0,
+            "63": 0.9972222222222222,
+            "64": 1.0,
+            "65": 1.0,
+            "66": 1.0,
+            "67": 1.0,
+            "68": 1.0,
+            "69": 1.0,
+            "70": 1.0,
+            "71": 1.0,
+            "72": 1.0,
+            "73": 1.0,
+            "74": 1.0,
+            "75": 1.0,
+            "76": 1.0,
+            "77": 1.0,
+            "78": 1.0,
+            "79": 1.0
           },
           "p95_jerk": {
-            "0": 0.07841179327055578,
-            "1": 0.05880914001138514,
-            "2": 0.08919384108512583,
-            "3": 0.058809140011385146,
-            "4": 0.05880924633876111,
-            "5": 0.058809246338761126,
-            "6": 0.07841221858005966,
-            "7": 0.05880924633876111,
-            "8": 0.06516960717663411,
-            "9": 0.07841179327055578,
-            "10": 0.05880914001138515,
-            "11": 0.06516965430760178,
-            "12": 0.05880915928322204,
-            "13": 0.05880924633876112,
-            "14": 0.05880920114962633,
-            "15": 0.0785997734366617,
-            "16": 0.05880914001138515,
-            "17": 0.058809147985938344,
-            "18": 0.058809310135186706,
-            "19": 0.060849567937923156,
-            "20": 0.058809140011385146,
-            "21": 0.05880924633876112,
-            "22": 0.05880915596049155,
-            "23": 0.04344658283474509,
-            "24": 0.058809140011385146,
-            "25": 0.05880903368400918,
-            "26": 0.05880915596049154,
-            "27": 0.058809049633115576,
-            "28": 0.03920609334092343,
-            "29": 0.06715645629384745,
-            "30": 0.0784124312348116,
-            "31": 0.0651695600456664,
-            "32": 0.07841197402709492,
-            "33": 0.05880924633876112,
-            "34": 0.07841197402709492,
-            "35": 0.07841218668184687,
-            "36": 0.05880926228786752,
-            "37": 0.05880903368400918,
-            "38": 0.05880914001138515,
-            "39": 0.058809310135186706,
-            "40": 0.07841218668184685,
-            "41": 0.06516960717663411,
-            "42": 0.05880915596049155,
-            "43": 0.07841218668184687,
-            "44": 0.07841218668184687,
-            "45": 0.05880914399866175,
-            "46": 0.058809049633115576,
-            "47": 0.058809140011385146,
-            "48": 0.051773870728608666,
-            "49": 0.05880904963311557,
-            "50": 0.06516960717663411,
-            "51": 0.07841218668184685
+            "0": 0.07711904065098782,
+            "1": 0.0578396752565525,
+            "2": 0.0907953601532142,
+            "3": 0.0578395863683234,
+            "4": 0.05793195255209988,
+            "5": 0.05783969094271058,
+            "6": 0.07711945894853658,
+            "7": 0.058452534431495,
+            "8": 0.06575925381543289,
+            "9": 0.07711904065098782,
+            "10": 0.05783957068216532,
+            "11": 0.06575930137283581,
+            "12": 0.057839630812437946,
+            "13": 0.05845248687409208,
+            "14": 0.05793159699918343,
+            "15": 0.08137561449628482,
+            "16": 0.05793159699918343,
+            "17": 0.057839630812437946,
+            "18": 0.058452534431495014,
+            "19": 0.060123707929170295,
+            "20": 0.0578396752565525,
+            "21": 0.05783973800118482,
+            "22": 0.0578395863683234,
+            "23": 0.043839682204921834,
+            "24": 0.0578395863683234,
+            "25": 0.057839466107778126,
+            "26": 0.0578396752565525,
+            "27": 0.0578395706821653,
+            "28": 0.03855971378811021,
+            "29": 0.06746374706734183,
+            "30": 0.07711966809731097,
+            "31": 0.06575920625802995,
+            "32": 0.07711921842744604,
+            "33": 0.05845312097279762,
+            "34": 0.07711921842744604,
+            "35": 0.07711942757622042,
+            "36": 0.05793178100221837,
+            "37": 0.05783948179393621,
+            "38": 0.05783957068216532,
+            "39": 0.05783973800118482,
+            "40": 0.07711942757622042,
+            "41": 0.06575925381543289,
+            "42": 0.05845258198889792,
+            "43": 0.07711942757622042,
+            "44": 0.07711942757622042,
+            "45": 0.057931501884377595,
+            "46": 0.05783967525655251,
+            "47": 0.0578395863683234,
+            "48": 0.05215036126669734,
+            "49": 0.05783957068216532,
+            "50": 6.2398368980900765,
+            "51": 20.75380364248197,
+            "52": 6.122931290243187,
+            "53": 0.05783967525655251,
+            "54": 0.07306602075677371,
+            "55": 0.0578396752565525,
+            "56": 0.07711942757622042,
+            "57": 0.07711942757622042,
+            "58": 0.05783969617142995,
+            "59": 0.05823841497211182,
+            "60": 0.05845321608760346,
+            "61": 0.06803175780063236,
+            "62": 0.05901253231810263,
+            "63": 0.07711951123573019,
+            "64": 0.07367391955978951,
+            "65": 0.06575930137283581,
+            "66": 0.060644946558367,
+            "67": 0.0674632394557583,
+            "68": 0.05845285148084777,
+            "69": 0.0578396752565525,
+            "70": 0.0578395863683234,
+            "71": 0.07711904065098782,
+            "72": 0.05783958015921915,
+            "73": 0.05902750979196812,
+            "74": 0.057839466107778126,
+            "75": 0.0578395706821653,
+            "76": 0.058452803923444846,
+            "77": 0.07711942757622042,
+            "78": 0.07367445854368923,
+            "79": 0.058452581988897925
           },
           "peak_velocity": {
-            "0": 0.2548396067160023,
-            "1": 0.25483971304337827,
-            "2": 0.2548396067160023,
-            "3": 0.1955093085499017,
-            "4": 0.2461970932592547,
-            "5": 0.2548396067160023,
-            "6": 0.2156338323572068,
-            "7": 0.23523656004554058,
-            "8": 0.23523656004554058,
-            "9": 0.23523666637291657,
-            "10": 0.23523656004554058,
-            "11": 0.31364874672738746,
-            "12": 0.2606788685955681,
-            "13": 0.25483971304337827,
-            "14": 0.21563361970245484,
-            "15": 0.31364877330923147,
-            "16": 0.25483950038862635,
-            "17": 0.3041254514303132,
-            "18": 0.21563361970245484,
-            "19": 0.21563361970245484,
-            "20": 0.17642742003415543,
-            "21": 0.2461970932592547,
-            "22": 0.23523656004554058,
-            "23": 0.21563351337507888,
-            "24": 0.23523656004554058,
-            "25": 0.19603046670461716,
-            "26": 0.267920070470176,
-            "27": 0.19603046670461716,
-            "28": 0.2027501962180584,
-            "29": 0.33325181997969316,
-            "30": 0.3910186170998034,
-            "31": 0.32584905705413697,
-            "32": 0.3330902589287449,
-            "33": 0.274442653386464,
-            "34": 0.2940458063843017,
-            "35": 0.27516127234478394,
-            "36": 0.27516127234478394,
-            "37": 0.2389558913846468,
-            "38": 0.21723291417372545,
-            "39": 0.31364874672738746,
-            "40": 0.3475720342650583,
-            "41": 0.23171468951003885,
-            "42": 0.2751606439318815,
-            "43": 0.36929563988888203,
-            "44": 0.45087010000246347,
-            "45": 0.2352365866273846,
-            "46": 0.21563351337507888,
-            "47": 0.2461970932592547,
-            "48": 0.2461970932592547,
-            "49": 0.267920070470176,
-            "50": 0.23523656004554058,
-            "51": 0.4508701797479954
+            "0": 0.25063813962271636,
+            "1": 0.25063824419710357,
+            "2": 0.25063813962271636,
+            "3": 0.1972782528727955,
+            "4": 0.2484246544616552,
+            "5": 0.25063813962271636,
+            "6": 0.21207873955776774,
+            "7": 0.23135828272866127,
+            "8": 0.23135828272866127,
+            "9": 0.23135838730304845,
+            "10": 0.23135828272866127,
+            "11": 0.3084777103048817,
+            "12": 0.2630374591308255,
+            "13": 0.25063824419710357,
+            "14": 0.21207853040899335,
+            "15": 0.3084777364484785,
+            "16": 0.25063803504832916,
+            "17": 0.3068771413357473,
+            "18": 0.21207853040899335,
+            "19": 0.21207853040899335,
+            "20": 0.1753580947209818,
+            "21": 0.2484246544616552,
+            "22": 0.23135828272866127,
+            "23": 0.21207842583460615,
+            "24": 0.23135828272866127,
+            "25": 0.19279856894055106,
+            "26": 0.2703441785147634,
+            "27": 0.19279856894055106,
+            "28": 0.20458465520738062,
+            "29": 0.32775759334253357,
+            "30": 0.394556505745591,
+            "31": 0.328797299487561,
+            "32": 0.3361040188714989,
+            "33": 0.26991799651677145,
+            "34": 0.28919795798521375,
+            "35": 0.2776508978987013,
+            "36": 0.2776508978987013,
+            "37": 0.2411179350777173,
+            "38": 0.21919841102460919,
+            "39": 0.3084777103048817,
+            "40": 0.35071682354066913,
+            "41": 0.23381121569377944,
+            "42": 0.27765026379999574,
+            "43": 0.3726369816924828,
+            "44": 0.44343673470686423,
+            "45": 0.23135830887225806,
+            "46": 0.21207842583460615,
+            "47": 0.2484246544616552,
+            "48": 0.2484246544616552,
+            "49": 0.2703441785147634,
+            "50": 3.489654359259942,
+            "51": 10.546082348494465,
+            "52": 3.29685563345781,
+            "53": 0.25063824419710357,
+            "54": 0.26991799651677145,
+            "55": 0.19279856894055106,
+            "56": 0.2411173009790118,
+            "57": 0.3361037018221461,
+            "58": 0.25573137384559314,
+            "59": 0.32148994600491754,
+            "60": 0.2995704219518094,
+            "61": 0.25063803504832916,
+            "62": 0.25573137384559314,
+            "63": 0.3084777103048817,
+            "64": 0.28919795798521375,
+            "65": 0.2703441785147634,
+            "66": 0.26991799651677145,
+            "67": 0.27034481261346893,
+            "68": 0.28919795798521375,
+            "69": 0.25063824419710357,
+            "70": 0.25063824419710357,
+            "71": 0.28919795798521375,
+            "72": 0.19279856894055106,
+            "73": 0.21207853040899335,
+            "74": 0.19279862122774466,
+            "75": 0.23135833501585487,
+            "76": 0.26991799651677145,
+            "77": 0.3277575671989368,
+            "78": 0.2891977488364394,
+            "79": 0.328797299487561
           },
           "velocity_spike": {
             "0": null,
@@ -800,7 +1228,35 @@
             "48": null,
             "49": null,
             "50": null,
-            "51": null
+            "51": null,
+            "52": null,
+            "53": null,
+            "54": null,
+            "55": null,
+            "56": null,
+            "57": null,
+            "58": null,
+            "59": null,
+            "60": null,
+            "61": null,
+            "62": null,
+            "63": null,
+            "64": null,
+            "65": null,
+            "66": null,
+            "67": null,
+            "68": null,
+            "69": null,
+            "70": null,
+            "71": null,
+            "72": null,
+            "73": null,
+            "74": null,
+            "75": null,
+            "76": null,
+            "77": null,
+            "78": null,
+            "79": null
           },
           "static_fraction": {
             "0": 0.41225626740947074,
@@ -853,73 +1309,129 @@
             "47": 0.36768802228412256,
             "48": 0.3955431754874652,
             "49": 0.29526462395543174,
-            "50": 0.4735376044568245,
-            "51": 0.4178272980501393
+            "50": 0.0,
+            "51": 0.0,
+            "52": 0.0,
+            "53": 0.47075208913649025,
+            "54": 0.4735376044568245,
+            "55": 0.3649025069637883,
+            "56": 0.34540389972144847,
+            "57": 0.2689075630252101,
+            "58": 0.28212290502793297,
+            "59": 0.28939828080229224,
+            "60": 0.36768802228412256,
+            "61": 0.388268156424581,
+            "62": 0.32590529247910865,
+            "63": 0.3407821229050279,
+            "64": 0.34818941504178275,
+            "65": 0.35376044568245124,
+            "66": 0.38997214484679665,
+            "67": 0.4011142061281337,
+            "68": 0.3816155988857939,
+            "69": 0.42896935933147634,
+            "70": 0.467966573816156,
+            "71": 0.3871866295264624,
+            "72": 0.35376044568245124,
+            "73": 0.3871866295264624,
+            "74": 0.40947075208913647,
+            "75": 0.3955431754874652,
+            "76": 0.467966573816156,
+            "77": 0.4401114206128134,
+            "78": 0.46518105849582175,
+            "79": 0.39275766016713093
           },
           "end_pose_deviation": {
-            "0": 0.10732323310579604,
-            "1": 0.04719763936282867,
-            "2": 0.07702020487807283,
-            "3": 0.10732323310579604,
-            "4": 0.09469697134424471,
-            "5": 0.5414395167331696,
-            "6": 0.17370130043804485,
-            "7": 0.06186868733995452,
-            "8": 0.1347402596473474,
-            "9": 0.05714284843133333,
-            "10": 0.09253247022692557,
-            "11": 0.08928571719458543,
-            "12": 0.154220782244004,
-            "13": 0.05714284843133333,
-            "14": 0.03409090683957148,
-            "15": 0.07954545466219057,
-            "16": 0.017857141677870773,
-            "17": 0.07629870506522486,
-            "18": 0.05714284843133333,
-            "19": 0.0694444452529495,
-            "20": 0.011363636013428291,
-            "21": 0.05714284843133333,
-            "22": 0.06655843716297288,
-            "23": 0.05714284843133333,
-            "24": 0.0694444452529495,
-            "25": 0.05934343584370843,
-            "26": 0.0694444452529495,
-            "27": 0.060064931098292605,
-            "28": 0.07449494995757004,
-            "29": 0.13474025084211583,
-            "30": 0.5929203924957379,
-            "31": 0.2905843963944426,
-            "32": 0.6000000609806667,
-            "33": 0.21266232361827922,
-            "34": 0.11525973264807499,
-            "35": 0.37142866725533336,
-            "36": 0.06331168413063275,
-            "37": 0.20941558819640219,
-            "38": 0.079545458097565,
-            "39": 0.37142866725533336,
-            "40": 0.11850650329087825,
-            "41": 0.04058441290425176,
-            "42": 0.10227272051871443,
-            "43": 0.07196969760525977,
-            "44": 0.07449494995757004,
-            "45": 0.046717174082157094,
-            "46": 0.06331168413063275,
-            "47": 0.15422076903615667,
+            "0": 0.1802575154316357,
+            "1": 0.057803463224276805,
+            "2": 0.12875537190673278,
+            "3": 0.1802575154316357,
+            "4": 0.15879828896292617,
+            "5": 0.847863372628849,
+            "6": 0.3063583786032156,
+            "7": 0.10300429432451444,
+            "8": 0.23699421489590058,
+            "9": 0.0815450678558049,
+            "10": 0.16184971270434073,
+            "11": 0.15606936638191307,
+            "12": 0.2716763006686495,
+            "13": 0.07999998292541437,
+            "14": 0.057803463224276805,
+            "15": 0.13733905958433315,
+            "16": 0.028901731612138402,
+            "17": 0.13294798109220235,
+            "18": 0.09248554115884289,
+            "19": 0.12017167840936552,
+            "20": 0.02145922792365127,
+            "21": 0.07999998292541437,
+            "22": 0.12138727277098128,
+            "23": 0.0815450678558049,
+            "24": 0.12017167840936552,
+            "25": 0.10404623380369825,
+            "26": 0.12017167840936552,
+            "27": 0.10982658012612592,
+            "28": 0.12875536899684933,
+            "29": 0.24277454554196257,
+            "30": 0.7065073176623587,
+            "31": 0.5202311690184912,
+            "32": 0.8400000341491712,
+            "33": 0.38150285728022687,
+            "34": 0.2080924676073965,
+            "35": 0.5200001024475138,
+            "36": 0.11560692644855361,
+            "37": 0.3757225423105306,
+            "38": 0.13872832741463,
+            "39": 0.5200001024475138,
+            "40": 0.21387284528255557,
+            "41": 0.06936415586913217,
+            "42": 0.18497108231768578,
+            "43": 0.12446352370310743,
+            "44": 0.12875536899684933,
+            "45": 0.08154507076568834,
+            "46": 0.11560692644855361,
+            "47": 0.27745662347652866,
             "48": 0.30088498293816796,
-            "49": 0.017857141677870773,
-            "50": 0.9528023606371714,
-            "51": 0.9971347068250889
+            "49": 0.03468207793456608,
+            "50": 0.9960159867635978,
+            "51": 0.07999998292541437,
+            "52": 0.16763005902676842,
+            "53": 0.07999998292541437,
+            "54": 0.09826588748127056,
+            "55": 0.07999998292541437,
+            "56": 0.2080924676073965,
+            "57": 0.45132734640671124,
+            "58": 0.12716761909340896,
+            "59": 0.3757225423105306,
+            "60": 0.38150285728022687,
+            "61": 0.07999998292541437,
+            "62": 0.13294796541583664,
+            "63": 0.10404623380369825,
+            "64": 0.15999996585082873,
+            "65": 0.20231213696133452,
+            "66": 0.09826588748127056,
+            "67": 0.4896755403894826,
+            "68": 0.43999997723388584,
+            "69": 0.35999999430847146,
+            "70": 0.07999998292541437,
+            "71": 0.07999998292541437,
+            "72": 0.10729613961825635,
+            "73": 0.1445086737370577,
+            "74": 0.35999999430847146,
+            "75": 0.07999998292541437,
+            "76": 0.10404623380369825,
+            "77": 0.16763005902676842,
+            "78": 0.20231213696133452,
+            "79": 0.15021459837544232
           }
         },
         "flagged": {
-          "2": [
-            "p95_jerk"
-          ],
           "5": [
             "end_pose_deviation"
           ],
           "30": [
             "peak_velocity",
+            "end_pose_deviation"
+          ],
+          "31": [
             "end_pose_deviation"
           ],
           "32": [
@@ -934,14 +1446,23 @@
           "44": [
             "peak_velocity"
           ],
-          "48": [
-            "end_pose_deviation"
-          ],
           "50": [
+            "duration_s",
+            "p95_jerk",
+            "peak_velocity",
             "end_pose_deviation"
           ],
           "51": [
-            "peak_velocity",
+            "duration_s",
+            "p95_jerk",
+            "peak_velocity"
+          ],
+          "52": [
+            "duration_s",
+            "p95_jerk",
+            "peak_velocity"
+          ],
+          "67": [
             "end_pose_deviation"
           ]
         }
@@ -949,10 +1470,12 @@
       "findings": [
         {
           "severity": "WARN",
-          "message": "episode 30: IQR outlier on peak_velocity, end_pose_deviation (far out)",
-          "episode_index": 30,
+          "message": "episode 50: IQR outlier on duration_s, p95_jerk, peak_velocity, end_pose_deviation (far out)",
+          "episode_index": 50,
           "details": {
             "metrics": [
+              "duration_s",
+              "p95_jerk",
               "peak_velocity",
               "end_pose_deviation"
             ],
@@ -961,14 +1484,40 @@
         },
         {
           "severity": "WARN",
-          "message": "episode 51: IQR outlier on peak_velocity, end_pose_deviation (far out)",
+          "message": "episode 51: IQR outlier on duration_s, p95_jerk, peak_velocity (far out)",
           "episode_index": 51,
+          "details": {
+            "metrics": [
+              "duration_s",
+              "p95_jerk",
+              "peak_velocity"
+            ],
+            "far_out": true
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 52: IQR outlier on duration_s, p95_jerk, peak_velocity (far out)",
+          "episode_index": 52,
+          "details": {
+            "metrics": [
+              "duration_s",
+              "p95_jerk",
+              "peak_velocity"
+            ],
+            "far_out": true
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 30: IQR outlier on peak_velocity, end_pose_deviation",
+          "episode_index": 30,
           "details": {
             "metrics": [
               "peak_velocity",
               "end_pose_deviation"
             ],
-            "far_out": true
+            "far_out": false
           }
         },
         {
@@ -994,23 +1543,12 @@
           }
         },
         {
-          "severity": "WARN",
-          "message": "episode 50: IQR outlier on end_pose_deviation (far out)",
-          "episode_index": 50,
+          "severity": "INFO",
+          "message": "episode 31: IQR outlier on end_pose_deviation",
+          "episode_index": 31,
           "details": {
             "metrics": [
               "end_pose_deviation"
-            ],
-            "far_out": true
-          }
-        },
-        {
-          "severity": "INFO",
-          "message": "episode 2: IQR outlier on p95_jerk",
-          "episode_index": 2,
-          "details": {
-            "metrics": [
-              "p95_jerk"
             ],
             "far_out": false
           }
@@ -1050,8 +1588,8 @@
         },
         {
           "severity": "INFO",
-          "message": "episode 48: IQR outlier on end_pose_deviation",
-          "episode_index": 48,
+          "message": "episode 67: IQR outlier on end_pose_deviation",
+          "episode_index": 67,
           "details": {
             "metrics": [
               "end_pose_deviation"
@@ -1081,7 +1619,7 @@
       "verdict": "PASS",
       "weight": 8,
       "weight_basis": "placeholder",
-      "summary": "2 camera(s) over 52 episodes; 0 missing segments",
+      "summary": "2 camera(s) over 82 episodes; 0 missing segments",
       "skipped": false,
       "skip_reason": "",
       "details": {},
@@ -1091,20 +1629,50 @@
     {
       "id": "episode-file-pointers",
       "title": "Episode file pointers (v3 shard metadata)",
-      "verdict": "PASS",
+      "verdict": "WARN",
       "weight": 8,
       "weight_basis": "placeholder",
-      "summary": "every shard pointer matches its file's contents (52 episodes, 2 shard(s))",
+      "summary": "2 episode(s) have no rows in any local shard - missing data, not a pointer bug (dropped-frames reports the episodes); those episodes silently drop out of LeRobot training loads (82 episodes, 3 shard(s))",
       "skipped": false,
       "skip_reason": "",
       "details": {
-        "broken": [],
-        "judged": 52,
-        "catalogued": 52,
-        "local_shards": 2
+        "broken": [
+          80,
+          81
+        ],
+        "judged": 82,
+        "catalogued": 82,
+        "local_shards": 3,
+        "robustness": {
+          "probed": [
+            "unit-milli",
+            "unit-kilo",
+            "order-reversed",
+            "half-sample"
+          ]
+        }
       },
-      "findings": [],
-      "charge": 0
+      "findings": [
+        {
+          "severity": "WARN",
+          "message": "episode 80: metadata points at data/chunk-000/file-002.parquet but its rows are not there; LeRobot loads only the metadata-named file, so the episode silently drops out of training",
+          "episode_index": 80,
+          "details": {
+            "declared": "data/chunk-000/file-002.parquet",
+            "actual": null
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 81: metadata points at data/chunk-000/file-002.parquet but its rows are not there; LeRobot loads only the metadata-named file, so the episode silently drops out of training",
+          "episode_index": 81,
+          "details": {
+            "declared": "data/chunk-000/file-002.parquet",
+            "actual": null
+          }
+        }
+      ],
+      "charge": 8
     },
     {
       "id": "video-file-pointers",
@@ -1128,7 +1696,7 @@
       "verdict": "PASS",
       "weight": 8,
       "weight_basis": "placeholder",
-      "summary": "52 episodes, 1 tasks in meta/tasks; 0 finding(s)",
+      "summary": "82 episodes, 1 tasks in meta/tasks; 0 finding(s)",
       "skipped": false,
       "skip_reason": "",
       "details": {},
@@ -1154,27 +1722,27 @@
       "verdict": "WARN",
       "weight": 6,
       "weight_basis": "placeholder",
-      "summary": "52 episodes x 2 camera(s) sampled; median blur observation.images.robot 236, observation.images.side 22",
+      "summary": "82 episodes x 2 camera(s) sampled; median blur observation.images.robot 236, observation.images.side 22",
       "skipped": false,
       "skip_reason": "",
       "details": {
         "median_blur_per_camera": {
-          "observation.images.robot": 236.45056056050237,
-          "observation.images.side": 22.32480621958488
+          "observation.images.robot": 235.95260230235408,
+          "observation.images.side": 21.728015274436103
         },
         "median_p95_brightness_per_camera": {
-          "observation.images.robot": 219.5,
-          "observation.images.side": 216.0
+          "observation.images.robot": 218.0,
+          "observation.images.side": 218.0
         },
         "median_saturated_fraction_per_camera": {
-          "observation.images.robot": 0.008567708333333333,
-          "observation.images.side": 0.005839029947916667
+          "observation.images.robot": 0.008058268229166667,
+          "observation.images.side": 0.009143880208333333
         }
       },
       "findings": [
         {
           "severity": "WARN",
-          "message": "camera observation.images.side: blurry in 50/52 episodes (blur score < 30; worst [36, 43, 34, 37, 29, 44, 51, 24])",
+          "message": "camera observation.images.side: blurry in 77/82 episodes (blur score < 30; worst [74, 73, 72, 71, 69, 67, 68, 36])",
           "episode_index": null,
           "details": {
             "camera": "observation.images.side",
@@ -1228,8 +1796,35 @@
               46,
               47,
               49,
-              50,
-              51
+              51,
+              52,
+              53,
+              54,
+              55,
+              56,
+              58,
+              59,
+              61,
+              62,
+              63,
+              64,
+              65,
+              66,
+              67,
+              68,
+              69,
+              70,
+              71,
+              72,
+              73,
+              74,
+              75,
+              76,
+              77,
+              78,
+              79,
+              80,
+              81
             ],
             "values": {
               "0": 24.71211015717449,
@@ -1280,25 +1875,66 @@
               "46": 22.40275717397546,
               "47": 20.031533160127164,
               "49": 19.122883255383304,
-              "50": 19.992789205904934,
-              "51": 17.11553651906179
+              "51": 22.126572252293712,
+              "52": 21.156923368909524,
+              "53": 24.924000813957207,
+              "54": 26.460377199227587,
+              "55": 18.148758046900504,
+              "56": 27.786363164498418,
+              "58": 18.098044188974193,
+              "59": 28.744336896722295,
+              "61": 23.38244826218957,
+              "62": 20.252003456224696,
+              "63": 24.995786304538655,
+              "64": 18.130518262804618,
+              "65": 23.142636313513442,
+              "66": 23.80333076865964,
+              "67": 13.71291025320321,
+              "68": 14.365339778742928,
+              "69": 13.241102155058929,
+              "70": 17.932816635870928,
+              "71": 13.10910954140955,
+              "72": 12.728271178443851,
+              "73": 12.215725412996392,
+              "74": 12.021184372790879,
+              "75": 15.907707091957548,
+              "76": 17.31806204456641,
+              "77": 15.33253578410484,
+              "78": 16.169605190085093,
+              "80": 16.169605190085093,
+              "79": 21.796297089708023,
+              "81": 21.796297089708023
             }
           }
         },
         {
           "severity": "INFO",
-          "message": "camera observation.images.side: overexposed in 2/52 episodes (saturated-pixel fraction > 0.25; worst [50, 51])",
+          "message": "camera observation.images.side: overexposed in 9/82 episodes (saturated-pixel fraction > 0.25; worst [53, 73, 77, 78, 80, 74, 76, 69])",
           "episode_index": null,
           "details": {
             "camera": "observation.images.side",
             "kind": "overexposed",
             "episodes": [
-              50,
-              51
+              53,
+              55,
+              69,
+              73,
+              74,
+              76,
+              77,
+              78,
+              80
             ],
             "values": {
-              "50": 0.8931103515625,
-              "51": 0.8233805338541667
+              "53": 0.7562939453125,
+              "55": 0.2588916015625,
+              "69": 0.2635823567708333,
+              "73": 0.5270686848958334,
+              "74": 0.41552083333333334,
+              "76": 0.2638850911458333,
+              "77": 0.48595540364583334,
+              "78": 0.43253417968749996,
+              "80": 0.43253417968749996
             },
             "static_clip_share": 0.0
           }
