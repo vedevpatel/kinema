@@ -1088,15 +1088,19 @@ def resolve_revision(repo: str) -> str | None:
 def revision_staleness(entries: list[dict], current: set[str],
                        workers: int = 8) -> tuple[set[str], set[str]]:
     """(changed, unknown) among the current rows: Hub datasets whose commit
-    moved since their audit, and audits that recorded no revision. RLDS and
-    gated rows are not probed (no commits / no access). A probe that errors
-    leaves the row current - an error is not a change."""
+    moved since their audit, and audits that recorded no revision (Hub or
+    RLDS). RLDS rows are not probed for upstream change (no commits); gated
+    rows have no audit. A probe that errors leaves the row current - an
+    error is not a change."""
     from concurrent.futures import ThreadPoolExecutor
 
-    rows = [e for e in entries if e["id"] in current and e.get("report")
-            and not e.get("rlds") and not e["id"].startswith("rlds/")]
-    unknown = {e["id"] for e in rows if not e.get("revision")}
-    known = [e for e in rows if e.get("revision")]
+    audited = [e for e in entries if e["id"] in current and e.get("report")]
+    # every audit without a recorded revision is re-audited once, RLDS too
+    # (cheap, metadata-only) - otherwise those rows read revision-unknown
+    # forever; only Hub rows can be probed for an upstream commit
+    unknown = {e["id"] for e in audited if not e.get("revision")}
+    known = [e for e in audited if e.get("revision")
+             and not e.get("rlds") and not e["id"].startswith("rlds/")]
 
     def probe(e):
         return e["id"], e["revision"], resolve_revision(e["id"].split("//", 1)[0])

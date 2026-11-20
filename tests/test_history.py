@@ -144,4 +144,27 @@ def test_revision_staleness_flags_changed_and_unrecorded_rows_only(monkeypatch):
     for r in rows:
         r["report"] = {"checks": []}
     changed, unknown = lb.revision_staleness(rows, {r["id"] for r in rows})
-    assert changed == {"o/changed"} and unknown == {"o/unknown"}  # a probe error is not a change
+    # a probe error is not a change; RLDS rows without a revision are queued too
+    assert changed == {"o/changed"} and unknown == {"o/unknown", "rlds/x"}
+
+
+def test_finding_digest_survives_mixed_field_types():
+    # the 2026-11-20 board run lost its history to this: real findings mix
+    # None, str and int in the same field across findings
+    mixed = [{"severity": "WARN", "details": {"kind": None, "dim": 3}},
+             {"severity": "WARN", "details": {"kind": "partial", "dim": None, "episodes": [4, 2]}},
+             {"severity": "FAIL", "episode_index": 7, "details": {}}]
+    e = _entry(findings={"stats-drift": mixed})
+    a = H.row_snapshot(e, CHECKS)["fd"]["stats-drift"]
+    e2 = _entry(findings={"stats-drift": list(reversed(mixed))})
+    assert H.row_snapshot(e2, CHECKS)["fd"]["stats-drift"] == a  # order-independent
+
+
+def test_history_writes_on_the_real_board(tmp_path):
+    # the committed board, whatever its rows hold today
+    board = Path(__file__).resolve().parent.parent / "docs" / "data.json"
+    if not board.exists():
+        pytest.skip("no committed board")
+    entries = json.loads(board.read_text())["datasets"]
+    doc = _lb().write_history(tmp_path, entries, "2026-11-20 23:07 UTC")
+    assert len(doc["rows"]) == len(entries)
