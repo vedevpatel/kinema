@@ -160,11 +160,11 @@ in a dataset's findings can be told apart from a change in the checker.
 | `checker-changed` | only the engine differs |
 | `sample-changed` | only the episodes or video files read differ |
 | `coverage-changed` | a check ran in one audit and was skipped in the other |
-| `revision-unknown` | a verdict moved and one side's revision is unknown |
+| `revision-unknown` | a verdict moved and one side's revision is unknown (with nothing else known to differ; a legacy side also lacks a sample fingerprint, which makes the move `ambiguous`) |
 | `ambiguous` | more than one of the above differs |
 | `unexplained` | nothing differs and a verdict still moved - a determinism bug |
 | `stable` | verdicts held (what changed anyway is listed, e.g. a new revision) |
-| `not-re-audited` | the row was not audited again; nothing to compare |
+| `not-re-audited` | the row was not audited again - including legacy audits that predate change tracking (no recorded audit time); nothing to compare |
 | `audit-failed` / `now-gated` | no audit this time: earlier findings are unknown, not resolved |
 | `audit-recovered`, `new-row`, `row-removed`, `still-not-audited` | as named |
 
