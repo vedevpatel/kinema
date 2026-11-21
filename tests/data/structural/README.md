@@ -10,8 +10,9 @@ exact Hub revisions, tested offline on every push by
 video-segment columns (per-episode statistics dropped); the kept data shards
 reduced to index columns (`episode_index`, `frame_index`, and where small
 enough `timestamp`, `index`, `task_index`) - no state, action or image values;
-and `listing.txt`, the repo's file listing at the revision for `meta/`, the
-kept shards and every video file the kept episodes name. `CASE.json` records
+and `listing.txt`, the repo's file listing at the revision for `meta/`, every
+data shard (packed or not - as on the board, the listing is the whole repo's)
+and every video file the kept episodes name. `CASE.json` records
 source, revision, license, what was kept, the ground truth and the evidence.
 
 **How the expected findings were verified.** `build_pack.py` / `cases.py`

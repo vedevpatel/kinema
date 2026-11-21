@@ -551,7 +551,14 @@ catalogued episode's declared shard against the shard's actual episode
 roster (one column read per shard).
 
 Every catalogued episode whose declared shard is available locally is
-checked. One WARN per broken episode (the first 10 are listed, with the
+checked. A broken pointer whose rows are found in another read shard is the
+rollover bug; one whose rows are in no read shard is called missing data only
+when every data shard the dataset holds was read (a local audit, or a Hub
+listing whose every `data/` shard was fetched). On a sampled audit it reads
+"no rows in the fetched shards": the rows may be missing, or in a shard the
+sample did not fetch - on the 2026-11-21 board, BitRobot's 83 and VLABench's
+"missing" episodes all had their rows in unfetched shards. Real cases live in
+the offline structural pack (`tests/data/structural/`). One WARN per broken episode (the first 10 are listed, with the
 shard its rows actually live in when that shard is local). A single broken
 pointer is a converter defect: re-convert or re-export with a fixed lerobot.
 Found live in official exports (allenai/MolmoAct2-RT-1-Dataset,

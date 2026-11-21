@@ -93,8 +93,10 @@ def extract(repo: str, rev: str, case: str, keep_episodes, keep_shards: set[str]
         ci, fi = md.get(f"videos/{cam}/chunk_index"), md.get(f"videos/{cam}/file_index")
         if vtpl and ci is not None:
             named |= {vtpl.format(video_key=cam, chunk_index=c, file_index=f) for c, f in zip(ci, fi) if c is not None}
+    # every data shard path too, packed or not: the board's listing is the
+    # whole repo's, and the pointer check reads it to know what it did not fetch
     (root / "listing.txt").write_text("".join(f"{p}\t{s}\n" for p, s in listing
-                                              if p.startswith("meta/") or p in keep_shards or p in named))
+                                              if p.startswith(("meta/", "data/")) or p in named))
     return root
 
 

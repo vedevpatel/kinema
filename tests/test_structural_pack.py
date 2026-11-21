@@ -129,3 +129,41 @@ def test_clean_controls_raise_nothing_structural(case):
         for cid in ("episode-file-pointers", "camera-coverage", "video-file-pointers"):
             res = C[cid].run(ctx, CFG)
             assert not [f for f in res.findings if f.severity >= Severity.WARN], (name, cid, res.summary)
+
+
+# --- wording: "missing data" only when every data shard was read --------------
+
+@pytest.mark.parametrize("name,claim", [
+    # rows live in file-002 / file-027, which the extract (like the board's
+    # sample) never fetched: missing cannot be told from misplaced
+    ("bitrobot_pointer_rows_unpacked", "fetched"),
+    ("vlabench_pointer_rollover", "fetched"),
+    # all three of the dataset's shards are read and the rows are in none
+    ("mendelbeans_pointer_no_rows", "missing"),
+])
+def test_no_rows_wording_follows_what_was_read(case, name, claim):
+    ctx, _ = case(name)
+    summary = C["episode-file-pointers"].run(ctx, CFG).summary
+    if claim == "missing":
+        assert "missing data, not a pointer bug" in summary, summary
+    else:
+        assert "no rows in the fetched shards" in summary and "missing data" not in summary, summary
+
+
+def test_no_rows_wording_on_a_local_dataset(tmp_path):
+    import pyarrow.compute as pc
+    import pyarrow.parquet as pq
+
+    from kinema.fixtures.synth import make_dataset
+    root = make_dataset(tmp_path / "d", episodes=12, shards=2)
+    f = root / "data" / "chunk-000" / "file-000.parquet"
+    t = pq.read_table(f)
+    pq.write_table(t.filter(pc.not_equal(t.column("episode_index"), 0)), f)  # episode 0's rows gone
+    ctx = load_dataset(str(root))
+    # a local audit holds every shard on disk: the rows are in none of them
+    assert "missing data" in C["episode-file-pointers"].run(ctx, CFG).summary
+    # the same files seen as a sample of a bigger repo: it cannot say so
+    ctx.repo_files = [*(p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file()),
+                      "data/chunk-000/file-007.parquet"]
+    summary = C["episode-file-pointers"].run(ctx, CFG).summary
+    assert "no rows in the fetched shards" in summary and "missing data" not in summary
