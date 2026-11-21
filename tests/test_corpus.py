@@ -83,14 +83,6 @@ def _behavior1k_tilt(ctx):
     assert not hits, [f.message for f in hits]
 
 
-def _hggforget(ctx):
-    # dropouts to 0 from a live ~0.95 on dim 14 (extract dim 3), state and action
-    res = C["nan-and-normalization"].run(ctx, CFG)
-    for feat in ("observation.state", "action"):
-        hits = _dominating(res, feat)
-        assert [h.details["dim"] for h in hits] == [3] and not hits[0].details["at_episode_start"], feat
-
-
 def _mendelbeans(ctx):
     res = C["stats-drift"].run(ctx, CFG)
     assert res.verdict == Severity.FAIL, res.summary
@@ -106,10 +98,23 @@ EXPECT = {
     "mendelbeans_stale_stats": _mendelbeans,
     "groot_basevel_tail": _groot_basevel,
     "behavior1k_tilt_tail": _behavior1k_tilt,
-    "hggforget_dropout": _hggforget,
 }
 
 
 @pytest.mark.parametrize("name", sorted(EXPECT))
 def test_adjudicated_verdict_holds(ctx_of, name):
     EXPECT[name](ctx_of(name))
+
+
+REDISTRIBUTABLE = {"mit", "apache-2.0", "cc-by-4.0", "cc0-1.0", "cc-by-sa-4.0", "odc-by", "bsd-3-clause"}
+
+
+def test_every_case_has_a_recorded_redistribution_license():
+    import re
+    from pathlib import Path
+    readme = (Path(__file__).resolve().parent / "data" / "corpus" / "README.md").read_text()
+    table = {m.group(1): m.group(2).strip().lower()
+             for m in re.finditer(r"^\| `([a-z0-9_]+)` \|[^|]*\|[^|]*\| ([^|]+) \|", readme, re.M)}
+    for name in cases():
+        assert name in table, f"{name}: no provenance row in tests/data/corpus/README.md"
+        assert table[name] in REDISTRIBUTABLE, f"{name}: license {table[name]!r}"

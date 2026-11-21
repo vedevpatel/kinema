@@ -129,6 +129,32 @@ def test_dropout_from_a_live_value_is_still_flagged(tmp_path):
     assert [(h.details["dim"], h.details["episodes"], h.details["at_episode_start"]) for h in hits] == [(3, [11], False)]
 
 
+def test_dropout_on_the_same_dim_of_state_and_action_is_flagged_in_both(tmp_path):
+    # the shape hggforget/lerobot_2026-10-26_12-09-32 showed on the board (its
+    # extract left the corpus: no declared license): a live value ~2% wide
+    # around 0.95 drops to 0 for a few frames mid-episode, in the command and
+    # the measurement alike. austin_buds (MIT) keeps the real state-side case.
+    root = make_dataset(tmp_path / "sa", episodes=24)
+    rng = np.random.default_rng(4)
+
+    def dropout(s, a, ep):
+        s, a = s.copy(), a.copy()
+        live = 0.95 + 0.005 * rng.normal(size=len(s))
+        s[:, 3] = live
+        a[:, 3] = live + 0.0005 * rng.normal(size=len(s))
+        for e in (4, 11, 19):
+            rows = np.flatnonzero(ep == e)[[15, 30]]
+            s[rows, 3] = 0.0
+            a[rows, 3] = 0.0
+        return s, a
+    _rewrite_data(root, dropout)
+    res = CHECK.run(load_dataset(str(root)), CheckConfig())
+    for feat in ("observation.state", "action"):
+        hits = [h for h in dom(res) if h.details["feature"] == feat]
+        assert [(h.details["dim"], h.details["episodes"], h.details["at_episode_start"]) for h in hits] \
+            == [(3, [4, 11, 19], False)], feat
+
+
 def test_reset_transient_is_named_as_one(tmp_path):
     # behavior1k dim 146: every (here: every other) episode's frame 0 sits far
     # outside a tight but live bulk

@@ -48,7 +48,10 @@ CASES = {
                      pick=dict(feature="action", dim=10, extra=30)),
     # MUST flag: stats-drift FAIL. Episode 51 reaches -53.5 on dim 0 while
     # stats.json says min -24.4 - stats never updated after it was recorded.
-    "mendelbeans_stale_stats": dict(repo="MendelBeans/lerobot_dataset_put_pen_in_the_holder_20261118_215903",
+    # (renamed on the Hub from ..._20261118_215903, which redirects here; the
+    # revision is pinned - the dataset keeps growing)
+    "mendelbeans_stale_stats": dict(repo="MendelBeans/lerobot_dataset_put_pen_in_the_holder",
+                                    revision="b281c2c1f1c92d5180ca33ac1c36898a7f8c1ec3",
                                     episodes=[51], spread=10, keep_stats=True, partial=True),
     # The cases below load the exact data files the 2026-11-20 board sampled
     # (scripts/leaderboard.py download_sample) at the revision it read, then
@@ -68,19 +71,16 @@ CASES = {
         keep=[0, 15, 26, 36], state_dims=[84, 85, 89], action_dims=[0]),
     # must NOT flag: dominating outliers. State dim 146 (robot_ori_sin[0] in
     # the R1Pro layout): single-frame spikes scattered mid-episode, a
-    # continuous tail out of a 4e-5-wide bulk. No frame_index column; the
-    # board and docs named these reset transients.
+    # continuous tail out of a 4e-5-wide bulk. The board and docs named these
+    # reset transients. Source: the official BEHAVIOR-1K 2025 challenge demos
+    # (MIT), task 45 - lerobot/behavior1k-task0045, where the board met it,
+    # is a copy that declares no license (dims 140/146/150 bit-identical).
     "behavior1k_tilt_tail": dict(
-        repo="lerobot/behavior1k-task0045",
-        revision="27458fab90baf767109b214c9b3fa4f82e9bc97f",
-        files=[f"data/chunk-000/file-{i:03d}.parquet" for i in (0, 1, 2, 3, 5)],
+        repo="behavior-1k/2025-challenge-demos",
+        revision="33639692425296185f245aaa648530178c7b3d2b",
+        files=[f"data/task-0045/episode_{e:08d}.parquet" for e in (450010, 450060, 450110, 450150, 450200, 450300)],
+        meta=["meta/info.json", "meta/episodes.jsonl", "meta/tasks.jsonl"],
         keep=[450010, 450060, 450110, 450150, 450200, 450300], state_dims=[140, 146, 150], action_dims=[0]),
-    # MUST flag: dominating outliers on state and action dim 14. A live
-    # value near 0.95 drops to 0 for a few frames in some episodes.
-    "hggforget_dropout": dict(
-        repo="hggforget/lerobot_2026-10-26_12-09-32",
-        revision="1debf8fce5cee8efd9ee9898ed607c68fe19e25d",
-        files="board", state_dims=[0, 1, 2, 14], action_dims=[0, 1, 2, 14]),
 }
 
 
@@ -98,8 +98,9 @@ def _load_files(spec: dict):
             path_in_repo=f"{pre}data") if hasattr(f, "size"))
         n = len(names)
         files = [names[i] for i in sorted({round(i * (n - 1) / 39) for i in range(40)} if n > 40 else range(n))]
+    meta = spec.get("meta") or ["meta/**"]  # a repo with per-episode meta files names what it needs
     local = Path(snapshot_download(spec["repo"], repo_type="dataset", revision=spec["revision"],
-                                   allow_patterns=[f"{pre}meta/**", *(pre + f for f in files)]))
+                                   allow_patterns=[*(pre + m for m in meta), *(pre + f for f in files)]))
     root = local / sub if sub else local
     ctx = load_dataset(str(root), max_episodes=250)
     src = f"{spec['repo']}{'//' + sub if sub else ''}@{spec['revision']}"
