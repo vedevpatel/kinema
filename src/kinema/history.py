@@ -59,7 +59,10 @@ def row_snapshot(entry: dict, checks: list[str]) -> dict:
         gated = [f for f in c.get("findings", []) if f.get("severity") in ("WARN", "FAIL")]
         if gated:
             counts[cid] = len(gated)
-            digests[cid] = _digest(sorted(_finding_key(f) for f in gated))
+            # canonical order by encoding: finding fields mix None, str and
+            # int across findings, which Python cannot compare directly
+            keys = sorted(json.dumps(_finding_key(f), sort_keys=True, default=str) for f in gated)
+            digests[cid] = _digest(keys)
     row = {
         "id": entry["id"],
         "status": "audited" if rep else entry.get("status", "missing"),
