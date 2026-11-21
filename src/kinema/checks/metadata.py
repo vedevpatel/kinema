@@ -139,6 +139,17 @@ def _shard_pointers(ctx) -> dict[int, tuple[int, int]] | None:
     return out
 
 
+def _all_data_shards_read(ctx, read: set[str]) -> bool:
+    """Whether the pointer check read every data shard the dataset holds: the
+    repo listing's data/*.parquet files when known (Hub audits), else those on
+    disk under the dataset root (local audits hold the whole dataset)."""
+    if ctx.repo_files is not None:
+        held = {p for p in ctx.repo_files if p.startswith("data/") and p.endswith(".parquet")}
+    else:
+        held = {p.relative_to(ctx.root).as_posix() for p in (ctx.root / "data").glob("**/*.parquet")}
+    return bool(held) and held <= read
+
+
 def _data_rel(template: str, chunk: int, file_: int) -> str:
     try:
         return template.format(chunk_index=chunk, file_index=file_)
@@ -219,9 +230,20 @@ class EpisodeFilePointersCheck(Check):
                     "(https://github.com/huggingface/lerobot/issues/2401): re-convert or "
                     "re-export with a fixed lerobot to repair the metadata")
             if gone:
-                parts.append(
-                    f"{gone} episode(s) have no rows in any local shard - missing data, "
-                    "not a pointer bug (dropped-frames reports the episodes)")
+                # "missing data" only when every data shard the dataset holds
+                # was read: a sampled audit that never fetched the shard holding
+                # the rows cannot tell missing rows from misplaced ones (board,
+                # 2026-11-21: BitRobot's 83 and VLABench's "missing" episodes
+                # all had their rows in shards the sample did not fetch)
+                if _all_data_shards_read(ctx, set(local)):
+                    parts.append(
+                        f"{gone} episode(s) have no rows in any of the dataset's data shards - "
+                        "missing data, not a pointer bug (dropped-frames reports the episodes)")
+                else:
+                    parts.append(
+                        f"{gone} episode(s) have no rows in the fetched shards - the rows may be "
+                        "missing, or in a shard this audit did not fetch (a sampled audit "
+                        "cannot tell; a full load can)")
             res.summary = ("; ".join(parts) + f"; those episodes silently drop out of "
                            f"LeRobot training loads ({coverage})")
         else:
