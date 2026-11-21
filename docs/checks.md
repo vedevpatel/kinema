@@ -457,8 +457,11 @@ nyu_franka_play and dobbe keep every finding, bit for bit (each is separated
 at the first cut). Still flagged: task-0007's joint efforts (+25 at a limit,
 with runs from -23 at most episode starts - real transients that set the
 std 29x) and task-0028's grasp (the gap above). Frozen extracts of GR00T
-task-0013, behavior1k-task0045 and hggforget joined the corpus and the
-invariance suite.
+task-0013 and BEHAVIOR-1K task 45 joined the corpus and the invariance
+suite; the task-45 extract now comes from the licensed upstream
+(`behavior-1k/2025-challenge-demos`, MIT), and hggforget's left the corpus
+for want of a declared license (a synthetic test keeps its state-and-action
+shape; provenance in `tests/data/corpus/README.md`).
 
 No knobs.
 
