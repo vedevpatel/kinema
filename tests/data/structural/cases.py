@@ -31,7 +31,7 @@ CASES = {
     # metadata catalogues 82 episodes; the data holds 80 - episodes 80/81 point
     # at file-002 with no rows anywhere (metadata committed ahead of data)
     "mendelbeans_pointer_no_rows": dict(
-        repo="MendelBeans/lerobot_dataset_put_pen_in_the_holder_20261118_215903",
+        repo="MendelBeans/lerobot_dataset_put_pen_in_the_holder",
         revision="0c0e6528c6b3441e6c6a309a7e725199fb6ddf89",
         episodes=None, shards="pointed"),
     # 83 episodes catalogued in file-006 whose rows live in file-002 (not packed:
