@@ -1,0 +1,2174 @@
+{
+  "adversarial_review": {
+    "incomplete_access": "Frame probes use first/middle/last and claim-specific positions, not every frame. BitRobot and VLABench pointer cases inspect the selected loader table but do not run training. FineART and droid cannot complete dataset construction for independent schema reasons.",
+    "revision_drift": "Every recovered path was fetched at a 40-character commit and SHA-256 hashed. Frozen info/stats and available LFS hashes were checked. No latest-branch data were substituted.",
+    "selection_bias": "All eleven unresolved findings in the four named checks were included; no case removed because of unavailable per-dataset pages or difficult loaders. The previously confirmed r413:c2:f2 is excluded by the frozen unresolved filter.",
+    "shared_assumptions": "The verifier imports no kinema detector code. It uses upstream LeRobot releases, raw parquet/MP4 and the frozen audit only to identify assertions and pins. A direct decoder probe cannot replace full dataset iteration.",
+    "weak_labels": "No policy checkpoint is specified for four inference-normalization claims. Those remain unresolved despite successful raw frame loading in three cases. No training or real-world miss-rate claim is made."
+  },
+  "cases": [
+    {
+      "artifact_hashes": [
+        {
+          "bytes": 400529,
+          "path": "meta/episodes.jsonl",
+          "remote_path": "meta/episodes.jsonl",
+          "sha256": "98b5717300c1f26ba61667025440d7b05ef23064a747c65ffefca2e48b1ffbb6"
+        },
+        {
+          "bytes": 2131,
+          "path": "meta/info.json",
+          "remote_path": "meta/info.json",
+          "sha256": "0b854f0765747f1735794c247fc474ea56a0602fd0b73e47b613063529e9701a"
+        },
+        {
+          "bytes": 5726,
+          "path": "meta/tasks.jsonl",
+          "remote_path": "meta/tasks.jsonl",
+          "sha256": "ed1f867c7600f0054c8478eebae42e47c38ddb1fbb2fd431232201a6ed6b8997"
+        },
+        {
+          "bytes": 11804543,
+          "path": "data/chunk-000/episode_000000.parquet",
+          "remote_path": "data/chunk-000/episode_000000.parquet",
+          "sha256": "072d0e5150bf4c624d51a470fa3678dbbddb1156d62230ae053e90cad1b2d041"
+        }
+      ],
+      "calls": [
+        {
+          "command": "/tmp/kinema-phase2-v2/bin/python loader-verification/2026-11-22/run_loader.py r67:c17:f0",
+          "environment": {
+            "av": "15.1.0",
+            "datasets": "3.6.0",
+            "lerobot": "0.3.3",
+            "python": "3.11.17",
+            "torch": "2.7.1+cpu"
+          },
+          "evidence_file": "evidence/r67_c17_f0_loader.json",
+          "operation": "LeRobotDataset(... episodes=[episode], revision=commit, video_backend='pyav'); select matching rows in hf_dataset; __getitem__ at first, middle, last",
+          "steps": [
+            {
+              "feature_keys": [
+                "image",
+                "wrist_image",
+                "state",
+                "actions",
+                "timestamp",
+                "frame_index",
+                "episode_index",
+                "index",
+                "task_index"
+              ],
+              "length": 98,
+              "outcome": "ok",
+              "step": "construct",
+              "video_keys": []
+            },
+            {
+              "matching_rows": 98,
+              "outcome": "ok",
+              "selected_table_rows": 98,
+              "step": "episode_index_scan"
+            },
+            {
+              "index": 0,
+              "outcome": "ok",
+              "step": "item_first",
+              "timestamp": 0.0
+            },
+            {
+              "index": 49,
+              "outcome": "ok",
+              "step": "item_middle",
+              "timestamp": 4.900000095367432
+            },
+            {
+              "index": 97,
+              "outcome": "ok",
+              "step": "item_last",
+              "timestamp": 9.699999809265137
+            }
+          ]
+        }
+      ],
+      "case_id": "r67:c17:f0",
+      "check": "deployment-readiness",
+      "classification": "unresolved",
+      "dataset": "jesbu1/libero_90_lerobot",
+      "evidence_files": [
+        "evidence/r67_c17_f0.json",
+        "evidence/r67_c17_f0_loader.json"
+      ],
+      "metadata_anomaly_at_freeze": {
+        "feature_declared": false,
+        "metadata_tree": [
+          "meta/episodes.jsonl",
+          "meta/info.json",
+          "meta/tasks.jsonl"
+        ],
+        "metadata_tree_complete": true,
+        "metadata_tree_count": 3,
+        "per_episode_stats_paths": [],
+        "stats_json_present": false
+      },
+      "observed_values": "98/98 episode rows selected; first, middle and last item access succeeded. Source has no stats file, but declares state/actions and no observation.state.",
+      "original_assertion": "observation.state: no normalization stats (meta/stats.json or per-episode stats) - the policy cannot normalize inputs/outputs at inference",
+      "original_audit_classification": "unresolved",
+      "preregistered_confirm_if": "The supported normalization path for the exact named feature fails specifically for missing stats after successful item access",
+      "preregistered_operation": "Load first episode item and inspect loader metadata/stats; exercise documented normalization constructor for named feature if supported",
+      "preregistered_refute_if": "The exact named feature normalizes successfully using pinned inputs and supported defaults",
+      "reason": "A loader returning raw frames does not test the stated inference-policy normalization consequence. No policy configuration or checkpoint is specified; the named feature is absent.",
+      "recovery_commands": [
+        "python loader-verification/2026-11-22/prepare.py r67:c17:f0 --metadata",
+        "python loader-verification/2026-11-22/prepare.py r67:c17:f0 --path data/chunk-000/episode_000000.parquet"
+      ],
+      "remaining_gap": "Test a specified policy/checkpoint and its feature mapping and normalization path.",
+      "repo": "jesbu1/libero_90_lerobot",
+      "revision": "fa5ab6b7cdcab51fdfd88c8f216c00426508ecde",
+      "subdir": "",
+      "tested_scope": "LeRobot 0.3.3 v2.0 episode-0 iteration"
+    },
+    {
+      "artifact_hashes": [
+        {
+          "bytes": 188837,
+          "path": "meta/episodes.jsonl",
+          "remote_path": "meta/episodes.jsonl",
+          "sha256": "bf3f1de39b863f27c695ffced59b1f23eee1b809fea446919a4209208fd7a666"
+        },
+        {
+          "bytes": 31477,
+          "path": "meta/episodes.shard00.jsonl",
+          "remote_path": "meta/episodes.shard00.jsonl",
+          "sha256": "2c6604f8a677c239f82ea2489aedd3a336343657e215d62363f355313a3a355a"
+        },
+        {
+          "bytes": 31453,
+          "path": "meta/episodes.shard01.jsonl",
+          "remote_path": "meta/episodes.shard01.jsonl",
+          "sha256": "e4e35ae1015e14a745ecbe0395ddac9aceec7fff391975845013fc8e53f8492e"
+        },
+        {
+          "bytes": 31591,
+          "path": "meta/episodes.shard02.jsonl",
+          "remote_path": "meta/episodes.shard02.jsonl",
+          "sha256": "693cd3f3361fa30afabb1da0c6a0dff6a77da461486ca53a6c27ad460395576c"
+        },
+        {
+          "bytes": 31607,
+          "path": "meta/episodes.shard03.jsonl",
+          "remote_path": "meta/episodes.shard03.jsonl",
+          "sha256": "0d2ab18a09581fc737dc70be401b584d220b2056cc5ea1f30aaae1810d9f6619"
+        },
+        {
+          "bytes": 31356,
+          "path": "meta/episodes.shard04.jsonl",
+          "remote_path": "meta/episodes.shard04.jsonl",
+          "sha256": "8098b85979021e39b08422c9b5c9887149193a8fb5f9e9425d7474f9fd619fa9"
+        },
+        {
+          "bytes": 31353,
+          "path": "meta/episodes.shard05.jsonl",
+          "remote_path": "meta/episodes.shard05.jsonl",
+          "sha256": "1e1f28ebf8b085026b67febabddcad77cd557abe8211a113bcc4d087fcb175ed"
+        },
+        {
+          "bytes": 749,
+          "path": "meta/info.json",
+          "remote_path": "meta/info.json",
+          "sha256": "6eaef7da3f60b5c68c228244c4c5b42583c9e7767085ccb43e43f0deb5ffd7bd"
+        },
+        {
+          "bytes": 569,
+          "path": "meta/info.shard00.json",
+          "remote_path": "meta/info.shard00.json",
+          "sha256": "3f9fd6bb5880f1e8150eed64d852e7b8fa2a1f5c91d442ed1ea4085957e563fe"
+        },
+        {
+          "bytes": 569,
+          "path": "meta/info.shard01.json",
+          "remote_path": "meta/info.shard01.json",
+          "sha256": "3f9fd6bb5880f1e8150eed64d852e7b8fa2a1f5c91d442ed1ea4085957e563fe"
+        },
+        {
+          "bytes": 569,
+          "path": "meta/info.shard02.json",
+          "remote_path": "meta/info.shard02.json",
+          "sha256": "3f9fd6bb5880f1e8150eed64d852e7b8fa2a1f5c91d442ed1ea4085957e563fe"
+        },
+        {
+          "bytes": 569,
+          "path": "meta/info.shard03.json",
+          "remote_path": "meta/info.shard03.json",
+          "sha256": "3f9fd6bb5880f1e8150eed64d852e7b8fa2a1f5c91d442ed1ea4085957e563fe"
+        },
+        {
+          "bytes": 569,
+          "path": "meta/info.shard04.json",
+          "remote_path": "meta/info.shard04.json",
+          "sha256": "3f9fd6bb5880f1e8150eed64d852e7b8fa2a1f5c91d442ed1ea4085957e563fe"
+        },
+        {
+          "bytes": 569,
+          "path": "meta/info.shard05.json",
+          "remote_path": "meta/info.shard05.json",
+          "sha256": "3f9fd6bb5880f1e8150eed64d852e7b8fa2a1f5c91d442ed1ea4085957e563fe"
+        },
+        {
+          "bytes": 327,
+          "path": "meta/modality.json",
+          "remote_path": "meta/modality.json",
+          "sha256": "3a1173010ae4e03dbc776eea1d3d3c0a04a3d455575af5a59311bd7a9b528fee"
+        },
+        {
+          "bytes": 327,
+          "path": "meta/modality.shard00.json",
+          "remote_path": "meta/modality.shard00.json",
+          "sha256": "3a1173010ae4e03dbc776eea1d3d3c0a04a3d455575af5a59311bd7a9b528fee"
+        },
+        {
+          "bytes": 327,
+          "path": "meta/modality.shard01.json",
+          "remote_path": "meta/modality.shard01.json",
+          "sha256": "3a1173010ae4e03dbc776eea1d3d3c0a04a3d455575af5a59311bd7a9b528fee"
+        },
+        {
+          "bytes": 327,
+          "path": "meta/modality.shard02.json",
+          "remote_path": "meta/modality.shard02.json",
+          "sha256": "3a1173010ae4e03dbc776eea1d3d3c0a04a3d455575af5a59311bd7a9b528fee"
+        },
+        {
+          "bytes": 327,
+          "path": "meta/modality.shard03.json",
+          "remote_path": "meta/modality.shard03.json",
+          "sha256": "3a1173010ae4e03dbc776eea1d3d3c0a04a3d455575af5a59311bd7a9b528fee"
+        },
+        {
+          "bytes": 327,
+          "path": "meta/modality.shard04.json",
+          "remote_path": "meta/modality.shard04.json",
+          "sha256": "3a1173010ae4e03dbc776eea1d3d3c0a04a3d455575af5a59311bd7a9b528fee"
+        },
+        {
+          "bytes": 327,
+          "path": "meta/modality.shard05.json",
+          "remote_path": "meta/modality.shard05.json",
+          "sha256": "3a1173010ae4e03dbc776eea1d3d3c0a04a3d455575af5a59311bd7a9b528fee"
+        },
+        {
+          "bytes": 326,
+          "path": "meta/tasks.jsonl",
+          "remote_path": "meta/tasks.jsonl",
+          "sha256": "8e0b0b5501ee24892471ade42f93a73f3dd496392bf6ddbcadf62d9832c18e09"
+        },
+        {
+          "bytes": 326,
+          "path": "meta/tasks.shard00.jsonl",
+          "remote_path": "meta/tasks.shard00.jsonl",
+          "sha256": "8e0b0b5501ee24892471ade42f93a73f3dd496392bf6ddbcadf62d9832c18e09"
+        },
+        {
+          "bytes": 326,
+          "path": "meta/tasks.shard01.jsonl",
+          "remote_path": "meta/tasks.shard01.jsonl",
+          "sha256": "8e0b0b5501ee24892471ade42f93a73f3dd496392bf6ddbcadf62d9832c18e09"
+        },
+        {
+          "bytes": 326,
+          "path": "meta/tasks.shard02.jsonl",
+          "remote_path": "meta/tasks.shard02.jsonl",
+          "sha256": "8e0b0b5501ee24892471ade42f93a73f3dd496392bf6ddbcadf62d9832c18e09"
+        },
+        {
+          "bytes": 326,
+          "path": "meta/tasks.shard03.jsonl",
+          "remote_path": "meta/tasks.shard03.jsonl",
+          "sha256": "8e0b0b5501ee24892471ade42f93a73f3dd496392bf6ddbcadf62d9832c18e09"
+        },
+        {
+          "bytes": 326,
+          "path": "meta/tasks.shard04.jsonl",
+          "remote_path": "meta/tasks.shard04.jsonl",
+          "sha256": "8e0b0b5501ee24892471ade42f93a73f3dd496392bf6ddbcadf62d9832c18e09"
+        },
+        {
+          "bytes": 326,
+          "path": "meta/tasks.shard05.jsonl",
+          "remote_path": "meta/tasks.shard05.jsonl",
+          "sha256": "8e0b0b5501ee24892471ade42f93a73f3dd496392bf6ddbcadf62d9832c18e09"
+        },
+        {
+          "bytes": 13079,
+          "path": "data/chunk-000/episode_000000.parquet",
+          "remote_path": "data/chunk-000/episode_000000.parquet",
+          "sha256": "55aa475f5dc1304561045ee841028a797a22f3166db68b51dca85c88d3a39c8b"
+        }
+      ],
+      "calls": [
+        {
+          "command": "/tmp/kinema-phase2-v2/bin/python loader-verification/2026-11-22/run_loader.py r79:c17:f0",
+          "environment": {
+            "av": "15.1.0",
+            "datasets": "3.6.0",
+            "lerobot": "0.3.3",
+            "python": "3.11.17",
+            "torch": "2.7.1+cpu"
+          },
+          "evidence_file": "evidence/r79_c17_f0_loader.json",
+          "operation": "LeRobotDataset(... episodes=[episode], revision=commit, video_backend='pyav'); select matching rows in hf_dataset; __getitem__ at first, middle, last",
+          "steps": [
+            {
+              "exception": "KeyError",
+              "outcome": "error",
+              "step": "construct"
+            }
+          ]
+        }
+      ],
+      "case_id": "r79:c17:f0",
+      "check": "deployment-readiness",
+      "classification": "unresolved",
+      "dataset": "easyminnn/exumi-lerobot",
+      "evidence_files": [
+        "evidence/r79_c17_f0.json",
+        "evidence/r79_c17_f0_loader.json"
+      ],
+      "metadata_anomaly_at_freeze": {
+        "feature_declared": false,
+        "metadata_tree": [
+          "meta/episodes.jsonl",
+          "meta/episodes.shard00.jsonl",
+          "meta/episodes.shard01.jsonl",
+          "meta/episodes.shard02.jsonl",
+          "meta/episodes.shard03.jsonl",
+          "meta/episodes.shard04.jsonl",
+          "meta/episodes.shard05.jsonl",
+          "meta/info.json",
+          "meta/info.shard00.json",
+          "meta/info.shard01.json",
+          "meta/info.shard02.json",
+          "meta/info.shard03.json",
+          "meta/info.shard04.json",
+          "meta/info.shard05.json",
+          "meta/modality.json",
+          "meta/modality.shard00.json",
+          "meta/modality.shard01.json",
+          "meta/modality.shard02.json",
+          "meta/modality.shard03.json",
+          "meta/modality.shard04.json",
+          "meta/modality.shard05.json",
+          "meta/tasks.jsonl",
+          "meta/tasks.shard00.jsonl",
+          "meta/tasks.shard01.jsonl",
+          "meta/tasks.shard02.jsonl",
+          "meta/tasks.shard03.jsonl",
+          "meta/tasks.shard04.jsonl",
+          "meta/tasks.shard05.jsonl"
+        ],
+        "metadata_tree_complete": true,
+        "metadata_tree_count": 28,
+        "per_episode_stats_paths": [],
+        "stats_json_present": false
+      },
+      "observed_values": "Pinned info.json omits features; construction raises KeyError(features) before episode access. No stats file is present.",
+      "original_assertion": "observation.state: no normalization stats (meta/stats.json or per-episode stats) - the policy cannot normalize inputs/outputs at inference",
+      "original_audit_classification": "unresolved",
+      "preregistered_confirm_if": "The supported normalization path for the exact named feature fails specifically for missing stats after successful item access",
+      "preregistered_operation": "Load first episode item and inspect loader metadata/stats; exercise documented normalization constructor for named feature if supported",
+      "preregistered_refute_if": "The exact named feature normalizes successfully using pinned inputs and supported defaults",
+      "reason": "The observed schema failure is separate from the asserted missing-stats inference consequence. No normalization path was reached.",
+      "recovery_commands": [
+        "python loader-verification/2026-11-22/prepare.py r79:c17:f0 --metadata",
+        "python loader-verification/2026-11-22/prepare.py r79:c17:f0 --path data/chunk-000/episode_000000.parquet"
+      ],
+      "remaining_gap": "Identify a supported feature schema and specific policy/checkpoint before an inference test.",
+      "repo": "easyminnn/exumi-lerobot",
+      "revision": "334bf5334477e613c7fef5774247257e86a7a95b",
+      "subdir": "",
+      "tested_scope": "LeRobot 0.3.3 v2.0 dataset construction"
+    },
+    {
+      "artifact_hashes": [
+        {
+          "bytes": 114925,
+          "path": "data/chunk-000/episode_000000.parquet",
+          "remote_path": "LeRobot/gr1_unified.PnPCupToDrawerClose/data/chunk-000/episode_000000.parquet",
+          "sha256": "3968f5f96623554431a320646693fe4a79d3a374bd72225a3c58136a12e25fb4"
+        },
+        {
+          "bytes": 245,
+          "path": "meta/embodiment.json",
+          "remote_path": "LeRobot/gr1_unified.PnPCupToDrawerClose/meta/embodiment.json",
+          "sha256": "cf2209523558307e4abef320c1c68ba3f24e034b5ffee85d5b65121d2db30979"
+        },
+        {
+          "bytes": 252891,
+          "path": "meta/episodes.jsonl",
+          "remote_path": "LeRobot/gr1_unified.PnPCupToDrawerClose/meta/episodes.jsonl",
+          "sha256": "422a0f77205ad5c3a288626f4f9bab95103ba6a2257105e2b4b5c85bb8dd9f60"
+        },
+        {
+          "bytes": 2289,
+          "path": "meta/info.json",
+          "remote_path": "LeRobot/gr1_unified.PnPCupToDrawerClose/meta/info.json",
+          "sha256": "d1405d4b063c9484fe625f53e51e4e8e6170b69882b11dcae91795b1ccdbee62"
+        },
+        {
+          "bytes": 640605,
+          "path": "meta/initial_actions.npz",
+          "remote_path": "LeRobot/gr1_unified.PnPCupToDrawerClose/meta/initial_actions.npz",
+          "sha256": "5a5e21a4a7e3ac0b4b24e76fc5d830ede1a82e99012c24f6740148db806d2a5a"
+        },
+        {
+          "bytes": 27209,
+          "path": "meta/metadata.json",
+          "remote_path": "LeRobot/gr1_unified.PnPCupToDrawerClose/meta/metadata.json",
+          "sha256": "b89cba5415409c83f8dcfa7d84053c8f96305198c73014992803a958c731331f"
+        },
+        {
+          "bytes": 2355,
+          "path": "meta/modality.json",
+          "remote_path": "LeRobot/gr1_unified.PnPCupToDrawerClose/meta/modality.json",
+          "sha256": "38602b9b9be82202da493496c6ae262f761c36c0ff478d014bb7b3beddfa2d79"
+        },
+        {
+          "bytes": 16749,
+          "path": "meta/stats.json",
+          "remote_path": "LeRobot/gr1_unified.PnPCupToDrawerClose/meta/stats.json",
+          "sha256": "07eb50f594f1e9a462a4d32b4372e6e02051842af775d7f3e073f36e9e1b6899"
+        },
+        {
+          "bytes": 79,
+          "path": "meta/tasks.jsonl",
+          "remote_path": "LeRobot/gr1_unified.PnPCupToDrawerClose/meta/tasks.jsonl",
+          "sha256": "ab805370df2230b6fd1d597905167d51f44335c53ab3c4512243fbfa2bbed9b3"
+        },
+        {
+          "bytes": 1498815,
+          "path": "videos/chunk-000/observation.images.ego_view/episode_000000.mp4",
+          "remote_path": "LeRobot/gr1_unified.PnPCupToDrawerClose/videos/chunk-000/observation.images.ego_view/episode_000000.mp4",
+          "sha256": "bcff33a7ef427a1c5b8904bd74bf06d628c45ea4786dbbcb4650b4cd34c82c6d"
+        }
+      ],
+      "calls": [
+        {
+          "command": "/tmp/kinema-phase2-v2/bin/python loader-verification/2026-11-22/run_loader.py r256:c2:f0",
+          "environment": {
+            "av": "15.1.0",
+            "datasets": "3.6.0",
+            "lerobot": "0.3.3",
+            "python": "3.11.17",
+            "torch": "2.7.1+cpu"
+          },
+          "evidence_file": "evidence/r256_c2_f0_loader.json",
+          "operation": "LeRobotDataset(... episodes=[episode], revision=commit, video_backend='pyav'); select matching rows in hf_dataset; __getitem__ at first, middle, last",
+          "steps": [
+            {
+              "feature_keys": [
+                "observation.images.ego_view",
+                "observation.state",
+                "action",
+                "timestamp",
+                "next.reward",
+                "next.done",
+                "task_index",
+                "annotation.human.fine_action",
+                "annotation.human.coarse_action",
+                "episode_index",
+                "index"
+              ],
+              "length": 229,
+              "outcome": "ok",
+              "step": "construct",
+              "video_keys": [
+                "observation.images.ego_view"
+              ]
+            },
+            {
+              "matching_rows": 229,
+              "outcome": "ok",
+              "selected_table_rows": 229,
+              "step": "episode_index_scan"
+            },
+            {
+              "index": 0,
+              "outcome": "ok",
+              "step": "item_first",
+              "timestamp": 0.0
+            },
+            {
+              "index": 114,
+              "outcome": "ok",
+              "step": "item_middle",
+              "timestamp": 5.6999945640563965
+            },
+            {
+              "index": 228,
+              "outcome": "ok",
+              "step": "item_last",
+              "timestamp": 11.399989128112793
+            }
+          ]
+        }
+      ],
+      "case_id": "r256:c2:f0",
+      "check": "dropped-frames",
+      "classification": "refuted",
+      "dataset": "nvidia/PhysicalAI-Robotics-GR00T-Teleop-Sim//LeRobot/gr1_unified.PnPCupToDrawerClose",
+      "evidence_files": [
+        "evidence/r256_c2_f0.json",
+        "evidence/r256_c2_f0_loader.json"
+      ],
+      "metadata_anomaly_at_freeze": {
+        "columns": [
+          "observation.state",
+          "action",
+          "timestamp",
+          "next.reward",
+          "next.done",
+          "task_index",
+          "annotation.human.fine_action",
+          "annotation.human.coarse_action",
+          "episode_index",
+          "index"
+        ],
+        "data_path": "LeRobot/gr1_unified.PnPCupToDrawerClose/data/chunk-000/episode_000000.parquet",
+        "frame_index_present": false
+      },
+      "observed_values": "Pinned parquet omits frame_index; all 229 rows were selected, and first, middle and last item/video access succeeded. Returned feature keys omit frame_index.",
+      "original_assertion": "frame_index column missing from the frame data - a default LeRobot feature that loaders and tools expect; gap/duplicate-index checks not evaluated (metadata length and video evidence are still checked)",
+      "original_audit_classification": "unresolved",
+      "preregistered_confirm_if": "Missing frame_index causes an exception on affected episode item access or required indexing",
+      "preregistered_operation": "LeRobotDataset v2 episode 0 iteration and frame access with videos disabled",
+      "preregistered_refute_if": "Affected episode items can be iterated and accessed without frame_index",
+      "reason": "The default dataset path tested does not require frame_index to index or access these frames.",
+      "recovery_commands": [
+        "python loader-verification/2026-11-22/prepare.py r256:c2:f0 --metadata",
+        "python loader-verification/2026-11-22/prepare.py r256:c2:f0 --path data/chunk-000/episode_000000.parquet",
+        "python loader-verification/2026-11-22/prepare.py r256:c2:f0 --path videos/chunk-000/observation.images.ego_view/episode_000000.mp4"
+      ],
+      "remaining_gap": "Other downstream tools that explicitly require frame_index were not tested.",
+      "repo": "nvidia/PhysicalAI-Robotics-GR00T-Teleop-Sim",
+      "revision": "09c6de8af50168090e7e9cc01e1ec3bce788de24",
+      "subdir": "LeRobot/gr1_unified.PnPCupToDrawerClose",
+      "tested_scope": "LeRobot 0.3.3 v2.0 episode-0 item and video access"
+    },
+    {
+      "artifact_hashes": [
+        {
+          "bytes": 85340370,
+          "path": "meta/episodes/chunk-000/file-000.parquet",
+          "remote_path": "meta/episodes/chunk-000/file-000.parquet",
+          "sha256": "9a880adad32ad652fe1c26f64a4805b62023227e2d3318fc5bf78af44d0cdae2"
+        },
+        {
+          "bytes": 84731464,
+          "path": "meta/episodes/chunk-000/file-001.parquet",
+          "remote_path": "meta/episodes/chunk-000/file-001.parquet",
+          "sha256": "afa1cf7af8ca8e9b0abd8bed095af062df7a3619ea89e2116c4616bce62d62ed"
+        },
+        {
+          "bytes": 84761307,
+          "path": "meta/episodes/chunk-000/file-002.parquet",
+          "remote_path": "meta/episodes/chunk-000/file-002.parquet",
+          "sha256": "e6b80db7f0ecc9d88816ff3d84952f184a952bac96b7889c6d15ac3ddf32a0a1"
+        },
+        {
+          "bytes": 85088204,
+          "path": "meta/episodes/chunk-000/file-003.parquet",
+          "remote_path": "meta/episodes/chunk-000/file-003.parquet",
+          "sha256": "3c5db8f6ed35445809b646d37879f80bf8bdc0547690bdeebb792d0d519022b8"
+        },
+        {
+          "bytes": 70949332,
+          "path": "meta/episodes/chunk-000/file-004.parquet",
+          "remote_path": "meta/episodes/chunk-000/file-004.parquet",
+          "sha256": "691e63d69bdde6e032fe5a6e80f35821b24238c9f98cfa50601682336ba3939d"
+        },
+        {
+          "bytes": 4176,
+          "path": "meta/info.json",
+          "remote_path": "meta/info.json",
+          "sha256": "b181615b1cd510bfb27a2ae2db5aeb9f2d9d15c1fce4eb27b0d92103bccf414b"
+        },
+        {
+          "bytes": 18354,
+          "path": "meta/stats.json",
+          "remote_path": "meta/stats.json",
+          "sha256": "96b505aec3fb8c8fce81a8dfa422d355a06a9e2195530fc75d9f748a116d33d6"
+        },
+        {
+          "bytes": 2151,
+          "path": "meta/tasks.parquet",
+          "remote_path": "meta/tasks.parquet",
+          "sha256": "73b5ff7ea91caa1f3c00068fb3e9ec0d1e3affd1ae117d83df9fe894666b9d56"
+        },
+        {
+          "bytes": 71372182,
+          "path": "data/chunk-000/file-006.parquet",
+          "remote_path": "data/chunk-000/file-006.parquet",
+          "sha256": "ea020cb6a42691ab123f6439c7050545ebf4ba353cfe06f182f7a65bf0a23f08"
+        }
+      ],
+      "calls": [
+        {
+          "command": "/tmp/kinema-phase2-v3/bin/python loader-verification/2026-11-22/run_loader.py r75:c12:f4",
+          "environment": {
+            "av": "15.1.0",
+            "datasets": "4.0.0",
+            "lerobot": "0.4.0",
+            "python": "3.11.17",
+            "torch": "2.7.1+cpu"
+          },
+          "evidence_file": "evidence/r75_c12_f4_loader.json",
+          "operation": "LeRobotDataset(... episodes=[episode], revision=commit, video_backend='pyav'); select matching rows in hf_dataset; __getitem__ at first, middle, last",
+          "steps": [
+            {
+              "feature_keys": [
+                "action",
+                "observation.images.front",
+                "observation.images.rear",
+                "observation.state",
+                "observation.action_mbra",
+                "observation.action_original",
+                "timestamp",
+                "frame_index",
+                "episode_index",
+                "index",
+                "task_index"
+              ],
+              "length": 751774,
+              "outcome": "ok",
+              "step": "construct",
+              "video_keys": [
+                "observation.images.front",
+                "observation.images.rear"
+              ]
+            },
+            {
+              "matching_rows": 0,
+              "outcome": "ok",
+              "selected_table_rows": 751774,
+              "step": "episode_index_scan"
+            }
+          ]
+        }
+      ],
+      "case_id": "r75:c12:f4",
+      "check": "episode-file-pointers",
+      "classification": "confirmed",
+      "dataset": "BitRobot/berkeley-frodobots-lerobot-7k",
+      "evidence_files": [
+        "evidence/r75_c12_f4.json",
+        "evidence/r75_c12_f4_loader.json"
+      ],
+      "metadata_anomaly_at_freeze": {
+        "catalog_files": [
+          "meta/episodes/chunk-000/file-000.parquet",
+          "meta/episodes/chunk-000/file-001.parquet",
+          "meta/episodes/chunk-000/file-002.parquet",
+          "meta/episodes/chunk-000/file-003.parquet",
+          "meta/episodes/chunk-000/file-004.parquet"
+        ],
+        "catalog_rows": [
+          {
+            "data/chunk_index": 0,
+            "data/file_index": 6,
+            "episode_index": 2035
+          }
+        ],
+        "declared_files": [
+          "data/chunk-000/file-006.parquet"
+        ],
+        "episode": 2035,
+        "rows_in_declared_files": {
+          "data/chunk-000/file-006.parquet": 0
+        }
+      },
+      "observed_values": "Pinned catalog names file-006 and length 71; selected loader table had 751774 rows from that shard but zero rows labeled episode 2035.",
+      "original_assertion": "episode 2035: metadata points at data/chunk-000/file-006.parquet but its rows are not there; LeRobot loads only the metadata-named file, so the episode silently drops out of training",
+      "original_audit_classification": "unresolved",
+      "preregistered_confirm_if": "The named episode is absent or yields no samples through the supported v3 loader despite a readable catalog entry",
+      "preregistered_operation": "LeRobotDataset episode selection, length, index iteration and first/last item for named episode, with videos disabled; inspect whether catalogued episode is reachable",
+      "preregistered_refute_if": "The loader returns actual samples from the named episode through normal episode selection",
+      "reason": "The normal episode-selection path does not expose the catalogued episode from the metadata-named file.",
+      "recovery_commands": [
+        "python loader-verification/2026-11-22/prepare.py r75:c12:f4 --metadata",
+        "python loader-verification/2026-11-22/prepare.py r75:c12:f4 --path data/chunk-000/file-006.parquet"
+      ],
+      "remaining_gap": "No training run; cannot establish whether a trainer silently omits it, errors, or uses another representation.",
+      "repo": "BitRobot/berkeley-frodobots-lerobot-7k",
+      "revision": "096912cad3512e29d95dd809af7cb9fc020e4de7",
+      "subdir": "",
+      "tested_scope": "LeRobot 0.4.0 v3.0 episode-2035 selection from metadata-named file"
+    },
+    {
+      "artifact_hashes": [
+        {
+          "bytes": 154340,
+          "path": "meta/episodes/chunk-000/file-000.parquet",
+          "remote_path": "meta/episodes/chunk-000/file-000.parquet",
+          "sha256": "9bf9981ae9a91df0a0194feeb82b022d20999c60c656162b3553a0ea244e56a1"
+        },
+        {
+          "bytes": 3559,
+          "path": "meta/info.json",
+          "remote_path": "meta/info.json",
+          "sha256": "9f31f988d7574ff72113b46790457937d405a81f551dd596034ed25882e0694e"
+        },
+        {
+          "bytes": 3531,
+          "path": "meta/stats.json",
+          "remote_path": "meta/stats.json",
+          "sha256": "eee4b9e4fa06fdc6fb108fbb4986ec05bc2a7ebef2d7d962747bc30bf637a14f"
+        },
+        {
+          "bytes": 4823,
+          "path": "meta/tasks.parquet",
+          "remote_path": "meta/tasks.parquet",
+          "sha256": "8984c122e91959f48a72c9b484224406d24b644be9493eff405165456c1f8459"
+        },
+        {
+          "bytes": 10577,
+          "path": "data/chunk-000/file-101.parquet",
+          "remote_path": "data/chunk-000/file-101.parquet",
+          "sha256": "9e3bdd533bf41c162104b674da26d34f4fd0e63778296a33926a89e217e06fed"
+        }
+      ],
+      "calls": [
+        {
+          "command": "/tmp/kinema-phase2-v3/bin/python loader-verification/2026-11-22/run_loader.py r36:c12:f1",
+          "environment": {
+            "av": "15.1.0",
+            "datasets": "4.0.0",
+            "lerobot": "0.4.0",
+            "python": "3.11.17",
+            "torch": "2.7.1+cpu"
+          },
+          "evidence_file": "evidence/r36_c12_f1_loader.json",
+          "operation": "LeRobotDataset(... episodes=[episode], revision=commit, video_backend='pyav'); select matching rows in hf_dataset; __getitem__ at first, middle, last",
+          "steps": [
+            {
+              "feature_keys": [
+                "image",
+                "second_image",
+                "wrist_image",
+                "state",
+                "actions",
+                "timestamp",
+                "frame_index",
+                "episode_index",
+                "index",
+                "task_index"
+              ],
+              "length": 85,
+              "outcome": "ok",
+              "step": "construct",
+              "video_keys": [
+                "image",
+                "second_image",
+                "wrist_image"
+              ]
+            },
+            {
+              "matching_rows": 0,
+              "outcome": "ok",
+              "selected_table_rows": 85,
+              "step": "episode_index_scan"
+            }
+          ]
+        }
+      ],
+      "case_id": "r36:c12:f1",
+      "check": "episode-file-pointers",
+      "classification": "confirmed",
+      "dataset": "VLABench/vlabench_primitive_ft_lerobot_video",
+      "evidence_files": [
+        "evidence/r36_c12_f1.json",
+        "evidence/r36_c12_f1_loader.json"
+      ],
+      "metadata_anomaly_at_freeze": {
+        "catalog_files": [
+          "meta/episodes/chunk-000/file-000.parquet"
+        ],
+        "catalog_rows": [
+          {
+            "data/chunk_index": 0,
+            "data/file_index": 101,
+            "episode_index": 129
+          }
+        ],
+        "declared_files": [
+          "data/chunk-000/file-101.parquet"
+        ],
+        "episode": 129,
+        "rows_in_declared_files": {
+          "data/chunk-000/file-101.parquet": 0
+        }
+      },
+      "observed_values": "Pinned catalog names file-101 and length 181; selected loader table had 85 rows from that shard but zero rows labeled episode 129.",
+      "original_assertion": "episode 129: metadata points at data/chunk-000/file-101.parquet but its rows are not there; LeRobot loads only the metadata-named file, so the episode silently drops out of training",
+      "original_audit_classification": "unresolved",
+      "preregistered_confirm_if": "The named episode is absent or yields no samples through the supported v3 loader despite a readable catalog entry",
+      "preregistered_operation": "LeRobotDataset episode selection, length, index iteration and first/last item for named episode, with videos disabled; inspect whether catalogued episode is reachable",
+      "preregistered_refute_if": "The loader returns actual samples from the named episode through normal episode selection",
+      "reason": "The normal episode-selection path does not expose the catalogued episode from the metadata-named file.",
+      "recovery_commands": [
+        "python loader-verification/2026-11-22/prepare.py r36:c12:f1 --metadata",
+        "python loader-verification/2026-11-22/prepare.py r36:c12:f1 --path data/chunk-000/file-101.parquet"
+      ],
+      "remaining_gap": "No training run; cannot establish whether a trainer silently omits it or errors.",
+      "repo": "VLABench/vlabench_primitive_ft_lerobot_video",
+      "revision": "9846a2f6bead3873251dc4fe3079359d57326b7c",
+      "subdir": "",
+      "tested_scope": "LeRobot 0.4.0 v3.0 episode-129 selection from metadata-named file"
+    },
+    {
+      "artifact_hashes": [
+        {
+          "bytes": 48774,
+          "path": "meta/episodes.jsonl",
+          "remote_path": "meta/episodes.jsonl",
+          "sha256": "095958fc2c5c08e2325670aa2fea7394872c516d70d09c5ff94bed0e32368da0"
+        },
+        {
+          "bytes": 5078,
+          "path": "meta/info.json",
+          "remote_path": "meta/info.json",
+          "sha256": "37fe43c8518f1f5a2bc474bf70404469ba493c37970eb4ddc87ddbd15d2c003a"
+        },
+        {
+          "bytes": 969,
+          "path": "meta/modality.json",
+          "remote_path": "meta/modality.json",
+          "sha256": "68865b576ef55003e0fbdd705eec5920de0db54dab7f06f34fb5d0a6ef2d8e82"
+        },
+        {
+          "bytes": 13189,
+          "path": "meta/stats.json",
+          "remote_path": "meta/stats.json",
+          "sha256": "b2ff16112fb4c17d608c76dc5d12c850ad6bb9c5c2095e8988d9221a7a5e058d"
+        },
+        {
+          "bytes": 397,
+          "path": "meta/tasks.jsonl",
+          "remote_path": "meta/tasks.jsonl",
+          "sha256": "3096bc267d7f3cb6a25624f10320b39e7b1d3c70af2d181004a1fad498c8c43a"
+        },
+        {
+          "bytes": 80533,
+          "path": "data/chunk-000/episode_000000.parquet",
+          "remote_path": "data/chunk-000/episode_000000.parquet",
+          "sha256": "ebba2bfce0ac7c4ac3027661c3b9b0fb9ab2c48d301547a19cf3e08ce52309b1"
+        },
+        {
+          "bytes": 779105,
+          "path": "videos/chunk-000/observation.images.front/episode_000000.mp4",
+          "remote_path": "videos/chunk-000/observation.images.front/episode_000000.mp4",
+          "sha256": "45c25fa2be24454ec2f159b4c11f5b8a78927940e0c0e6d9ac4bacf25857b4f8"
+        },
+        {
+          "bytes": 465438,
+          "path": "videos/chunk-000/observation.images.high_opposite/episode_000000.mp4",
+          "remote_path": "videos/chunk-000/observation.images.high_opposite/episode_000000.mp4",
+          "sha256": "e14e2157a532dd487665213e048b597bef1c256f0563604122df56352065a88c"
+        },
+        {
+          "bytes": 768452,
+          "path": "videos/chunk-000/observation.images.wrist_left/episode_000000.mp4",
+          "remote_path": "videos/chunk-000/observation.images.wrist_left/episode_000000.mp4",
+          "sha256": "8b331264c38ae2ff4331c180c255b97ac1710a5701f262d68dd283ed15bfdbac"
+        },
+        {
+          "bytes": 1290880,
+          "path": "videos/chunk-000/observation.images.wrist_right/episode_000000.mp4",
+          "remote_path": "videos/chunk-000/observation.images.wrist_right/episode_000000.mp4",
+          "sha256": "4ede3da79ff65e943ed400c5cd0f8cc9ea9b0474d443089dff34ad8fe875b5b6"
+        }
+      ],
+      "calls": [
+        {
+          "command": "/tmp/kinema-phase2-v2/bin/python loader-verification/2026-11-22/run_loader.py r94:c1:f1",
+          "environment": {
+            "av": "15.1.0",
+            "datasets": "3.6.0",
+            "lerobot": "0.3.3",
+            "python": "3.11.17",
+            "torch": "2.7.1+cpu"
+          },
+          "evidence_file": "evidence/r94_c1_f1_loader.json",
+          "operation": "LeRobotDataset(... episodes=[episode], revision=commit, video_backend='pyav'); select matching rows in hf_dataset; __getitem__ at first, middle, last",
+          "steps": [
+            {
+              "exception": "ValueError",
+              "outcome": "error",
+              "step": "construct"
+            }
+          ]
+        },
+        {
+          "command": "/tmp/kinema-phase2-v2/bin/python loader-verification/2026-11-22/decode_probe.py r94:c1:f1",
+          "environment": {
+            "lerobot": "0.3.3"
+          },
+          "evidence_file": "evidence/r94_c1_f1_decoder.json",
+          "operation": "lerobot.datasets.video_utils.decode_video_frames(path, [raw_timestamp], tolerance_s=1e-4, backend='pyav')",
+          "steps": [
+            {
+              "camera": "observation.images.front",
+              "exception": "AssertionError",
+              "outcome": "error",
+              "position": "first",
+              "row_index": 0,
+              "timestamp": 1784331549.834715
+            },
+            {
+              "camera": "observation.images.front",
+              "exception": "AssertionError",
+              "outcome": "error",
+              "position": "middle",
+              "row_index": 218,
+              "timestamp": 1784331557.5205252
+            },
+            {
+              "camera": "observation.images.front",
+              "exception": "AssertionError",
+              "outcome": "error",
+              "position": "last",
+              "row_index": 436,
+              "timestamp": 1784331565.3495831
+            },
+            {
+              "camera": "observation.images.high_opposite",
+              "exception": "AssertionError",
+              "outcome": "error",
+              "position": "first",
+              "row_index": 0,
+              "timestamp": 1784331549.834715
+            },
+            {
+              "camera": "observation.images.high_opposite",
+              "exception": "AssertionError",
+              "outcome": "error",
+              "position": "middle",
+              "row_index": 218,
+              "timestamp": 1784331557.5205252
+            },
+            {
+              "camera": "observation.images.high_opposite",
+              "exception": "AssertionError",
+              "outcome": "error",
+              "position": "last",
+              "row_index": 436,
+              "timestamp": 1784331565.3495831
+            },
+            {
+              "camera": "observation.images.wrist_left",
+              "exception": "AssertionError",
+              "outcome": "error",
+              "position": "first",
+              "row_index": 0,
+              "timestamp": 1784331549.834715
+            },
+            {
+              "camera": "observation.images.wrist_left",
+              "exception": "AssertionError",
+              "outcome": "error",
+              "position": "middle",
+              "row_index": 218,
+              "timestamp": 1784331557.5205252
+            },
+            {
+              "camera": "observation.images.wrist_left",
+              "exception": "AssertionError",
+              "outcome": "error",
+              "position": "last",
+              "row_index": 436,
+              "timestamp": 1784331565.3495831
+            },
+            {
+              "camera": "observation.images.wrist_right",
+              "exception": "AssertionError",
+              "outcome": "error",
+              "position": "first",
+              "row_index": 0,
+              "timestamp": 1784331549.834715
+            },
+            {
+              "camera": "observation.images.wrist_right",
+              "exception": "AssertionError",
+              "outcome": "error",
+              "position": "middle",
+              "row_index": 218,
+              "timestamp": 1784331557.5205252
+            },
+            {
+              "camera": "observation.images.wrist_right",
+              "exception": "AssertionError",
+              "outcome": "error",
+              "position": "last",
+              "row_index": 436,
+              "timestamp": 1784331565.3495831
+            }
+          ]
+        }
+      ],
+      "case_id": "r94:c1:f1",
+      "check": "timestamp-grid",
+      "classification": "confirmed",
+      "dataset": "Cybernetic-Labs/openarm-packingbench-v2-groot-lerobot",
+      "evidence_files": [
+        "evidence/r94_c1_f1.json",
+        "evidence/r94_c1_f1_loader.json",
+        "evidence/r94_c1_f1_decoder.json"
+      ],
+      "metadata_anomaly_at_freeze": {
+        "data_path": "data/chunk-000/episode_000000.parquet",
+        "first_timestamp": 1784331549.834715,
+        "fps": 30.0,
+        "frames": 437,
+        "last_timestamp": 1784331565.3495831,
+        "second_timestamp": 1784331549.869697
+      },
+      "observed_values": "Default dataset construction rejects timestamp spacing after float32 conversion of epoch-scale values. Direct decode_video_frames at pinned first/middle/last raw timestamps failed for all four cameras (12/12); video times were about 0\u201315 s versus raw timestamps about 1.784e9 s.",
+      "original_assertion": "40 episode(s) whose timestamps do not start at 0: 0 (1.784e+09s), 10 (1.784e+09s), 20 (1.784e+09s), 30 (1.784e+09s), 40 (1.784e+09s) - video frames are looked up by timestamp, so decoding will miss",
+      "original_audit_classification": "unresolved",
+      "preregistered_confirm_if": "The loader raises timestamp or decode failure at in-bounds affected frames because absolute timestamps miss the video",
+      "preregistered_operation": "LeRobotDataset affected episode 0 first/middle/last video frame access via __getitem__",
+      "preregistered_refute_if": "Affected frames decode within tolerance using ordinary lookup",
+      "reason": "The asserted video lookup miss is reproduced on the affected pinned episode with the relevant decoder, although dataset construction fails earlier.",
+      "recovery_commands": [
+        "python loader-verification/2026-11-22/prepare.py r94:c1:f1 --metadata",
+        "python loader-verification/2026-11-22/prepare.py r94:c1:f1 --path data/chunk-000/episode_000000.parquet",
+        "python loader-verification/2026-11-22/prepare.py r94:c1:f1 --path videos/chunk-000/observation.images.front/episode_000000.mp4",
+        "python loader-verification/2026-11-22/prepare.py r94:c1:f1 --path videos/chunk-000/observation.images.high_opposite/episode_000000.mp4",
+        "python loader-verification/2026-11-22/prepare.py r94:c1:f1 --path videos/chunk-000/observation.images.wrist_left/episode_000000.mp4",
+        "python loader-verification/2026-11-22/prepare.py r94:c1:f1 --path videos/chunk-000/observation.images.wrist_right/episode_000000.mp4"
+      ],
+      "remaining_gap": "The other 39 named episodes were not probed; the first load failure is timestamp validation rather than a video lookup error.",
+      "repo": "Cybernetic-Labs/openarm-packingbench-v2-groot-lerobot",
+      "revision": "41194807df07267235098a020ae4204f02262a93",
+      "subdir": "",
+      "tested_scope": "LeRobot 0.3.3 v2.0 episode-0 construction and direct pyav video lookup"
+    },
+    {
+      "artifact_hashes": [
+        {
+          "bytes": 33753264,
+          "path": "meta/episodes/chunk-000/file-000.parquet",
+          "remote_path": "meta/episodes/chunk-000/file-000.parquet",
+          "sha256": "79f5c49d6b677468f81de4a54da74ba7fbfd5fa65d0c294f030242ee605342c9"
+        },
+        {
+          "bytes": 4192,
+          "path": "meta/info.json",
+          "remote_path": "meta/info.json",
+          "sha256": "ab373b0ac887217a0a7618b36d0f566f814ef00d94ed30b294b1723fba63a7f5"
+        },
+        {
+          "bytes": 814,
+          "path": "meta/sampling/motion_scan.json",
+          "remote_path": "meta/sampling/motion_scan.json",
+          "sha256": "0ce456f9d09f50124aab98610d5c4b0dc1af6633e3cdfda426404e7f4d37c49f"
+        },
+        {
+          "bytes": 1760652,
+          "path": "meta/sampling/sampling_index.npz",
+          "remote_path": "meta/sampling/sampling_index.npz",
+          "sha256": "6f751de053a8f40a878f0adafa692afdefd2b614c55d400c7a2754ebe5425575"
+        },
+        {
+          "bytes": 1470328,
+          "path": "meta/sampling/sampling_index_headonly.npz",
+          "remote_path": "meta/sampling/sampling_index_headonly.npz",
+          "sha256": "3541349de63a8ff76d2b992bd61b0d699dc7a1bd07368c5aa21324ad43079945"
+        },
+        {
+          "bytes": 45922,
+          "path": "meta/sampling/sampling_report.json",
+          "remote_path": "meta/sampling/sampling_report.json",
+          "sha256": "422dbc22c13001a5ecdc1a70aa3b8244e93d0f8d644a030e0b4eefe60e5cbda3"
+        },
+        {
+          "bytes": 44726,
+          "path": "meta/sampling/sampling_report_headonly.json",
+          "remote_path": "meta/sampling/sampling_report_headonly.json",
+          "sha256": "0589e6f2355edbb6b82bfdc07b017d9d1e3e1025e523a29e0a36297eb484760e"
+        },
+        {
+          "bytes": 12296,
+          "path": "meta/stats.json",
+          "remote_path": "meta/stats.json",
+          "sha256": "309e0b78e85e1a1e300272d99c2f797e7ac182246b2fafac9d8b5b0cbd0a28d4"
+        },
+        {
+          "bytes": 5381,
+          "path": "meta/tasks.parquet",
+          "remote_path": "meta/tasks.parquet",
+          "sha256": "f180436cf59b02c4ff4f2b16167bdfb697d87e559efbedae95875699aff0d2de"
+        },
+        {
+          "bytes": 77521971,
+          "path": "data/chunk-000/file-210.parquet",
+          "remote_path": "data/chunk-000/file-210.parquet",
+          "sha256": "ddc46138853e697a492705f01a3d6427fd90538358d8ac41deb12b855a229df5"
+        },
+        {
+          "bytes": 18358754,
+          "path": "videos/observation.images.cam_high/chunk-040/file-455.mp4",
+          "remote_path": "videos/observation.images.cam_high/chunk-040/file-455.mp4",
+          "sha256": "a8628d8f7d86c5afe429034e71fd780d3bbb9719815b57eec61f7eb31d2b8387"
+        },
+        {
+          "bytes": 53186548,
+          "path": "videos/observation.images.cam_left_wrist/chunk-040/file-455.mp4",
+          "remote_path": "videos/observation.images.cam_left_wrist/chunk-040/file-455.mp4",
+          "sha256": "4b2f5fd2f3cbdeeefa6bfd26e4d107757b31574bac004be5f07556c9aa5304c2"
+        },
+        {
+          "bytes": 26290678,
+          "path": "videos/observation.images.cam_low/chunk-040/file-455.mp4",
+          "remote_path": "videos/observation.images.cam_low/chunk-040/file-455.mp4",
+          "sha256": "2c40b0dbc53e62b4c78722a5b9dc4298354d21f4f8648a4830fd144c6c441575"
+        },
+        {
+          "bytes": 56169091,
+          "path": "videos/observation.images.cam_right_wrist/chunk-040/file-455.mp4",
+          "remote_path": "videos/observation.images.cam_right_wrist/chunk-040/file-455.mp4",
+          "sha256": "99dbd6b3c7aaed5bf39d980607dab3d7df38c03b6dc2af8052c6dfbe5d98d333"
+        }
+      ],
+      "calls": [
+        {
+          "command": "/tmp/kinema-phase2-v3/bin/python loader-verification/2026-11-22/run_loader.py r1:c1:f0 --suffix _0.4.0",
+          "environment": {
+            "av": "15.1.0",
+            "datasets": "4.0.0",
+            "lerobot": "0.4.0",
+            "python": "3.11.17",
+            "torch": "2.7.1+cpu"
+          },
+          "evidence_file": "evidence/r1_c1_f0_loader_0.4.0.json",
+          "operation": "LeRobotDataset(... episodes=[episode], revision=commit, video_backend='pyav'); select matching rows in hf_dataset; __getitem__ at first, middle, last",
+          "steps": [
+            {
+              "exception": "ValueError",
+              "outcome": "error",
+              "step": "construct"
+            }
+          ]
+        },
+        {
+          "command": "/tmp/kinema-phase2-v3-051/bin/python loader-verification/2026-11-22/run_loader.py r1:c1:f0 --suffix _0.5.1",
+          "environment": {
+            "av": "15.1.0",
+            "datasets": "4.0.0",
+            "lerobot": "0.5.1",
+            "python": "3.12.15",
+            "torch": "2.7.1+cpu"
+          },
+          "evidence_file": "evidence/r1_c1_f0_loader_0.5.1.json",
+          "operation": "LeRobotDataset(... episodes=[episode], revision=commit, video_backend='pyav'); select matching rows in hf_dataset; __getitem__ at first, middle, last",
+          "steps": [
+            {
+              "exception": "ValueError",
+              "outcome": "error",
+              "step": "construct"
+            }
+          ]
+        },
+        {
+          "command": "/tmp/kinema-phase2-v3/bin/python loader-verification/2026-11-22/decode_fineart.py",
+          "environment": {
+            "lerobot": "0.4.0"
+          },
+          "evidence_file": "evidence/r1_c1_f0_decoder.json",
+          "operation": "LeRobot 0.4.0 decode_video_frames(... tolerance_s=1e-4, backend='pyav')",
+          "steps": [
+            {
+              "camera": "cam_high",
+              "outcome": "ok",
+              "position": "first",
+              "row_index": 0,
+              "shape": [
+                1,
+                3,
+                360,
+                640
+              ],
+              "timestamp": 0.0
+            },
+            {
+              "camera": "cam_high",
+              "outcome": "ok",
+              "position": "middle",
+              "row_index": 13473,
+              "shape": [
+                1,
+                3,
+                360,
+                640
+              ],
+              "timestamp": 149.6999969482422
+            },
+            {
+              "camera": "cam_high",
+              "outcome": "ok",
+              "position": "worst_grid",
+              "row_index": 1458,
+              "shape": [
+                1,
+                3,
+                360,
+                640
+              ],
+              "timestamp": 16.200000762939453
+            },
+            {
+              "camera": "cam_high",
+              "outcome": "ok",
+              "position": "last",
+              "row_index": 26945,
+              "shape": [
+                1,
+                3,
+                360,
+                640
+              ],
+              "timestamp": 299.3888854980469
+            },
+            {
+              "camera": "cam_low",
+              "outcome": "ok",
+              "position": "first",
+              "row_index": 0,
+              "shape": [
+                1,
+                3,
+                360,
+                640
+              ],
+              "timestamp": 0.0
+            },
+            {
+              "camera": "cam_low",
+              "outcome": "ok",
+              "position": "middle",
+              "row_index": 13473,
+              "shape": [
+                1,
+                3,
+                360,
+                640
+              ],
+              "timestamp": 149.6999969482422
+            },
+            {
+              "camera": "cam_low",
+              "outcome": "ok",
+              "position": "worst_grid",
+              "row_index": 1458,
+              "shape": [
+                1,
+                3,
+                360,
+                640
+              ],
+              "timestamp": 16.200000762939453
+            },
+            {
+              "camera": "cam_low",
+              "outcome": "ok",
+              "position": "last",
+              "row_index": 26945,
+              "shape": [
+                1,
+                3,
+                360,
+                640
+              ],
+              "timestamp": 299.3888854980469
+            },
+            {
+              "camera": "cam_left_wrist",
+              "outcome": "ok",
+              "position": "first",
+              "row_index": 0,
+              "shape": [
+                1,
+                3,
+                360,
+                640
+              ],
+              "timestamp": 0.0
+            },
+            {
+              "camera": "cam_left_wrist",
+              "outcome": "ok",
+              "position": "middle",
+              "row_index": 13473,
+              "shape": [
+                1,
+                3,
+                360,
+                640
+              ],
+              "timestamp": 149.6999969482422
+            },
+            {
+              "camera": "cam_left_wrist",
+              "outcome": "ok",
+              "position": "worst_grid",
+              "row_index": 1458,
+              "shape": [
+                1,
+                3,
+                360,
+                640
+              ],
+              "timestamp": 16.200000762939453
+            },
+            {
+              "camera": "cam_left_wrist",
+              "outcome": "ok",
+              "position": "last",
+              "row_index": 26945,
+              "shape": [
+                1,
+                3,
+                360,
+                640
+              ],
+              "timestamp": 299.3888854980469
+            },
+            {
+              "camera": "cam_right_wrist",
+              "outcome": "ok",
+              "position": "first",
+              "row_index": 0,
+              "shape": [
+                1,
+                3,
+                360,
+                640
+              ],
+              "timestamp": 0.0
+            },
+            {
+              "camera": "cam_right_wrist",
+              "outcome": "ok",
+              "position": "middle",
+              "row_index": 13473,
+              "shape": [
+                1,
+                3,
+                360,
+                640
+              ],
+              "timestamp": 149.6999969482422
+            },
+            {
+              "camera": "cam_right_wrist",
+              "outcome": "ok",
+              "position": "worst_grid",
+              "row_index": 1458,
+              "shape": [
+                1,
+                3,
+                360,
+                640
+              ],
+              "timestamp": 16.200000762939453
+            },
+            {
+              "camera": "cam_right_wrist",
+              "outcome": "ok",
+              "position": "last",
+              "row_index": 26945,
+              "shape": [
+                1,
+                3,
+                360,
+                640
+              ],
+              "timestamp": 299.3888854980469
+            }
+          ]
+        }
+      ],
+      "case_id": "r1:c1:f0",
+      "check": "timestamp-grid",
+      "classification": "refuted",
+      "dataset": "lerobot/FineART",
+      "evidence_files": [
+        "evidence/r1_c1_f0.json",
+        "evidence/r1_c1_f0_loader_0.4.0.json",
+        "evidence/r1_c1_f0_loader_0.5.1.json",
+        "evidence/r1_c1_f0_decoder.json"
+      ],
+      "metadata_anomaly_at_freeze": {},
+      "observed_values": "Pinned episode has 26946 rows, about 1/90-s spacing, and maximum 30-fps grid deviation 0.022225 s. Direct decoder returned frames within default 1e-4-s tolerance for first/middle/worst-grid/last positions across all four cameras (16/16). LeRobotDataset construction in 0.4.0 and 0.5.1 fails earlier on source dtype language.",
+      "original_assertion": "1 episode(s) off the 30 fps grid (episodes 40455): frame spacing deviates up to 67% of a period; LeRobot's default tolerance_s (1e-4 s) rejects these - needs tolerance_s >= 0.0222",
+      "original_audit_classification": "unresolved",
+      "preregistered_confirm_if": "Timestamp validation or actual access rejects affected episode at default tolerance for the claimed grid deviation",
+      "preregistered_operation": "LeRobotDataset v3 episode 40455 indexing and item access at default tolerance_s=1e-4",
+      "preregistered_refute_if": "Affected episode is indexable and accessible at default tolerance without timestamp error",
+      "reason": "Off-30-fps spacing did not make video lookup reject the tested frames; the loader does not reach timestamp access because of an independent schema incompatibility.",
+      "recovery_commands": [
+        "python loader-verification/2026-11-22/prepare.py r1:c1:f0 --metadata",
+        "python loader-verification/2026-11-22/prepare.py r1:c1:f0 --path data/chunk-000/file-210.parquet",
+        "python loader-verification/2026-11-22/prepare.py r1:c1:f0 --path videos/observation.images.cam_high/chunk-040/file-455.mp4",
+        "python loader-verification/2026-11-22/prepare.py r1:c1:f0 --path videos/observation.images.cam_left_wrist/chunk-040/file-455.mp4",
+        "python loader-verification/2026-11-22/prepare.py r1:c1:f0 --path videos/observation.images.cam_low/chunk-040/file-455.mp4",
+        "python loader-verification/2026-11-22/prepare.py r1:c1:f0 --path videos/observation.images.cam_right_wrist/chunk-040/file-455.mp4"
+      ],
+      "remaining_gap": "Full dataset iteration with this custom language schema remains unsupported by the tested releases; no inference about other loaders.",
+      "repo": "lerobot/FineART",
+      "revision": "15746b76ddc21ffd38d73888fefe2e7a1496385b",
+      "subdir": "",
+      "tested_scope": "LeRobot 0.4.0 v3.0 direct pyav video lookup at episode-40455 timestamps"
+    },
+    {
+      "artifact_hashes": [
+        {
+          "bytes": 12454337,
+          "path": "meta/episodes/chunk-000/file-000.parquet",
+          "remote_path": "task_392/meta/episodes/chunk-000/file-000.parquet",
+          "sha256": "89ec0af4783570d15d356317d5347a74146b7967909527dfbdd53d28754df3b1"
+        },
+        {
+          "bytes": 9097,
+          "path": "meta/info.json",
+          "remote_path": "task_392/meta/info.json",
+          "sha256": "0e180a60963eec033fee432f944900b28f365950387f78153777c4a2aac8c021"
+        },
+        {
+          "bytes": 39281,
+          "path": "meta/stats.json",
+          "remote_path": "task_392/meta/stats.json",
+          "sha256": "a997177b1f4fcbf63ca70a1cb61d758000efa9437afab7393dff8de86ebe0b5e"
+        },
+        {
+          "bytes": 3211,
+          "path": "meta/tasks.parquet",
+          "remote_path": "task_392/meta/tasks.parquet",
+          "sha256": "00cb160b3789784dfc710fa7188facd2e0830274bfb3ee472a5c16ddd004c8fd"
+        },
+        {
+          "bytes": 104734745,
+          "path": "data/chunk-000/file-000.parquet",
+          "remote_path": "task_392/data/chunk-000/file-000.parquet",
+          "sha256": "8d3c78cfe32b34590ba3a1e07892da965360450f44f7be749e5db6cd081eaeb4"
+        },
+        {
+          "bytes": 204160508,
+          "path": "videos/observation.images.hand_left/chunk-000/file-011.mp4",
+          "remote_path": "task_392/videos/observation.images.hand_left/chunk-000/file-011.mp4",
+          "sha256": "dec82a6635ce2e9a8e5cbc3670b6f97df97ae7990e96e75b505c03766d4293d1"
+        },
+        {
+          "bytes": 176653253,
+          "path": "videos/observation.images.hand_right/chunk-000/file-010.mp4",
+          "remote_path": "task_392/videos/observation.images.hand_right/chunk-000/file-010.mp4",
+          "sha256": "ab1aca09598a07658243b5a3921d067b813255cb9c7451d9820513aec12fbb80"
+        },
+        {
+          "bytes": 200788857,
+          "path": "videos/observation.images.head/chunk-000/file-012.mp4",
+          "remote_path": "task_392/videos/observation.images.head/chunk-000/file-012.mp4",
+          "sha256": "c8803ce9dff5f11148d2e1b408a2f19e063ceaa8035905e4b840d8c625536d6b"
+        }
+      ],
+      "calls": [
+        {
+          "command": "/tmp/kinema-phase2-v3/bin/python loader-verification/2026-11-22/run_loader.py r261:c2:f4",
+          "environment": {
+            "av": "15.1.0",
+            "datasets": "4.0.0",
+            "lerobot": "0.4.0",
+            "python": "3.11.17",
+            "torch": "2.7.1+cpu"
+          },
+          "evidence_file": "evidence/r261_c2_f4_loader.json",
+          "operation": "LeRobotDataset(... episodes=[episode], revision=commit, video_backend='pyav'); select matching rows in hf_dataset; __getitem__ at first, middle, last",
+          "steps": [
+            {
+              "feature_keys": [
+                "observation.images.head",
+                "observation.images.hand_left",
+                "observation.images.hand_right",
+                "observation.states.effector.position",
+                "observation.states.end.orientation",
+                "observation.states.end.position",
+                "observation.states.head.position",
+                "observation.states.joint.current_value",
+                "observation.states.joint.position",
+                "observation.states.robot.orientation",
+                "observation.states.robot.position",
+                "observation.states.waist.position",
+                "actions.effector.position",
+                "actions.end.orientation",
+                "actions.end.position",
+                "actions.head.position",
+                "actions.joint.position",
+                "actions.robot.velocity",
+                "actions.waist.position",
+                "timestamp",
+                "frame_index",
+                "episode_index",
+                "index",
+                "task_index"
+              ],
+              "length": 282636,
+              "outcome": "ok",
+              "step": "construct",
+              "video_keys": [
+                "observation.images.head",
+                "observation.images.hand_left",
+                "observation.images.hand_right"
+              ]
+            },
+            {
+              "matching_rows": 9903,
+              "outcome": "ok",
+              "selected_table_rows": 282636,
+              "step": "episode_index_scan"
+            },
+            {
+              "index": 207504,
+              "outcome": "ok",
+              "step": "item_first",
+              "timestamp": 0.0
+            },
+            {
+              "index": 212455,
+              "outcome": "ok",
+              "step": "item_middle",
+              "timestamp": 57.0
+            },
+            {
+              "exception": "AssertionError",
+              "index": 217406,
+              "outcome": "error",
+              "step": "item_last"
+            }
+          ]
+        },
+        {
+          "command": "/tmp/kinema-phase2-v3/bin/python loader-verification/2026-11-22/probe_traly.py",
+          "environment": {
+            "lerobot": "0.4.0"
+          },
+          "evidence_file": "evidence/r261_c2_f4_hand_right.json",
+          "operation": "LeRobotDataset._query_videos({'observation.images.hand_right': [timestamp]}, 59) at first, middle and last matching row",
+          "steps": [
+            {
+              "index": 207504,
+              "outcome": "ok",
+              "position": "first",
+              "shape": [
+                3,
+                480,
+                640
+              ],
+              "timestamp": 0.0
+            },
+            {
+              "index": 212455,
+              "outcome": "ok",
+              "position": "middle",
+              "shape": [
+                3,
+                480,
+                640
+              ],
+              "timestamp": 57.0
+            },
+            {
+              "exception": "AssertionError",
+              "index": 217406,
+              "outcome": "error",
+              "position": "last",
+              "timestamp": 109.16666412353516
+            }
+          ]
+        }
+      ],
+      "case_id": "r261:c2:f4",
+      "check": "dropped-frames",
+      "classification": "confirmed",
+      "dataset": "Traly/AgiBotWorld-Alpha-lerobot//task_392",
+      "evidence_files": [
+        "evidence/r261_c2_f4.json",
+        "evidence/r261_c2_f4_loader.json",
+        "evidence/r261_c2_f4_hand_right.json"
+      ],
+      "metadata_anomaly_at_freeze": {},
+      "observed_values": "Pinned catalog declares 3241 frames and hand_right video ending at 544.0667 s; selected shard contains 9903 rows labeled episode 59. First/middle hand_right lookups succeeded; final row timestamp 109.1667 s shifts to 545.2 s and hand_right lookup fails. Full item access at the final row first fails on head camera.",
+      "original_assertion": "camera observation.images.hand_right: 1 episode(s) whose video segment is shorter than the data (e.g. episode 59: 3241 video frames, 9903 rows) - frame lookups past the segment end fail",
+      "original_audit_classification": "unresolved",
+      "preregistered_confirm_if": "The final in-bounds data item fails hand_right frame access because video segment ends",
+      "preregistered_operation": "LeRobotDataset v3 episode 59 data iteration and hand_right video access at start and end",
+      "preregistered_refute_if": "First and final in-bounds hand_right frames decode successfully",
+      "reason": "The specific hand_right frame access fails after the declared segment end on the affected pinned episode.",
+      "recovery_commands": [
+        "python loader-verification/2026-11-22/prepare.py r261:c2:f4 --metadata",
+        "python loader-verification/2026-11-22/prepare.py r261:c2:f4 --path data/chunk-000/file-000.parquet",
+        "python loader-verification/2026-11-22/prepare.py r261:c2:f4 --path videos/observation.images.hand_left/chunk-000/file-011.mp4",
+        "python loader-verification/2026-11-22/prepare.py r261:c2:f4 --path videos/observation.images.hand_right/chunk-000/file-010.mp4",
+        "python loader-verification/2026-11-22/prepare.py r261:c2:f4 --path videos/observation.images.head/chunk-000/file-012.mp4"
+      ],
+      "remaining_gap": "Other cameras and training behavior beyond first/middle/last were not exhaustively tested; duplicate episode labels may be the underlying source issue.",
+      "repo": "Traly/AgiBotWorld-Alpha-lerobot",
+      "revision": "b38fd11acfe54f06b8b73b217f1b7c5c89b2c552",
+      "subdir": "task_392",
+      "tested_scope": "LeRobot 0.4.0 v3.0 episode-59 item and hand_right lookup"
+    },
+    {
+      "artifact_hashes": [
+        {
+          "bytes": 444570,
+          "path": "meta/episodes.jsonl",
+          "remote_path": "meta/episodes.jsonl",
+          "sha256": "92ce044024b85d275ff795f8248cd64f5db5fd6bc67a14e4271d18ebede28de6"
+        },
+        {
+          "bytes": 2411,
+          "path": "meta/info.json",
+          "remote_path": "meta/info.json",
+          "sha256": "abdc07b410603d8c4270e701eb8139e3d2dbf7d6e84b7a24fd5dd402951f6ca1"
+        },
+        {
+          "bytes": 8628,
+          "path": "meta/tasks.jsonl",
+          "remote_path": "meta/tasks.jsonl",
+          "sha256": "524c1684ed8d17140bb94449c533e5dfbe2318f36d2d46a4b0e678ccfe4cee4e"
+        },
+        {
+          "bytes": 56261534,
+          "path": "data/chunk-000/episode_000000.parquet",
+          "remote_path": "data/chunk-000/episode_000000.parquet",
+          "sha256": "1002576706ddf9c476bd15d101d6b48ca8792d561f621ca8c1e9ca339641ec3f"
+        }
+      ],
+      "calls": [
+        {
+          "command": "/tmp/kinema-phase2-v2/bin/python loader-verification/2026-11-22/run_loader.py r51:c17:f1",
+          "environment": {
+            "av": "15.1.0",
+            "datasets": "3.6.0",
+            "lerobot": "0.3.3",
+            "python": "3.11.17",
+            "torch": "2.7.1+cpu"
+          },
+          "evidence_file": "evidence/r51_c17_f1_loader.json",
+          "operation": "LeRobotDataset(... episodes=[episode], revision=commit, video_backend='pyav'); select matching rows in hf_dataset; __getitem__ at first, middle, last",
+          "steps": [
+            {
+              "feature_keys": [
+                "image",
+                "second_image",
+                "wrist_image",
+                "state",
+                "actions",
+                "timestamp",
+                "frame_index",
+                "episode_index",
+                "index",
+                "task_index"
+              ],
+              "length": 93,
+              "outcome": "ok",
+              "step": "construct",
+              "video_keys": []
+            },
+            {
+              "matching_rows": 93,
+              "outcome": "ok",
+              "selected_table_rows": 93,
+              "step": "episode_index_scan"
+            },
+            {
+              "index": 0,
+              "outcome": "ok",
+              "step": "item_first",
+              "timestamp": 0.0
+            },
+            {
+              "index": 46,
+              "outcome": "ok",
+              "step": "item_middle",
+              "timestamp": 4.599999904632568
+            },
+            {
+              "index": 92,
+              "outcome": "ok",
+              "step": "item_last",
+              "timestamp": 9.199999809265137
+            }
+          ]
+        }
+      ],
+      "case_id": "r51:c17:f1",
+      "check": "deployment-readiness",
+      "classification": "unresolved",
+      "dataset": "VLABench/vlabench_primitive_ft_lerobot",
+      "evidence_files": [
+        "evidence/r51_c17_f1.json",
+        "evidence/r51_c17_f1_loader.json"
+      ],
+      "metadata_anomaly_at_freeze": {
+        "feature_declared": false,
+        "metadata_tree": [
+          "meta/episodes.jsonl",
+          "meta/info.json",
+          "meta/tasks.jsonl"
+        ],
+        "metadata_tree_complete": true,
+        "metadata_tree_count": 3,
+        "per_episode_stats_paths": [],
+        "stats_json_present": false
+      },
+      "observed_values": "93/93 episode rows selected; first, middle and last item access succeeded. Source has no stats file; feature is actions, not action.",
+      "original_assertion": "action: no normalization stats (meta/stats.json or per-episode stats) - the policy cannot normalize inputs/outputs at inference",
+      "original_audit_classification": "unresolved",
+      "preregistered_confirm_if": "The supported normalization path for the exact named feature fails specifically for missing stats after successful item access",
+      "preregistered_operation": "Load first episode item and inspect loader metadata/stats; exercise documented normalization constructor for named feature if supported",
+      "preregistered_refute_if": "The exact named feature normalizes successfully using pinned inputs and supported defaults",
+      "reason": "The asserted action inference normalization cannot be tested without a named action feature mapping and policy checkpoint.",
+      "recovery_commands": [
+        "python loader-verification/2026-11-22/prepare.py r51:c17:f1 --metadata",
+        "python loader-verification/2026-11-22/prepare.py r51:c17:f1 --path data/chunk-000/episode_000000.parquet"
+      ],
+      "remaining_gap": "Test a specified policy/checkpoint and feature mapping.",
+      "repo": "VLABench/vlabench_primitive_ft_lerobot",
+      "revision": "460a2a4dc0bf29bef92b3e195a0f4e87f2d026a6",
+      "subdir": "",
+      "tested_scope": "LeRobot 0.3.3 v2.0 episode-0 iteration"
+    },
+    {
+      "artifact_hashes": [
+        {
+          "bytes": 8959642,
+          "path": "meta/episodes.jsonl",
+          "remote_path": "meta/episodes.jsonl",
+          "sha256": "a0884bb2d9cda8023727e5ba79559fa22d91ff853627af5442f9e64b24fd3c47"
+        },
+        {
+          "bytes": 87602774,
+          "path": "meta/episodes_stats.jsonl",
+          "remote_path": "meta/episodes_stats.jsonl",
+          "sha256": "87aba12c3c7ce29400c1d0d58104fab81156540d3512ecd6400b0392114617d6"
+        },
+        {
+          "bytes": 3242,
+          "path": "meta/info.json",
+          "remote_path": "meta/info.json",
+          "sha256": "64e763a6af9db3574de22a11c1b86de41b92dc520b0aa5ce26d1e05473a5313c"
+        },
+        {
+          "bytes": 1222,
+          "path": "meta/modality.json",
+          "remote_path": "meta/modality.json",
+          "sha256": "8e1530d1ea1c14b5ffd3d5efa9007958373caa8dc80ee84aad0aa8deb68c91a3"
+        },
+        {
+          "bytes": 2,
+          "path": "meta/relative_stats.json",
+          "remote_path": "meta/relative_stats.json",
+          "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+        },
+        {
+          "bytes": 5036,
+          "path": "meta/stats.json",
+          "remote_path": "meta/stats.json",
+          "sha256": "3441f39091d153932f95b113d17a77d146d068e663d8c49245f491b3c4e943e3"
+        },
+        {
+          "bytes": 2661763,
+          "path": "meta/tasks.jsonl",
+          "remote_path": "meta/tasks.jsonl",
+          "sha256": "4f873f60d2fa80cb1e477859af0046aa47a020ab1eb0bf99d91a9e6843fc86a6"
+        },
+        {
+          "bytes": 35227,
+          "path": "data/chunk-000/episode_000000.parquet",
+          "remote_path": "data/chunk-000/episode_000000.parquet",
+          "sha256": "124bd27a4671062f53e86bbfa13b98b281cf8e9b9710d62df537cce5a65064c4"
+        },
+        {
+          "bytes": 264225,
+          "path": "videos/chunk-000/observation.images.primary/episode_000000.mp4",
+          "remote_path": "videos/chunk-000/observation.images.primary/episode_000000.mp4",
+          "sha256": "fec90a5fa5916d6fab504c70f7bb2ec2f73bd989a63f49f27f78da4082f435fe"
+        },
+        {
+          "bytes": 220400,
+          "path": "videos/chunk-000/observation.images.secondary/episode_000000.mp4",
+          "remote_path": "videos/chunk-000/observation.images.secondary/episode_000000.mp4",
+          "sha256": "8013c75f395517bcecdb882c0b268eea038cd693a56c6423564f99296a8ed494"
+        },
+        {
+          "bytes": 405912,
+          "path": "videos/chunk-000/observation.images.wrist/episode_000000.mp4",
+          "remote_path": "videos/chunk-000/observation.images.wrist/episode_000000.mp4",
+          "sha256": "841f1d73372377e6c8034ac1cfd2bf9abb5935960c6f0557deb6ec809b315ec7"
+        }
+      ],
+      "calls": [
+        {
+          "command": "/tmp/kinema-phase2-v2/bin/python loader-verification/2026-11-22/run_loader.py r71:c1:f1",
+          "environment": {
+            "av": "15.1.0",
+            "datasets": "3.6.0",
+            "lerobot": "0.3.3",
+            "python": "3.11.17",
+            "torch": "2.7.1+cpu"
+          },
+          "evidence_file": "evidence/r71_c1_f1_loader.json",
+          "operation": "LeRobotDataset(... episodes=[episode], revision=commit, video_backend='pyav'); select matching rows in hf_dataset; __getitem__ at first, middle, last",
+          "steps": [
+            {
+              "exception": "KeyError",
+              "outcome": "error",
+              "step": "construct"
+            }
+          ]
+        },
+        {
+          "command": "/tmp/kinema-phase2-v2/bin/python loader-verification/2026-11-22/decode_probe.py r71:c1:f1",
+          "environment": {
+            "lerobot": "0.3.3"
+          },
+          "evidence_file": "evidence/r71_c1_f1_decoder.json",
+          "operation": "lerobot.datasets.video_utils.decode_video_frames(path, [raw_timestamp], tolerance_s=1e-4, backend='pyav')",
+          "steps": [
+            {
+              "camera": "observation.images.primary",
+              "outcome": "ok",
+              "position": "first",
+              "row_index": 0,
+              "shape": [
+                1,
+                3,
+                160,
+                256
+              ],
+              "timestamp": 0.7333333492279053
+            },
+            {
+              "camera": "observation.images.primary",
+              "outcome": "ok",
+              "position": "middle",
+              "row_index": 96,
+              "shape": [
+                1,
+                3,
+                160,
+                256
+              ],
+              "timestamp": 7.133333206176758
+            },
+            {
+              "camera": "observation.images.primary",
+              "outcome": "ok",
+              "position": "last",
+              "row_index": 191,
+              "shape": [
+                1,
+                3,
+                160,
+                256
+              ],
+              "timestamp": 13.466666221618652
+            },
+            {
+              "camera": "observation.images.secondary",
+              "outcome": "ok",
+              "position": "first",
+              "row_index": 0,
+              "shape": [
+                1,
+                3,
+                160,
+                256
+              ],
+              "timestamp": 0.7333333492279053
+            },
+            {
+              "camera": "observation.images.secondary",
+              "outcome": "ok",
+              "position": "middle",
+              "row_index": 96,
+              "shape": [
+                1,
+                3,
+                160,
+                256
+              ],
+              "timestamp": 7.133333206176758
+            },
+            {
+              "camera": "observation.images.secondary",
+              "outcome": "ok",
+              "position": "last",
+              "row_index": 191,
+              "shape": [
+                1,
+                3,
+                160,
+                256
+              ],
+              "timestamp": 13.466666221618652
+            },
+            {
+              "camera": "observation.images.wrist",
+              "outcome": "ok",
+              "position": "first",
+              "row_index": 0,
+              "shape": [
+                1,
+                3,
+                160,
+                256
+              ],
+              "timestamp": 0.7333333492279053
+            },
+            {
+              "camera": "observation.images.wrist",
+              "outcome": "ok",
+              "position": "middle",
+              "row_index": 96,
+              "shape": [
+                1,
+                3,
+                160,
+                256
+              ],
+              "timestamp": 7.133333206176758
+            },
+            {
+              "camera": "observation.images.wrist",
+              "outcome": "ok",
+              "position": "last",
+              "row_index": 191,
+              "shape": [
+                1,
+                3,
+                160,
+                256
+              ],
+              "timestamp": 13.466666221618652
+            }
+          ]
+        }
+      ],
+      "case_id": "r71:c1:f1",
+      "check": "timestamp-grid",
+      "classification": "refuted",
+      "dataset": "azsdsadasdsadasd/droid_filter_lerobot",
+      "evidence_files": [
+        "evidence/r71_c1_f1.json",
+        "evidence/r71_c1_f1_loader.json",
+        "evidence/r71_c1_f1_decoder.json"
+      ],
+      "metadata_anomaly_at_freeze": {
+        "data_path": "data/chunk-000/episode_000000.parquet",
+        "first_timestamp": 0.7333333492279053,
+        "fps": 15,
+        "frames": 192,
+        "last_timestamp": 13.466666221618652,
+        "second_timestamp": 0.800000011920929
+      },
+      "observed_values": "Pinned first timestamp is 0.733333 s. Direct decoder returned frames at first/middle/last raw timestamps for all three cameras (9/9). Dataset construction separately raises KeyError(stats) in episode metadata.",
+      "original_assertion": "23 episode(s) whose timestamps do not start at 0: 0 (0.7333s), 2335 (1s), 11676 (1.067s), 14011 (0.5333s), 16346 (1.733s) - video frames are looked up by timestamp, so decoding will miss",
+      "original_audit_classification": "unresolved",
+      "preregistered_confirm_if": "The loader raises timestamp or decode failure at in-bounds affected frames because absolute timestamps miss the video",
+      "preregistered_operation": "LeRobotDataset affected episode 0 first/middle/last video frame access via __getitem__",
+      "preregistered_refute_if": "Affected frames decode within tolerance using ordinary lookup",
+      "reason": "A nonzero start did not make the tested timestamp-to-video lookups miss.",
+      "recovery_commands": [
+        "python loader-verification/2026-11-22/prepare.py r71:c1:f1 --metadata",
+        "python loader-verification/2026-11-22/prepare.py r71:c1:f1 --path data/chunk-000/episode_000000.parquet",
+        "python loader-verification/2026-11-22/prepare.py r71:c1:f1 --path videos/chunk-000/observation.images.primary/episode_000000.mp4",
+        "python loader-verification/2026-11-22/prepare.py r71:c1:f1 --path videos/chunk-000/observation.images.secondary/episode_000000.mp4",
+        "python loader-verification/2026-11-22/prepare.py r71:c1:f1 --path videos/chunk-000/observation.images.wrist/episode_000000.mp4"
+      ],
+      "remaining_gap": "The other 22 named episodes and complete dataset iteration remain untested; episode-stats schema blocks construction.",
+      "repo": "azsdsadasdsadasd/droid_filter_lerobot",
+      "revision": "7415f67330af40953ea52aa61a74788c75e1a8d6",
+      "subdir": "",
+      "tested_scope": "LeRobot 0.3.3 v2.1 direct pyav video lookup on episode 0"
+    },
+    {
+      "artifact_hashes": [
+        {
+          "bytes": 2206477,
+          "path": "meta/episodes.jsonl",
+          "remote_path": "meta/episodes.jsonl",
+          "sha256": "fdb8e029b407828c006a8ceb03e56b4411c7be37f88746532d2f7cba04a3fe53"
+        },
+        {
+          "bytes": 2415,
+          "path": "meta/info.json",
+          "remote_path": "meta/info.json",
+          "sha256": "6e9c20e8e3f52fb59954002c93596d4204e30ececa7b1f8497549c5cb2adf07e"
+        },
+        {
+          "bytes": 20353,
+          "path": "meta/tasks.jsonl",
+          "remote_path": "meta/tasks.jsonl",
+          "sha256": "e1e61367de6cf284fb4df87da535188bc17fa14e4d2210cfc36620857af5e977"
+        },
+        {
+          "bytes": 45390259,
+          "path": "data/chunk-000/episode_000000.parquet",
+          "remote_path": "data/chunk-000/episode_000000.parquet",
+          "sha256": "179a139b7352c575a9b265581a421f0518f231de41800c5a29ec34b4aaa4d854"
+        }
+      ],
+      "calls": [
+        {
+          "command": "/tmp/kinema-phase2-v2/bin/python loader-verification/2026-11-22/run_loader.py r15:c17:f0",
+          "environment": {
+            "av": "15.1.0",
+            "datasets": "3.6.0",
+            "lerobot": "0.3.3",
+            "python": "3.11.17",
+            "torch": "2.7.1+cpu"
+          },
+          "evidence_file": "evidence/r15_c17_f0_loader.json",
+          "operation": "LeRobotDataset(... episodes=[episode], revision=commit, video_backend='pyav'); select matching rows in hf_dataset; __getitem__ at first, middle, last",
+          "steps": [
+            {
+              "feature_keys": [
+                "image",
+                "second_image",
+                "wrist_image",
+                "state",
+                "actions",
+                "timestamp",
+                "frame_index",
+                "episode_index",
+                "index",
+                "task_index"
+              ],
+              "length": 81,
+              "outcome": "ok",
+              "step": "construct",
+              "video_keys": []
+            },
+            {
+              "matching_rows": 81,
+              "outcome": "ok",
+              "selected_table_rows": 81,
+              "step": "episode_index_scan"
+            },
+            {
+              "index": 0,
+              "outcome": "ok",
+              "step": "item_first",
+              "timestamp": 0.0
+            },
+            {
+              "index": 40,
+              "outcome": "ok",
+              "step": "item_middle",
+              "timestamp": 4.0
+            },
+            {
+              "index": 80,
+              "outcome": "ok",
+              "step": "item_last",
+              "timestamp": 8.0
+            }
+          ]
+        }
+      ],
+      "case_id": "r15:c17:f0",
+      "check": "deployment-readiness",
+      "classification": "unresolved",
+      "dataset": "VLABench/vlabench_primitive_pretrain_lerobot",
+      "evidence_files": [
+        "evidence/r15_c17_f0.json",
+        "evidence/r15_c17_f0_loader.json"
+      ],
+      "metadata_anomaly_at_freeze": {
+        "feature_declared": false,
+        "metadata_tree": [
+          "meta/episodes.jsonl",
+          "meta/info.json",
+          "meta/tasks.jsonl"
+        ],
+        "metadata_tree_complete": true,
+        "metadata_tree_count": 3,
+        "per_episode_stats_paths": [],
+        "stats_json_present": false
+      },
+      "observed_values": "81/81 episode rows selected; first, middle and last item access succeeded. Source has no stats file; feature is state, not observation.state.",
+      "original_assertion": "observation.state: no normalization stats (meta/stats.json or per-episode stats) - the policy cannot normalize inputs/outputs at inference",
+      "original_audit_classification": "unresolved",
+      "preregistered_confirm_if": "The supported normalization path for the exact named feature fails specifically for missing stats after successful item access",
+      "preregistered_operation": "Load first episode item and inspect loader metadata/stats; exercise documented normalization constructor for named feature if supported",
+      "preregistered_refute_if": "The exact named feature normalizes successfully using pinned inputs and supported defaults",
+      "reason": "Raw frame loading cannot settle the stated inference normalization failure without a policy/checkpoint and feature mapping.",
+      "recovery_commands": [
+        "python loader-verification/2026-11-22/prepare.py r15:c17:f0 --metadata",
+        "python loader-verification/2026-11-22/prepare.py r15:c17:f0 --path data/chunk-000/episode_000000.parquet"
+      ],
+      "remaining_gap": "Test a specified policy/checkpoint and feature mapping.",
+      "repo": "VLABench/vlabench_primitive_pretrain_lerobot",
+      "revision": "aaa042a8ffb56c931ad738bd220c0c944d8479e7",
+      "subdir": "",
+      "tested_scope": "LeRobot 0.3.3 v2.0 episode-0 iteration"
+    }
+  ],
+  "date_utc": "2026-11-22",
+  "environment_file": "evidence/environments.json",
+  "frozen_audit_sha256": "d1b13333442049e09b942d7aca0ad7b9824ca24dd9dff71c6732160593b66f40",
+  "frozen_board_commit": "f701ff4bdd7be514644fa2769aa1bb22e979e4d6",
+  "frozen_board_engine": "f9a1edd38b66",
+  "frozen_expectations_sha256": "ee6d4f27e12e184d310fee484bcb7c162247e36a9f83424645f7ce9ce51a1b91",
+  "loader_versions": {
+    "secondary_v3_schema_probe": "LeRobot 0.5.1 for FineART only",
+    "v2.0/v2.1": "LeRobot 0.3.3",
+    "v3.0": "LeRobot 0.4.0"
+  },
+  "per_check": {
+    "deployment-readiness": {
+      "confirmed": 0,
+      "refuted": 0,
+      "unresolved": 4
+    },
+    "dropped-frames": {
+      "confirmed": 1,
+      "refuted": 1,
+      "unresolved": 0
+    },
+    "episode-file-pointers": {
+      "confirmed": 2,
+      "refuted": 0,
+      "unresolved": 0
+    },
+    "timestamp-grid": {
+      "confirmed": 1,
+      "refuted": 2,
+      "unresolved": 0
+    }
+  },
+  "result_counts": {
+    "confirmed": 4,
+    "refuted": 3,
+    "unresolved": 4
+  },
+  "schema": 1,
+  "scope": "Loader consequences in the eleven unresolved frozen phase-1 cases; no product certification or aggregate accuracy",
+  "version_selection": "LeRobot 0.3.3 declares CODEBASE_VERSION v2.1 and its source explicitly supports v2.0 global stats. Official LeRobot v3 documentation dates v3.0 support to 0.4.0. Version 0.5.1 also declares v3.0 and was used only to check FineART's custom language dtype, not to seek a preferred verdict.",
+  "version_sources": {
+    "v2_loader_source": "https://github.com/huggingface/lerobot/blob/v0.3.3/src/lerobot/datasets/lerobot_dataset.py",
+    "v3_format_documentation": "https://github.com/huggingface/lerobot/blob/main/docs/source/lerobot-dataset-v3.mdx",
+    "v3_loader_source": "https://github.com/huggingface/lerobot/blob/v0.4.0/src/lerobot/datasets/lerobot_dataset.py",
+    "v3_secondary_source": "https://github.com/huggingface/lerobot/blob/v0.5.1/src/lerobot/datasets/dataset_metadata.py"
+  }
+}
