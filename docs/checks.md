@@ -366,6 +366,21 @@ in pick/place episodes; and commanded-but-not-followed - the leader moves,
 the follower's measured position does not (dead follower motor; action-only
 checks cannot see this).
 
+An explicitly named quaternion component is not an actuator coordinate: one
+component may barely change while the represented rotation changes. When at
+least two **distinct** components share a `quat` or `quaternion` stem with
+`x`, `y`, `z`, or `w` suffixes, and the action and state dimension names match, a static or
+unfollowed component is reported as INFO with its episode evidence, without
+a dead-motor claim. This recognizes `base_orient_quat_z` / `_w` and
+`base.quaternion.z` / `.w`; it does not classify Euler angles, joint axes,
+or an arbitrary name containing `quat` as quaternion components. The global
+no-motion recording warning is unchanged. Missing, lone, or contradictory
+feature names retain the previous rule, so poorly described rotations may
+still be false alarms. Conversely, a real failure encoded only through a
+quaternion may now appear as INFO; inspect the full rotation and command
+semantics before deciding whether an actuator failed. This rule does not
+infer the robot's pose from selected components.
+
 Grippers and detected on/off (two-level) commands idle legitimately, so they
 are reported but not gated; the toggle detection is data-driven, so odd
 layouts the gripper slot prior misses (e.g. a 7-dim bimanual pair) get the

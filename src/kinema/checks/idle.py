@@ -1,12 +1,14 @@
 """Checks 5 & 6 - idle segments and stuck actuators.
 
 Idle stretches teach the policy to do nothing (the classic "robot stays
-still at inference" postmortem). A joint that never moves is a broken
-actuator, a disabled motor, or a recording bug - and the policy learns
-to ignore that joint.
+still at inference" postmortem). A joint that never moves may be a broken
+actuator, a disabled motor, or a recording bug - and the policy can learn
+to ignore that joint. An individual quaternion component is not a joint.
 """
 
 from __future__ import annotations
+
+import re
 
 import numpy as np
 
@@ -15,6 +17,32 @@ from kinema.stats import (action_gripper_dims, canonical, is_generic, structural
                           toggle_dims, velocity_dims)
 
 _PICK_WORDS = ("pick", "place", "grasp", "grab", "lift")
+_QUAT_COMPONENT = re.compile(r"^(?P<stem>.*(?:^|[._-])(?:quat|quaternion))[._-](?P<axis>[xyzw])$")
+
+
+def _named_quaternion_components(ctx, dim: int) -> set[int]:
+    """Explicit, paired quaternion channels; one component is not a motor.
+
+    Require matching action/state names and at least two components with the
+    same stem. A lone name or an incomplete/mismatched schema is ambiguous and
+    keeps the existing detector behavior. Euler angles and named joint axes
+    are deliberately outside this rule.
+    """
+    an, sn = ctx.action_names, ctx.state_names
+    if an is None or sn is None or len(an) != dim or len(sn) != dim:
+        return set()
+    groups: dict[str, list[tuple[int, str]]] = {}
+    for j, (a, s) in enumerate(zip(an, sn)):
+        if canonical(a) != canonical(s):
+            continue
+        match = _QUAT_COMPONENT.fullmatch(a.lower().strip())
+        if match and _QUAT_COMPONENT.fullmatch(s.lower().strip()):
+            groups.setdefault(match.group("stem"), []).append((j, match.group("axis")))
+    # Repeated axis labels make the representation ambiguous: keep the old
+    # treatment rather than trusting a partly duplicated schema.
+    return {j for group in groups.values()
+            if len(group) >= 2 and len({axis for _, axis in group}) == len(group)
+            for j, _ in group}
 
 
 def _runs(mask: np.ndarray) -> list[tuple[int, int]]:
@@ -187,14 +215,15 @@ class StuckActuatorCheck(Check):
         if action is None:
             return self.skip("action column missing")
         n = action.shape[1]
+        quat = _named_quaternion_components(ctx, n)
         named_grip, inferred_grip = action_gripper_dims(ctx)
-        grip = named_grip | inferred_grip
+        grip = (named_grip | inferred_grip) - quat
         # on/off commands the slot prior misses (odd layouts, e.g. a 7-dim
         # bimanual pair): a shut/open command idles legitimately, so it gets
         # the inferred-gripper treatment everywhere below
         toggles = toggle_dims(ctx, exclude=named_grip | inferred_grip
                               | velocity_dims(ctx.action_names, n))
-        grip |= toggles
+        grip |= toggles - quat
         # velocity commands (base twist, named or recognised structurally) sit
         # at exactly zero whenever that axis is not driven: not a dead motor
         vel = velocity_dims(ctx.action_names, n) | structural_velocity_dims(ctx)
@@ -230,7 +259,7 @@ class StuckActuatorCheck(Check):
         #    died or was disabled during those recordings. A joint idle in
         #    (nearly) every episode is an unused DOF for this task - INFO.
         for j in live:
-            if j in named_grip:
+            if j in named_grip and j not in quat:
                 continue
             stuck_eps = [eps_ids[i] for i in range(n_eps) if still[i, j] and eps_ids[i] not in dead_set]
             if not stuck_eps:
@@ -243,7 +272,12 @@ class StuckActuatorCheck(Check):
             else:
                 sev, why = Severity.INFO, "the task may not need it in every episode"
             name = f" ({ctx.action_names[j]})" if ctx.action_names and len(ctx.action_names) == n else ""
-            if j in inferred_grip or j in toggles:  # a shut/open gripper idles legitimately: report, do not gate
+            if j in quat:
+                # A quaternion component can stay nearly fixed while other
+                # components vary. Keep the observed stasis, not a motor claim.
+                sev, why = Severity.INFO, ("one quaternion component stayed nearly fixed; "
+                                           "inspect the full rotation before inferring a motor fault")
+            elif j in inferred_grip or j in toggles:  # a shut/open gripper idles legitimately: report, do not gate
                 sev, why = Severity.INFO, why + (" [dim looks like an unnamed gripper]" if j in inferred_grip
                                                  else " [two-level on/off command]")
             elif j in vel:
@@ -251,9 +285,11 @@ class StuckActuatorCheck(Check):
                                            "driven in those episodes, not a dead motor")
             res.findings.append(Finding(
                 self.id, sev,
-                f"joint {j}{name} does not move in {len(stuck_eps)}/{n_eps} episodes "
+                f"{'quaternion component' if j in quat else 'joint'} {j}{name} "
+                f"does not move in {len(stuck_eps)}/{n_eps} episodes "
                 f"{stuck_eps[:8]}{'...' if len(stuck_eps) > 8 else ''} - {why}",
-                details={"joint": j, "episodes": stuck_eps, "share": share},
+                details={"joint": j, "episodes": stuck_eps, "share": share,
+                         **({"representation": "quaternion_component"} if j in quat else {})},
             ))
 
         # 3. pick/place task where the gripper never actuates
@@ -303,6 +339,7 @@ class StuckActuatorCheck(Check):
         if state is None or state.shape[1] != action.shape[1]:
             return []
         n = action.shape[1]
+        quat = _named_quaternion_components(ctx, n)
         sn, an = ctx.state_names, ctx.action_names
         have_names = sn is not None and an is not None and len(sn) == n == len(an)
         a_rng = np.nanpercentile(action, 99, axis=0) - np.nanpercentile(action, 1, axis=0)
@@ -325,11 +362,15 @@ class StuckActuatorCheck(Check):
                 if s_rng[j] < 0.01 * a_rng[j]:
                     # same joint by name, commanded everywhere, never measured moving
                     out.append(Finding(
-                        self.id, Severity.WARN,
-                        f"joint {j} ({an[j]}): commanded across the dataset but its measured "
-                        "position never changes - follower motor dead or unpowered, or the "
-                        "state is not actually recorded",
-                        details={"joint": j, "kind": "never_followed"},
+                        self.id, Severity.INFO if j in quat else Severity.WARN,
+                        (f"quaternion component {j} ({an[j]}): commanded across the dataset "
+                         "but its measured component stays fixed - inspect the full rotation"
+                         if j in quat else
+                         f"joint {j} ({an[j]}): commanded across the dataset but its measured "
+                         "position never changes - follower motor dead or unpowered, or the "
+                         "state is not actually recorded"),
+                        details={"joint": j, "kind": "never_followed",
+                                 **({"representation": "quaternion_component"} if j in quat else {})},
                     ))
                     continue
                 pairs.append(j)
@@ -362,12 +403,16 @@ class StuckActuatorCheck(Check):
             name = f" ({an[j]})" if an and len(an) == n else ""
             ep0, a0, s0 = max(bad, key=lambda x: x[1] - x[2])
             out.append(Finding(
-                self.id, Severity.WARN,
-                f"joint {j}{name}: commanded to move but the follower did not in "
+                self.id, Severity.INFO if j in quat else Severity.WARN,
+                f"{'quaternion component' if j in quat else 'joint'} {j}{name}: "
+                f"commanded to move but the measured {'component' if j in quat else 'follower'} did not in "
                 f"{len(bad)}/{len(eps_ids)} episode(s) {[b[0] for b in bad][:8]}"
                 f"{'...' if len(bad) > 8 else ''} (e.g. episode {ep0}: commanded {a0:.0%} of "
-                f"its range, moved {s0:.0%}) - dead or disabled follower motor, or blocked joint",
-                details={"joint": j, "kind": "not_followed", "episodes": [b[0] for b in bad]},
+                f"its range, moved {s0:.0%}) - "
+                + ("inspect the full rotation before inferring a motor fault" if j in quat
+                   else "dead or disabled follower motor, or blocked joint"),
+                details={"joint": j, "kind": "not_followed", "episodes": [b[0] for b in bad],
+                         **({"representation": "quaternion_component"} if j in quat else {})},
             ))
         return out
 
