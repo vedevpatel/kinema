@@ -1,0 +1,4252 @@
+{
+  "source": "MendelBeans/lerobot_dataset_so101_multitask_8",
+  "format_version": "v3.0",
+  "episodes": 250,
+  "frames": 81692,
+  "fps": 30.0,
+  "truncated": true,
+  "video_audited": 5,
+  "score": 78,
+  "score_model": "tiered-v3",
+  "verdict": "WARN",
+  "checks": [
+    {
+      "id": "stats-drift",
+      "title": "Stats drift (stored normalization stats vs actual data)",
+      "verdict": "PASS",
+      "weight": 6,
+      "weight_basis": "measured",
+      "summary": "data matches per-episode stats of the loaded episodes (worst 0% of the FAIL threshold)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "timestamp-grid",
+      "title": "Timestamp grid (spacing, monotonic, start at 0)",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "evenly spaced at 30 fps and monotonic",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "dropped-frames",
+      "title": "Dropped / duplicated frames",
+      "verdict": "PASS",
+      "weight": 2,
+      "weight_basis": "measured",
+      "summary": "frame_index contiguous; episode lengths and video segments match the data",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "calibration-drift",
+      "title": "Calibration drift (action vs state on still frames)",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "measured",
+      "summary": "5 joint(s) + 1 gripper(s) agree; worst offset -0.6% of range (joint 2)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "per_joint": {
+          "0": {
+            "joint": 0,
+            "offset_fraction": 0.0016142462702321409,
+            "scale_error": -0.004886597538826817,
+            "r2": 0.006044225002300174,
+            "line_vs_step": 0.9919459779998419,
+            "still_frames": 61285
+          },
+          "1": {
+            "joint": 1,
+            "offset_fraction": -0.0018388267676848129,
+            "scale_error": -0.00683299506645174,
+            "r2": 0.1822831426535747,
+            "line_vs_step": 0.9833716336361944,
+            "still_frames": 42935
+          },
+          "2": {
+            "joint": 2,
+            "offset_fraction": -0.005859142278144642,
+            "scale_error": 0.012167357174584467,
+            "r2": 0.24320365008696576,
+            "line_vs_step": 0.8502806932040097,
+            "still_frames": 48582
+          },
+          "3": {
+            "joint": 3,
+            "offset_fraction": 7.290556591404693e-05,
+            "scale_error": 0.02225664430142078,
+            "r2": 0.14970127642870323,
+            "line_vs_step": 1.005234226150316,
+            "still_frames": 59134
+          },
+          "4": {
+            "joint": 4,
+            "offset_fraction": 0.00036594141533811703,
+            "scale_error": 0.01642909339981617,
+            "r2": 0.08318860070234424,
+            "line_vs_step": 1.0364374077602085,
+            "still_frames": 65665
+          },
+          "5": {
+            "joint": 5,
+            "free_end": "high",
+            "offset_fraction": 0.004431880024395847,
+            "still_frames": 721,
+            "kind": "gripper"
+          }
+        },
+        "compared_joints": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "compared_grippers": [
+          5
+        ],
+        "compared_deltas": [],
+        "excluded_joints": {}
+      },
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "idle-segments",
+      "title": "Idle segments (policy learns to do nothing)",
+      "verdict": "WARN",
+      "weight": 6,
+      "weight_basis": "measured",
+      "summary": "190/250 episodes flagged; worst 50% idle",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "robustness": {
+          "probed": [
+            "unit-milli",
+            "unit-kilo",
+            "order-reversed",
+            "half-sample"
+          ]
+        }
+      },
+      "findings": [
+        {
+          "severity": "WARN",
+          "message": "episode 2: starts idle for 2.2s (teaches waiting at the start)",
+          "episode_index": 2,
+          "details": {
+            "idle_fraction": 0.22,
+            "idle_runs": 1,
+            "leading_idle_s": 2.2,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 4: starts idle for 2.1s (teaches waiting at the start)",
+          "episode_index": 4,
+          "details": {
+            "idle_fraction": 0.21,
+            "idle_runs": 1,
+            "leading_idle_s": 2.1,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 9: 31% of frames idle in runs >= 2s; starts idle for 3.1s (teaches waiting at the start)",
+          "episode_index": 9,
+          "details": {
+            "idle_fraction": 0.31,
+            "idle_runs": 1,
+            "leading_idle_s": 3.1,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 11: 34% of frames idle in runs >= 2s; starts idle for 3.4s (teaches waiting at the start)",
+          "episode_index": 11,
+          "details": {
+            "idle_fraction": 0.3433333333333333,
+            "idle_runs": 1,
+            "leading_idle_s": 3.433333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 13: starts idle for 2.8s (teaches waiting at the start)",
+          "episode_index": 13,
+          "details": {
+            "idle_fraction": 0.2833333333333333,
+            "idle_runs": 1,
+            "leading_idle_s": 2.8333333333333335,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 14: starts idle for 2.2s (teaches waiting at the start)",
+          "episode_index": 14,
+          "details": {
+            "idle_fraction": 0.22408026755852842,
+            "idle_runs": 1,
+            "leading_idle_s": 2.2333333333333334,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 20: starts idle for 2.8s (teaches waiting at the start)",
+          "episode_index": 20,
+          "details": {
+            "idle_fraction": 0.2833333333333333,
+            "idle_runs": 1,
+            "leading_idle_s": 2.8333333333333335,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 23: 32% of frames idle in runs >= 2s; starts idle for 3.2s (teaches waiting at the start)",
+          "episode_index": 23,
+          "details": {
+            "idle_fraction": 0.31666666666666665,
+            "idle_runs": 1,
+            "leading_idle_s": 3.1666666666666665,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 30: starts idle for 2.6s (teaches waiting at the start)",
+          "episode_index": 30,
+          "details": {
+            "idle_fraction": 0.26,
+            "idle_runs": 1,
+            "leading_idle_s": 2.6,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 34: starts idle for 2.4s (teaches waiting at the start)",
+          "episode_index": 34,
+          "details": {
+            "idle_fraction": 0.24333333333333335,
+            "idle_runs": 1,
+            "leading_idle_s": 2.433333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 38: starts idle for 2.3s (teaches waiting at the start)",
+          "episode_index": 38,
+          "details": {
+            "idle_fraction": 0.23,
+            "idle_runs": 1,
+            "leading_idle_s": 2.3,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 39: starts idle for 2.2s (teaches waiting at the start)",
+          "episode_index": 39,
+          "details": {
+            "idle_fraction": 0.21666666666666667,
+            "idle_runs": 1,
+            "leading_idle_s": 2.1666666666666665,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 41: 36% of frames idle in runs >= 2s; starts idle for 3.6s (teaches waiting at the start)",
+          "episode_index": 41,
+          "details": {
+            "idle_fraction": 0.36,
+            "idle_runs": 1,
+            "leading_idle_s": 3.6,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 43: 33% of frames idle in runs >= 2s; starts idle for 3.3s (teaches waiting at the start)",
+          "episode_index": 43,
+          "details": {
+            "idle_fraction": 0.33444816053511706,
+            "idle_runs": 1,
+            "leading_idle_s": 3.3333333333333335,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 45: starts idle for 2.6s (teaches waiting at the start)",
+          "episode_index": 45,
+          "details": {
+            "idle_fraction": 0.26,
+            "idle_runs": 1,
+            "leading_idle_s": 2.6,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 48: 36% of frames idle in runs >= 2s; starts idle for 3.6s (teaches waiting at the start)",
+          "episode_index": 48,
+          "details": {
+            "idle_fraction": 0.36333333333333334,
+            "idle_runs": 1,
+            "leading_idle_s": 3.6333333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 50: starts idle for 2.2s (teaches waiting at the start)",
+          "episode_index": 50,
+          "details": {
+            "idle_fraction": 0.22333333333333333,
+            "idle_runs": 1,
+            "leading_idle_s": 2.2333333333333334,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 52: starts idle for 2.1s (teaches waiting at the start)",
+          "episode_index": 52,
+          "details": {
+            "idle_fraction": 0.20666666666666667,
+            "idle_runs": 1,
+            "leading_idle_s": 2.066666666666667,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 54: 35% of frames idle in runs >= 2s; starts idle for 3.5s (teaches waiting at the start)",
+          "episode_index": 54,
+          "details": {
+            "idle_fraction": 0.35,
+            "idle_runs": 1,
+            "leading_idle_s": 3.5,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 59: 30% of frames idle in runs >= 2s; starts idle for 3.0s (teaches waiting at the start)",
+          "episode_index": 59,
+          "details": {
+            "idle_fraction": 0.30333333333333334,
+            "idle_runs": 1,
+            "leading_idle_s": 3.033333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 61: 36% of frames idle in runs >= 2s; starts idle for 3.6s (teaches waiting at the start)",
+          "episode_index": 61,
+          "details": {
+            "idle_fraction": 0.36333333333333334,
+            "idle_runs": 1,
+            "leading_idle_s": 3.6333333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 63: starts idle for 2.3s (teaches waiting at the start)",
+          "episode_index": 63,
+          "details": {
+            "idle_fraction": 0.22666666666666666,
+            "idle_runs": 1,
+            "leading_idle_s": 2.2666666666666666,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 64: 37% of frames idle in runs >= 2s; starts idle for 3.7s (teaches waiting at the start)",
+          "episode_index": 64,
+          "details": {
+            "idle_fraction": 0.37,
+            "idle_runs": 1,
+            "leading_idle_s": 3.7,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 66: starts idle for 2.1s (teaches waiting at the start)",
+          "episode_index": 66,
+          "details": {
+            "idle_fraction": 0.21333333333333335,
+            "idle_runs": 1,
+            "leading_idle_s": 2.1333333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 68: 34% of frames idle in runs >= 2s; starts idle for 3.4s (teaches waiting at the start)",
+          "episode_index": 68,
+          "details": {
+            "idle_fraction": 0.33666666666666667,
+            "idle_runs": 1,
+            "leading_idle_s": 3.3666666666666667,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 70: starts idle for 3.0s (teaches waiting at the start)",
+          "episode_index": 70,
+          "details": {
+            "idle_fraction": 0.2966666666666667,
+            "idle_runs": 1,
+            "leading_idle_s": 2.966666666666667,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 71: 31% of frames idle in runs >= 2s; starts idle for 3.1s (teaches waiting at the start)",
+          "episode_index": 71,
+          "details": {
+            "idle_fraction": 0.31333333333333335,
+            "idle_runs": 1,
+            "leading_idle_s": 3.1333333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 73: starts idle for 2.4s (teaches waiting at the start)",
+          "episode_index": 73,
+          "details": {
+            "idle_fraction": 0.24333333333333335,
+            "idle_runs": 1,
+            "leading_idle_s": 2.433333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 75: 31% of frames idle in runs >= 2s; starts idle for 3.1s (teaches waiting at the start)",
+          "episode_index": 75,
+          "details": {
+            "idle_fraction": 0.30666666666666664,
+            "idle_runs": 1,
+            "leading_idle_s": 3.066666666666667,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 77: starts idle for 2.7s (teaches waiting at the start)",
+          "episode_index": 77,
+          "details": {
+            "idle_fraction": 0.26666666666666666,
+            "idle_runs": 1,
+            "leading_idle_s": 2.6666666666666665,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 79: starts idle for 2.6s (teaches waiting at the start)",
+          "episode_index": 79,
+          "details": {
+            "idle_fraction": 0.2633333333333333,
+            "idle_runs": 1,
+            "leading_idle_s": 2.6333333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 80: starts idle for 2.2s (teaches waiting at the start)",
+          "episode_index": 80,
+          "details": {
+            "idle_fraction": 0.22,
+            "idle_runs": 1,
+            "leading_idle_s": 2.2,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 82: starts idle for 3.0s (teaches waiting at the start)",
+          "episode_index": 82,
+          "details": {
+            "idle_fraction": 0.2966666666666667,
+            "idle_runs": 1,
+            "leading_idle_s": 2.966666666666667,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 84: 34% of frames idle in runs >= 2s; starts idle for 3.4s (teaches waiting at the start)",
+          "episode_index": 84,
+          "details": {
+            "idle_fraction": 0.3433333333333333,
+            "idle_runs": 1,
+            "leading_idle_s": 3.433333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 88: starts idle for 2.4s (teaches waiting at the start)",
+          "episode_index": 88,
+          "details": {
+            "idle_fraction": 0.24333333333333335,
+            "idle_runs": 1,
+            "leading_idle_s": 2.433333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 89: starts idle for 2.9s (teaches waiting at the start)",
+          "episode_index": 89,
+          "details": {
+            "idle_fraction": 0.29,
+            "idle_runs": 1,
+            "leading_idle_s": 2.9,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 91: starts idle for 2.8s (teaches waiting at the start)",
+          "episode_index": 91,
+          "details": {
+            "idle_fraction": 0.28,
+            "idle_runs": 1,
+            "leading_idle_s": 2.8,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 93: 32% of frames idle in runs >= 2s; starts idle for 3.2s (teaches waiting at the start)",
+          "episode_index": 93,
+          "details": {
+            "idle_fraction": 0.32,
+            "idle_runs": 1,
+            "leading_idle_s": 3.2,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 95: 39% of frames idle in runs >= 2s; starts idle for 3.9s (teaches waiting at the start)",
+          "episode_index": 95,
+          "details": {
+            "idle_fraction": 0.39,
+            "idle_runs": 1,
+            "leading_idle_s": 3.9,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 97: 31% of frames idle in runs >= 2s; starts idle for 3.1s (teaches waiting at the start)",
+          "episode_index": 97,
+          "details": {
+            "idle_fraction": 0.31,
+            "idle_runs": 1,
+            "leading_idle_s": 3.1,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 98: 30% of frames idle in runs >= 2s; starts idle for 3.0s (teaches waiting at the start)",
+          "episode_index": 98,
+          "details": {
+            "idle_fraction": 0.30333333333333334,
+            "idle_runs": 1,
+            "leading_idle_s": 3.033333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 100: starts idle for 2.5s (teaches waiting at the start)",
+          "episode_index": 100,
+          "details": {
+            "idle_fraction": 0.25333333333333335,
+            "idle_runs": 1,
+            "leading_idle_s": 2.533333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 102: starts idle for 2.6s (teaches waiting at the start)",
+          "episode_index": 102,
+          "details": {
+            "idle_fraction": 0.25666666666666665,
+            "idle_runs": 1,
+            "leading_idle_s": 2.566666666666667,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 104: starts idle for 3.0s (teaches waiting at the start)",
+          "episode_index": 104,
+          "details": {
+            "idle_fraction": 0.3,
+            "idle_runs": 1,
+            "leading_idle_s": 3.0,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 105: 30% of frames idle in runs >= 2s; starts idle for 3.0s (teaches waiting at the start)",
+          "episode_index": 105,
+          "details": {
+            "idle_fraction": 0.30333333333333334,
+            "idle_runs": 1,
+            "leading_idle_s": 3.033333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 107: starts idle for 2.1s (teaches waiting at the start)",
+          "episode_index": 107,
+          "details": {
+            "idle_fraction": 0.21333333333333335,
+            "idle_runs": 1,
+            "leading_idle_s": 2.1333333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 109: starts idle for 2.6s (teaches waiting at the start)",
+          "episode_index": 109,
+          "details": {
+            "idle_fraction": 0.2633333333333333,
+            "idle_runs": 1,
+            "leading_idle_s": 2.6333333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 111: starts idle for 2.7s (teaches waiting at the start)",
+          "episode_index": 111,
+          "details": {
+            "idle_fraction": 0.27,
+            "idle_runs": 1,
+            "leading_idle_s": 2.7,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 113: starts idle for 2.6s (teaches waiting at the start)",
+          "episode_index": 113,
+          "details": {
+            "idle_fraction": 0.26,
+            "idle_runs": 1,
+            "leading_idle_s": 2.6,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 114: starts idle for 3.0s (teaches waiting at the start)",
+          "episode_index": 114,
+          "details": {
+            "idle_fraction": 0.3,
+            "idle_runs": 1,
+            "leading_idle_s": 3.0,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 116: 36% of frames idle in runs >= 2s; starts idle for 3.6s (teaches waiting at the start)",
+          "episode_index": 116,
+          "details": {
+            "idle_fraction": 0.3566666666666667,
+            "idle_runs": 1,
+            "leading_idle_s": 3.566666666666667,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 118: starts idle for 2.5s (teaches waiting at the start)",
+          "episode_index": 118,
+          "details": {
+            "idle_fraction": 0.25333333333333335,
+            "idle_runs": 1,
+            "leading_idle_s": 2.533333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 120: 38% of frames idle in runs >= 2s; starts idle for 3.8s (teaches waiting at the start)",
+          "episode_index": 120,
+          "details": {
+            "idle_fraction": 0.37666666666666665,
+            "idle_runs": 1,
+            "leading_idle_s": 3.7666666666666666,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 122: starts idle for 2.5s (teaches waiting at the start)",
+          "episode_index": 122,
+          "details": {
+            "idle_fraction": 0.25,
+            "idle_runs": 1,
+            "leading_idle_s": 2.5,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 123: 32% of frames idle in runs >= 2s; starts idle for 3.2s (teaches waiting at the start)",
+          "episode_index": 123,
+          "details": {
+            "idle_fraction": 0.3233333333333333,
+            "idle_runs": 1,
+            "leading_idle_s": 3.2333333333333334,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 125: starts idle for 2.4s (teaches waiting at the start)",
+          "episode_index": 125,
+          "details": {
+            "idle_fraction": 0.24333333333333335,
+            "idle_runs": 1,
+            "leading_idle_s": 2.433333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 127: 32% of frames idle in runs >= 2s; starts idle for 3.2s (teaches waiting at the start)",
+          "episode_index": 127,
+          "details": {
+            "idle_fraction": 0.31666666666666665,
+            "idle_runs": 1,
+            "leading_idle_s": 3.1666666666666665,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 129: starts idle for 2.2s (teaches waiting at the start)",
+          "episode_index": 129,
+          "details": {
+            "idle_fraction": 0.21666666666666667,
+            "idle_runs": 1,
+            "leading_idle_s": 2.1666666666666665,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 130: starts idle for 2.4s (teaches waiting at the start)",
+          "episode_index": 130,
+          "details": {
+            "idle_fraction": 0.23666666666666666,
+            "idle_runs": 1,
+            "leading_idle_s": 2.3666666666666667,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 132: starts idle for 2.9s (teaches waiting at the start)",
+          "episode_index": 132,
+          "details": {
+            "idle_fraction": 0.29,
+            "idle_runs": 1,
+            "leading_idle_s": 2.9,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 134: starts idle for 2.4s (teaches waiting at the start)",
+          "episode_index": 134,
+          "details": {
+            "idle_fraction": 0.23666666666666666,
+            "idle_runs": 1,
+            "leading_idle_s": 2.3666666666666667,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 136: 33% of frames idle in runs >= 2s; starts idle for 3.3s (teaches waiting at the start)",
+          "episode_index": 136,
+          "details": {
+            "idle_fraction": 0.32666666666666666,
+            "idle_runs": 1,
+            "leading_idle_s": 3.2666666666666666,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 138: starts idle for 2.6s (teaches waiting at the start)",
+          "episode_index": 138,
+          "details": {
+            "idle_fraction": 0.2633333333333333,
+            "idle_runs": 1,
+            "leading_idle_s": 2.6333333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 139: starts idle for 2.2s (teaches waiting at the start)",
+          "episode_index": 139,
+          "details": {
+            "idle_fraction": 0.22333333333333333,
+            "idle_runs": 1,
+            "leading_idle_s": 2.2333333333333334,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 141: starts idle for 2.3s (teaches waiting at the start)",
+          "episode_index": 141,
+          "details": {
+            "idle_fraction": 0.22666666666666666,
+            "idle_runs": 1,
+            "leading_idle_s": 2.2666666666666666,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 143: starts idle for 2.3s (teaches waiting at the start)",
+          "episode_index": 143,
+          "details": {
+            "idle_fraction": 0.23333333333333334,
+            "idle_runs": 1,
+            "leading_idle_s": 2.3333333333333335,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 145: starts idle for 2.7s (teaches waiting at the start)",
+          "episode_index": 145,
+          "details": {
+            "idle_fraction": 0.27,
+            "idle_runs": 1,
+            "leading_idle_s": 2.7,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 147: 33% of frames idle in runs >= 2s; starts idle for 3.3s (teaches waiting at the start)",
+          "episode_index": 147,
+          "details": {
+            "idle_fraction": 0.3333333333333333,
+            "idle_runs": 1,
+            "leading_idle_s": 3.3333333333333335,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 148: starts idle for 2.3s (teaches waiting at the start)",
+          "episode_index": 148,
+          "details": {
+            "idle_fraction": 0.23333333333333334,
+            "idle_runs": 1,
+            "leading_idle_s": 2.3333333333333335,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 150: starts idle for 2.3s (teaches waiting at the start)",
+          "episode_index": 150,
+          "details": {
+            "idle_fraction": 0.22666666666666666,
+            "idle_runs": 1,
+            "leading_idle_s": 2.2666666666666666,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 152: 30% of frames idle in runs >= 2s; starts idle for 3.0s (teaches waiting at the start)",
+          "episode_index": 152,
+          "details": {
+            "idle_fraction": 0.30333333333333334,
+            "idle_runs": 1,
+            "leading_idle_s": 3.033333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 154: starts idle for 2.5s (teaches waiting at the start)",
+          "episode_index": 154,
+          "details": {
+            "idle_fraction": 0.25,
+            "idle_runs": 1,
+            "leading_idle_s": 2.5,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 155: 31% of frames idle in runs >= 2s; starts idle for 3.1s (teaches waiting at the start)",
+          "episode_index": 155,
+          "details": {
+            "idle_fraction": 0.31333333333333335,
+            "idle_runs": 1,
+            "leading_idle_s": 3.1333333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 157: 31% of frames idle in runs >= 2s; starts idle for 3.1s (teaches waiting at the start)",
+          "episode_index": 157,
+          "details": {
+            "idle_fraction": 0.30666666666666664,
+            "idle_runs": 1,
+            "leading_idle_s": 3.066666666666667,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 159: 32% of frames idle in runs >= 2s; starts idle for 3.2s (teaches waiting at the start)",
+          "episode_index": 159,
+          "details": {
+            "idle_fraction": 0.31666666666666665,
+            "idle_runs": 1,
+            "leading_idle_s": 3.1666666666666665,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 163: starts idle for 3.0s (teaches waiting at the start)",
+          "episode_index": 163,
+          "details": {
+            "idle_fraction": 0.2966666666666667,
+            "idle_runs": 1,
+            "leading_idle_s": 2.966666666666667,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 166: starts idle for 2.5s (teaches waiting at the start)",
+          "episode_index": 166,
+          "details": {
+            "idle_fraction": 0.25,
+            "idle_runs": 1,
+            "leading_idle_s": 2.5,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 168: starts idle for 2.7s (teaches waiting at the start)",
+          "episode_index": 168,
+          "details": {
+            "idle_fraction": 0.2733333333333333,
+            "idle_runs": 1,
+            "leading_idle_s": 2.7333333333333334,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 170: starts idle for 2.8s (teaches waiting at the start)",
+          "episode_index": 170,
+          "details": {
+            "idle_fraction": 0.28,
+            "idle_runs": 1,
+            "leading_idle_s": 2.8,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 172: starts idle for 2.8s (teaches waiting at the start)",
+          "episode_index": 172,
+          "details": {
+            "idle_fraction": 0.28,
+            "idle_runs": 1,
+            "leading_idle_s": 2.8,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 175: 30% of frames idle in runs >= 2s; starts idle for 3.0s (teaches waiting at the start)",
+          "episode_index": 175,
+          "details": {
+            "idle_fraction": 0.30333333333333334,
+            "idle_runs": 1,
+            "leading_idle_s": 3.033333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 177: 38% of frames idle in runs >= 2s; starts idle for 3.8s (teaches waiting at the start)",
+          "episode_index": 177,
+          "details": {
+            "idle_fraction": 0.37666666666666665,
+            "idle_runs": 1,
+            "leading_idle_s": 3.7666666666666666,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 179: 34% of frames idle in runs >= 2s; starts idle for 3.4s (teaches waiting at the start)",
+          "episode_index": 179,
+          "details": {
+            "idle_fraction": 0.34,
+            "idle_runs": 1,
+            "leading_idle_s": 3.4,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 181: 33% of frames idle in runs >= 2s; starts idle for 3.3s (teaches waiting at the start)",
+          "episode_index": 181,
+          "details": {
+            "idle_fraction": 0.33,
+            "idle_runs": 1,
+            "leading_idle_s": 3.3,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 182: 38% of frames idle in runs >= 2s; starts idle for 3.8s (teaches waiting at the start)",
+          "episode_index": 182,
+          "details": {
+            "idle_fraction": 0.38,
+            "idle_runs": 1,
+            "leading_idle_s": 3.8,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 184: 41% of frames idle in runs >= 2s; starts idle for 4.1s (teaches waiting at the start)",
+          "episode_index": 184,
+          "details": {
+            "idle_fraction": 0.4066666666666667,
+            "idle_runs": 1,
+            "leading_idle_s": 4.066666666666666,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 186: 38% of frames idle in runs >= 2s; starts idle for 3.8s (teaches waiting at the start)",
+          "episode_index": 186,
+          "details": {
+            "idle_fraction": 0.38333333333333336,
+            "idle_runs": 1,
+            "leading_idle_s": 3.8333333333333335,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 188: starts idle for 2.9s (teaches waiting at the start)",
+          "episode_index": 188,
+          "details": {
+            "idle_fraction": 0.29333333333333333,
+            "idle_runs": 1,
+            "leading_idle_s": 2.933333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 189: starts idle for 2.2s (teaches waiting at the start)",
+          "episode_index": 189,
+          "details": {
+            "idle_fraction": 0.22,
+            "idle_runs": 1,
+            "leading_idle_s": 2.2,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 191: 34% of frames idle in runs >= 2s; starts idle for 3.4s (teaches waiting at the start)",
+          "episode_index": 191,
+          "details": {
+            "idle_fraction": 0.3433333333333333,
+            "idle_runs": 1,
+            "leading_idle_s": 3.433333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 193: starts idle for 2.7s (teaches waiting at the start)",
+          "episode_index": 193,
+          "details": {
+            "idle_fraction": 0.2733333333333333,
+            "idle_runs": 1,
+            "leading_idle_s": 2.7333333333333334,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 195: starts idle for 2.7s (teaches waiting at the start)",
+          "episode_index": 195,
+          "details": {
+            "idle_fraction": 0.27,
+            "idle_runs": 1,
+            "leading_idle_s": 2.7,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 197: 41% of frames idle in runs >= 2s; starts idle for 4.1s (teaches waiting at the start)",
+          "episode_index": 197,
+          "details": {
+            "idle_fraction": 0.41333333333333333,
+            "idle_runs": 1,
+            "leading_idle_s": 4.133333333333334,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 198: starts idle for 2.8s (teaches waiting at the start)",
+          "episode_index": 198,
+          "details": {
+            "idle_fraction": 0.28,
+            "idle_runs": 1,
+            "leading_idle_s": 2.8,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 200: 32% of frames idle in runs >= 2s; starts idle for 3.2s (teaches waiting at the start)",
+          "episode_index": 200,
+          "details": {
+            "idle_fraction": 0.31666666666666665,
+            "idle_runs": 1,
+            "leading_idle_s": 3.1666666666666665,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 202: starts idle for 2.2s (teaches waiting at the start)",
+          "episode_index": 202,
+          "details": {
+            "idle_fraction": 0.22333333333333333,
+            "idle_runs": 1,
+            "leading_idle_s": 2.2333333333333334,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 204: 32% of frames idle in runs >= 2s; starts idle for 3.2s (teaches waiting at the start)",
+          "episode_index": 204,
+          "details": {
+            "idle_fraction": 0.31666666666666665,
+            "idle_runs": 1,
+            "leading_idle_s": 3.1666666666666665,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 206: starts idle for 2.1s (teaches waiting at the start)",
+          "episode_index": 206,
+          "details": {
+            "idle_fraction": 0.21,
+            "idle_runs": 1,
+            "leading_idle_s": 2.1,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 207: starts idle for 2.5s (teaches waiting at the start)",
+          "episode_index": 207,
+          "details": {
+            "idle_fraction": 0.25333333333333335,
+            "idle_runs": 1,
+            "leading_idle_s": 2.533333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 209: 33% of frames idle in runs >= 2s; starts idle for 3.3s (teaches waiting at the start)",
+          "episode_index": 209,
+          "details": {
+            "idle_fraction": 0.3333333333333333,
+            "idle_runs": 1,
+            "leading_idle_s": 3.3333333333333335,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 211: starts idle for 2.1s (teaches waiting at the start)",
+          "episode_index": 211,
+          "details": {
+            "idle_fraction": 0.21,
+            "idle_runs": 1,
+            "leading_idle_s": 2.1,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 213: 32% of frames idle in runs >= 2s; starts idle for 3.2s (teaches waiting at the start)",
+          "episode_index": 213,
+          "details": {
+            "idle_fraction": 0.32,
+            "idle_runs": 1,
+            "leading_idle_s": 3.2,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 214: 31% of frames idle in runs >= 2s; starts idle for 3.1s (teaches waiting at the start)",
+          "episode_index": 214,
+          "details": {
+            "idle_fraction": 0.31,
+            "idle_runs": 1,
+            "leading_idle_s": 3.1,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 216: 31% of frames idle in runs >= 2s; starts idle for 3.1s (teaches waiting at the start)",
+          "episode_index": 216,
+          "details": {
+            "idle_fraction": 0.30666666666666664,
+            "idle_runs": 1,
+            "leading_idle_s": 3.066666666666667,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 218: starts idle for 2.1s (teaches waiting at the start)",
+          "episode_index": 218,
+          "details": {
+            "idle_fraction": 0.20666666666666667,
+            "idle_runs": 1,
+            "leading_idle_s": 2.066666666666667,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 220: starts idle for 2.4s (teaches waiting at the start)",
+          "episode_index": 220,
+          "details": {
+            "idle_fraction": 0.24333333333333335,
+            "idle_runs": 1,
+            "leading_idle_s": 2.433333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 222: 36% of frames idle in runs >= 2s; starts idle for 3.6s (teaches waiting at the start)",
+          "episode_index": 222,
+          "details": {
+            "idle_fraction": 0.3566666666666667,
+            "idle_runs": 1,
+            "leading_idle_s": 3.566666666666667,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 223: starts idle for 2.2s (teaches waiting at the start)",
+          "episode_index": 223,
+          "details": {
+            "idle_fraction": 0.22333333333333333,
+            "idle_runs": 1,
+            "leading_idle_s": 2.2333333333333334,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 225: starts idle for 2.8s (teaches waiting at the start)",
+          "episode_index": 225,
+          "details": {
+            "idle_fraction": 0.27666666666666667,
+            "idle_runs": 1,
+            "leading_idle_s": 2.7666666666666666,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 229: 35% of frames idle in runs >= 2s; starts idle for 3.5s (teaches waiting at the start)",
+          "episode_index": 229,
+          "details": {
+            "idle_fraction": 0.35333333333333333,
+            "idle_runs": 1,
+            "leading_idle_s": 3.533333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 232: starts idle for 2.0s (teaches waiting at the start)",
+          "episode_index": 232,
+          "details": {
+            "idle_fraction": 0.20333333333333334,
+            "idle_runs": 1,
+            "leading_idle_s": 2.033333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 234: 32% of frames idle in runs >= 2s; starts idle for 3.2s (teaches waiting at the start)",
+          "episode_index": 234,
+          "details": {
+            "idle_fraction": 0.3233333333333333,
+            "idle_runs": 1,
+            "leading_idle_s": 3.2333333333333334,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 236: starts idle for 2.9s (teaches waiting at the start)",
+          "episode_index": 236,
+          "details": {
+            "idle_fraction": 0.29333333333333333,
+            "idle_runs": 1,
+            "leading_idle_s": 2.933333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 238: starts idle for 3.0s (teaches waiting at the start)",
+          "episode_index": 238,
+          "details": {
+            "idle_fraction": 0.3,
+            "idle_runs": 1,
+            "leading_idle_s": 3.0,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 239: starts idle for 2.1s (teaches waiting at the start)",
+          "episode_index": 239,
+          "details": {
+            "idle_fraction": 0.21333333333333335,
+            "idle_runs": 1,
+            "leading_idle_s": 2.1333333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 241: 32% of frames idle in runs >= 2s; starts idle for 3.2s (teaches waiting at the start)",
+          "episode_index": 241,
+          "details": {
+            "idle_fraction": 0.31666666666666665,
+            "idle_runs": 1,
+            "leading_idle_s": 3.1666666666666665,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 243: starts idle for 2.3s (teaches waiting at the start)",
+          "episode_index": 243,
+          "details": {
+            "idle_fraction": 0.23333333333333334,
+            "idle_runs": 1,
+            "leading_idle_s": 2.3333333333333335,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 247: 39% of frames idle in runs >= 2s; starts idle for 2.6s (teaches waiting at the start); ends with 2.1s idle",
+          "episode_index": 247,
+          "details": {
+            "idle_fraction": 0.39444444444444443,
+            "idle_runs": 2,
+            "leading_idle_s": 2.6,
+            "trailing_idle_s": 2.1333333333333333
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 248: ends with 3.3s idle - trim if you want shorter episodes",
+          "episode_index": 248,
+          "details": {
+            "idle_fraction": 0.2777777777777778,
+            "idle_runs": 1,
+            "leading_idle_s": 0.0,
+            "trailing_idle_s": 3.3333333333333335
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 250: ends with 2.3s idle - trim if you want shorter episodes",
+          "episode_index": 250,
+          "details": {
+            "idle_fraction": 0.19444444444444445,
+            "idle_runs": 1,
+            "leading_idle_s": 0.0,
+            "trailing_idle_s": 2.3333333333333335
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 252: ends with 2.3s idle - trim if you want shorter episodes",
+          "episode_index": 252,
+          "details": {
+            "idle_fraction": 0.18888888888888888,
+            "idle_runs": 1,
+            "leading_idle_s": 0.0,
+            "trailing_idle_s": 2.2666666666666666
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 254: ends with 2.1s idle - trim if you want shorter episodes",
+          "episode_index": 254,
+          "details": {
+            "idle_fraction": 0.175,
+            "idle_runs": 1,
+            "leading_idle_s": 0.0,
+            "trailing_idle_s": 2.1
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 256: ends with 2.6s idle - trim if you want shorter episodes",
+          "episode_index": 256,
+          "details": {
+            "idle_fraction": 0.21666666666666667,
+            "idle_runs": 1,
+            "leading_idle_s": 0.0,
+            "trailing_idle_s": 2.6
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 257: 37% of frames idle in runs >= 2s; starts idle for 4.4s (teaches waiting at the start)",
+          "episode_index": 257,
+          "details": {
+            "idle_fraction": 0.36666666666666664,
+            "idle_runs": 1,
+            "leading_idle_s": 4.4,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 259: starts idle for 3.5s (teaches waiting at the start)",
+          "episode_index": 259,
+          "details": {
+            "idle_fraction": 0.2916666666666667,
+            "idle_runs": 1,
+            "leading_idle_s": 3.5,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 261: starts idle for 2.8s (teaches waiting at the start)",
+          "episode_index": 261,
+          "details": {
+            "idle_fraction": 0.23333333333333334,
+            "idle_runs": 1,
+            "leading_idle_s": 2.8,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 263: starts idle for 3.1s (teaches waiting at the start)",
+          "episode_index": 263,
+          "details": {
+            "idle_fraction": 0.2611111111111111,
+            "idle_runs": 1,
+            "leading_idle_s": 3.1333333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 264: starts idle for 3.3s (teaches waiting at the start)",
+          "episode_index": 264,
+          "details": {
+            "idle_fraction": 0.2777777777777778,
+            "idle_runs": 1,
+            "leading_idle_s": 3.3333333333333335,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 272: 38% of frames idle in runs >= 2s; starts idle for 4.6s (teaches waiting at the start)",
+          "episode_index": 272,
+          "details": {
+            "idle_fraction": 0.38333333333333336,
+            "idle_runs": 1,
+            "leading_idle_s": 4.6,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 273: starts idle for 3.6s (teaches waiting at the start)",
+          "episode_index": 273,
+          "details": {
+            "idle_fraction": 0.3,
+            "idle_runs": 1,
+            "leading_idle_s": 3.6,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 275: 31% of frames idle in runs >= 2s; starts idle for 3.7s (teaches waiting at the start)",
+          "episode_index": 275,
+          "details": {
+            "idle_fraction": 0.30833333333333335,
+            "idle_runs": 1,
+            "leading_idle_s": 3.7,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 277: ends with 2.1s idle - trim if you want shorter episodes",
+          "episode_index": 277,
+          "details": {
+            "idle_fraction": 0.17222222222222222,
+            "idle_runs": 1,
+            "leading_idle_s": 0.0,
+            "trailing_idle_s": 2.066666666666667
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 279: starts idle for 2.8s (teaches waiting at the start)",
+          "episode_index": 279,
+          "details": {
+            "idle_fraction": 0.23333333333333334,
+            "idle_runs": 1,
+            "leading_idle_s": 2.8,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 281: starts idle for 2.1s (teaches waiting at the start)",
+          "episode_index": 281,
+          "details": {
+            "idle_fraction": 0.17222222222222222,
+            "idle_runs": 1,
+            "leading_idle_s": 2.066666666666667,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 282: ends with 2.7s idle - trim if you want shorter episodes",
+          "episode_index": 282,
+          "details": {
+            "idle_fraction": 0.225,
+            "idle_runs": 1,
+            "leading_idle_s": 0.0,
+            "trailing_idle_s": 2.7
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 284: 42% of frames idle in runs >= 2s; starts idle for 2.8s (teaches waiting at the start); ends with 2.3s idle",
+          "episode_index": 284,
+          "details": {
+            "idle_fraction": 0.425,
+            "idle_runs": 2,
+            "leading_idle_s": 2.8333333333333335,
+            "trailing_idle_s": 2.2666666666666666
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 286: 32% of frames idle in runs >= 2s; starts idle for 3.8s (teaches waiting at the start)",
+          "episode_index": 286,
+          "details": {
+            "idle_fraction": 0.3194444444444444,
+            "idle_runs": 1,
+            "leading_idle_s": 3.8333333333333335,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 288: 39% of frames idle in runs >= 2s; starts idle for 2.7s (teaches waiting at the start); ends with 2.0s idle",
+          "episode_index": 288,
+          "details": {
+            "idle_fraction": 0.39166666666666666,
+            "idle_runs": 2,
+            "leading_idle_s": 2.7,
+            "trailing_idle_s": 2.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 290: starts idle for 3.6s (teaches waiting at the start)",
+          "episode_index": 290,
+          "details": {
+            "idle_fraction": 0.3,
+            "idle_runs": 1,
+            "leading_idle_s": 3.6,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 291: 31% of frames idle in runs >= 2s; starts idle for 3.7s (teaches waiting at the start)",
+          "episode_index": 291,
+          "details": {
+            "idle_fraction": 0.3111111111111111,
+            "idle_runs": 1,
+            "leading_idle_s": 3.7333333333333334,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 293: starts idle for 2.4s (teaches waiting at the start)",
+          "episode_index": 293,
+          "details": {
+            "idle_fraction": 0.19722222222222222,
+            "idle_runs": 1,
+            "leading_idle_s": 2.3666666666666667,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 295: starts idle for 2.1s (teaches waiting at the start)",
+          "episode_index": 295,
+          "details": {
+            "idle_fraction": 0.17222222222222222,
+            "idle_runs": 1,
+            "leading_idle_s": 2.066666666666667,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 297: 44% of frames idle in runs >= 2s; starts idle for 2.6s (teaches waiting at the start); ends with 2.7s idle",
+          "episode_index": 297,
+          "details": {
+            "idle_fraction": 0.4444444444444444,
+            "idle_runs": 2,
+            "leading_idle_s": 2.6,
+            "trailing_idle_s": 2.7333333333333334
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 298: 39% of frames idle in runs >= 2s; starts idle for 2.4s (teaches waiting at the start); ends with 2.2s idle",
+          "episode_index": 298,
+          "details": {
+            "idle_fraction": 0.3861111111111111,
+            "idle_runs": 2,
+            "leading_idle_s": 2.433333333333333,
+            "trailing_idle_s": 2.2
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 300: starts idle for 2.9s (teaches waiting at the start)",
+          "episode_index": 300,
+          "details": {
+            "idle_fraction": 0.24444444444444444,
+            "idle_runs": 1,
+            "leading_idle_s": 2.933333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 302: 44% of frames idle in runs >= 2s; starts idle for 2.5s (teaches waiting at the start); ends with 2.8s idle",
+          "episode_index": 302,
+          "details": {
+            "idle_fraction": 0.4361111111111111,
+            "idle_runs": 2,
+            "leading_idle_s": 2.466666666666667,
+            "trailing_idle_s": 2.7666666666666666
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 304: 35% of frames idle in runs >= 2s; starts idle for 2.2s (teaches waiting at the start); ends with 2.0s idle",
+          "episode_index": 304,
+          "details": {
+            "idle_fraction": 0.3527777777777778,
+            "idle_runs": 2,
+            "leading_idle_s": 2.2333333333333334,
+            "trailing_idle_s": 2.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 306: 31% of frames idle in runs >= 2s; starts idle for 3.7s (teaches waiting at the start)",
+          "episode_index": 306,
+          "details": {
+            "idle_fraction": 0.3055555555555556,
+            "idle_runs": 1,
+            "leading_idle_s": 3.6666666666666665,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 307: starts idle for 3.0s (teaches waiting at the start)",
+          "episode_index": 307,
+          "details": {
+            "idle_fraction": 0.25277777777777777,
+            "idle_runs": 1,
+            "leading_idle_s": 3.033333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 309: starts idle for 3.3s (teaches waiting at the start)",
+          "episode_index": 309,
+          "details": {
+            "idle_fraction": 0.2777777777777778,
+            "idle_runs": 1,
+            "leading_idle_s": 3.3333333333333335,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 311: 36% of frames idle in runs >= 2s; starts idle for 4.3s (teaches waiting at the start)",
+          "episode_index": 311,
+          "details": {
+            "idle_fraction": 0.35833333333333334,
+            "idle_runs": 1,
+            "leading_idle_s": 4.3,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 313: starts idle for 2.8s (teaches waiting at the start)",
+          "episode_index": 313,
+          "details": {
+            "idle_fraction": 0.2361111111111111,
+            "idle_runs": 1,
+            "leading_idle_s": 2.8333333333333335,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 315: starts idle for 2.4s (teaches waiting at the start)",
+          "episode_index": 315,
+          "details": {
+            "idle_fraction": 0.20277777777777778,
+            "idle_runs": 1,
+            "leading_idle_s": 2.433333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 320: starts idle for 3.3s (teaches waiting at the start)",
+          "episode_index": 320,
+          "details": {
+            "idle_fraction": 0.2722222222222222,
+            "idle_runs": 1,
+            "leading_idle_s": 3.2666666666666666,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 322: starts idle for 2.7s (teaches waiting at the start)",
+          "episode_index": 322,
+          "details": {
+            "idle_fraction": 0.2222222222222222,
+            "idle_runs": 1,
+            "leading_idle_s": 2.6666666666666665,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 323: ends with 2.4s idle - trim if you want shorter episodes",
+          "episode_index": 323,
+          "details": {
+            "idle_fraction": 0.19722222222222222,
+            "idle_runs": 1,
+            "leading_idle_s": 0.0,
+            "trailing_idle_s": 2.3666666666666667
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 325: ends with 2.5s idle - trim if you want shorter episodes",
+          "episode_index": 325,
+          "details": {
+            "idle_fraction": 0.20555555555555555,
+            "idle_runs": 1,
+            "leading_idle_s": 0.0,
+            "trailing_idle_s": 2.466666666666667
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 327: 40% of frames idle in runs >= 2s; starts idle for 2.2s (teaches waiting at the start); ends with 2.6s idle",
+          "episode_index": 327,
+          "details": {
+            "idle_fraction": 0.4,
+            "idle_runs": 2,
+            "leading_idle_s": 2.2333333333333334,
+            "trailing_idle_s": 2.566666666666667
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 329: 38% of frames idle in runs >= 2s; starts idle for 4.5s (teaches waiting at the start)",
+          "episode_index": 329,
+          "details": {
+            "idle_fraction": 0.37777777777777777,
+            "idle_runs": 1,
+            "leading_idle_s": 4.533333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 331: ends with 3.0s idle - trim if you want shorter episodes",
+          "episode_index": 331,
+          "details": {
+            "idle_fraction": 0.25,
+            "idle_runs": 1,
+            "leading_idle_s": 0.0,
+            "trailing_idle_s": 3.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 332: starts idle for 3.5s (teaches waiting at the start)",
+          "episode_index": 332,
+          "details": {
+            "idle_fraction": 0.29444444444444445,
+            "idle_runs": 1,
+            "leading_idle_s": 3.533333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 334: starts idle for 2.6s (teaches waiting at the start)",
+          "episode_index": 334,
+          "details": {
+            "idle_fraction": 0.21944444444444444,
+            "idle_runs": 1,
+            "leading_idle_s": 2.6333333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 336: starts idle for 2.7s (teaches waiting at the start)",
+          "episode_index": 336,
+          "details": {
+            "idle_fraction": 0.2222222222222222,
+            "idle_runs": 1,
+            "leading_idle_s": 2.6666666666666665,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 338: 32% of frames idle in runs >= 2s; starts idle for 3.8s (teaches waiting at the start)",
+          "episode_index": 338,
+          "details": {
+            "idle_fraction": 0.31666666666666665,
+            "idle_runs": 1,
+            "leading_idle_s": 3.8,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 340: 32% of frames idle in runs >= 2s; starts idle for 3.9s (teaches waiting at the start)",
+          "episode_index": 340,
+          "details": {
+            "idle_fraction": 0.325,
+            "idle_runs": 1,
+            "leading_idle_s": 3.9,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 341: starts idle for 2.1s (teaches waiting at the start)",
+          "episode_index": 341,
+          "details": {
+            "idle_fraction": 0.17777777777777778,
+            "idle_runs": 1,
+            "leading_idle_s": 2.1333333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 343: 48% of frames idle in runs >= 2s; starts idle for 3.1s (teaches waiting at the start); ends with 2.6s idle",
+          "episode_index": 343,
+          "details": {
+            "idle_fraction": 0.475,
+            "idle_runs": 2,
+            "leading_idle_s": 3.1333333333333333,
+            "trailing_idle_s": 2.566666666666667
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 345: 42% of frames idle in runs >= 2s; starts idle for 3.0s (teaches waiting at the start); ends with 2.0s idle",
+          "episode_index": 345,
+          "details": {
+            "idle_fraction": 0.4166666666666667,
+            "idle_runs": 2,
+            "leading_idle_s": 3.0,
+            "trailing_idle_s": 2.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 347: 42% of frames idle in runs >= 2s; starts idle for 2.8s (teaches waiting at the start); ends with 2.2s idle",
+          "episode_index": 347,
+          "details": {
+            "idle_fraction": 0.41944444444444445,
+            "idle_runs": 2,
+            "leading_idle_s": 2.8333333333333335,
+            "trailing_idle_s": 2.2
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 348: ends with 3.0s idle - trim if you want shorter episodes",
+          "episode_index": 348,
+          "details": {
+            "idle_fraction": 0.25,
+            "idle_runs": 1,
+            "leading_idle_s": 0.0,
+            "trailing_idle_s": 3.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 350: 35% of frames idle in runs >= 2s; starts idle for 4.2s (teaches waiting at the start)",
+          "episode_index": 350,
+          "details": {
+            "idle_fraction": 0.3527777777777778,
+            "idle_runs": 1,
+            "leading_idle_s": 4.233333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 352: 34% of frames idle in runs >= 2s; starts idle for 4.1s (teaches waiting at the start)",
+          "episode_index": 352,
+          "details": {
+            "idle_fraction": 0.34444444444444444,
+            "idle_runs": 1,
+            "leading_idle_s": 4.133333333333334,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 354: 35% of frames idle in runs >= 2s; starts idle for 4.2s (teaches waiting at the start)",
+          "episode_index": 354,
+          "details": {
+            "idle_fraction": 0.3472222222222222,
+            "idle_runs": 1,
+            "leading_idle_s": 4.166666666666667,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 356: 50% of frames idle in runs >= 2s; starts idle for 2.9s (teaches waiting at the start); ends with 3.0s idle",
+          "episode_index": 356,
+          "details": {
+            "idle_fraction": 0.49722222222222223,
+            "idle_runs": 2,
+            "leading_idle_s": 2.933333333333333,
+            "trailing_idle_s": 3.033333333333333
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 357: 39% of frames idle in runs >= 2s; starts idle for 4.7s (teaches waiting at the start)",
+          "episode_index": 357,
+          "details": {
+            "idle_fraction": 0.3888888888888889,
+            "idle_runs": 1,
+            "leading_idle_s": 4.666666666666667,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 359: 39% of frames idle in runs >= 2s; starts idle for 2.1s (teaches waiting at the start); ends with 2.6s idle",
+          "episode_index": 359,
+          "details": {
+            "idle_fraction": 0.39166666666666666,
+            "idle_runs": 2,
+            "leading_idle_s": 2.066666666666667,
+            "trailing_idle_s": 2.6333333333333333
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 361: ends with 3.3s idle - trim if you want shorter episodes",
+          "episode_index": 361,
+          "details": {
+            "idle_fraction": 0.2777777777777778,
+            "idle_runs": 1,
+            "leading_idle_s": 0.0,
+            "trailing_idle_s": 3.3333333333333335
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 363: starts idle for 2.3s (teaches waiting at the start)",
+          "episode_index": 363,
+          "details": {
+            "idle_fraction": 0.19444444444444445,
+            "idle_runs": 1,
+            "leading_idle_s": 2.3333333333333335,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 365: starts idle for 3.3s (teaches waiting at the start)",
+          "episode_index": 365,
+          "details": {
+            "idle_fraction": 0.2722222222222222,
+            "idle_runs": 1,
+            "leading_idle_s": 3.2666666666666666,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 366: starts idle for 3.0s (teaches waiting at the start)",
+          "episode_index": 366,
+          "details": {
+            "idle_fraction": 0.25,
+            "idle_runs": 1,
+            "leading_idle_s": 3.0,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 368: starts idle for 2.3s (teaches waiting at the start)",
+          "episode_index": 368,
+          "details": {
+            "idle_fraction": 0.19886363636363635,
+            "idle_runs": 1,
+            "leading_idle_s": 2.3333333333333335,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 370: starts idle for 2.2s (teaches waiting at the start)",
+          "episode_index": 370,
+          "details": {
+            "idle_fraction": 0.18333333333333332,
+            "idle_runs": 1,
+            "leading_idle_s": 2.2,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 377: 31% of frames idle in runs >= 2s; starts idle for 3.8s (teaches waiting at the start)",
+          "episode_index": 377,
+          "details": {
+            "idle_fraction": 0.3138888888888889,
+            "idle_runs": 1,
+            "leading_idle_s": 3.7666666666666666,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 379: starts idle for 2.5s (teaches waiting at the start)",
+          "episode_index": 379,
+          "details": {
+            "idle_fraction": 0.20555555555555555,
+            "idle_runs": 1,
+            "leading_idle_s": 2.466666666666667,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 381: starts idle for 3.2s (teaches waiting at the start)",
+          "episode_index": 381,
+          "details": {
+            "idle_fraction": 0.26944444444444443,
+            "idle_runs": 1,
+            "leading_idle_s": 3.2333333333333334,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 382: starts idle for 2.5s (teaches waiting at the start)",
+          "episode_index": 382,
+          "details": {
+            "idle_fraction": 0.20833333333333334,
+            "idle_runs": 1,
+            "leading_idle_s": 2.5,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 384: 38% of frames idle in runs >= 2s; starts idle for 4.5s (teaches waiting at the start)",
+          "episode_index": 384,
+          "details": {
+            "idle_fraction": 0.37777777777777777,
+            "idle_runs": 1,
+            "leading_idle_s": 4.533333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 386: starts idle for 2.7s (teaches waiting at the start)",
+          "episode_index": 386,
+          "details": {
+            "idle_fraction": 0.2222222222222222,
+            "idle_runs": 1,
+            "leading_idle_s": 2.6666666666666665,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 388: starts idle for 2.1s (teaches waiting at the start)",
+          "episode_index": 388,
+          "details": {
+            "idle_fraction": 0.17222222222222222,
+            "idle_runs": 1,
+            "leading_idle_s": 2.066666666666667,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 390: 31% of frames idle in runs >= 2s; starts idle for 3.7s (teaches waiting at the start)",
+          "episode_index": 390,
+          "details": {
+            "idle_fraction": 0.3111111111111111,
+            "idle_runs": 1,
+            "leading_idle_s": 3.7333333333333334,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 391: starts idle for 2.2s (teaches waiting at the start)",
+          "episode_index": 391,
+          "details": {
+            "idle_fraction": 0.18333333333333332,
+            "idle_runs": 1,
+            "leading_idle_s": 2.2,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 407: starts idle for 2.8s (teaches waiting at the start)",
+          "episode_index": 407,
+          "details": {
+            "idle_fraction": 0.23333333333333334,
+            "idle_runs": 1,
+            "leading_idle_s": 2.8,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 418: starts idle for 3.6s (teaches waiting at the start)",
+          "episode_index": 418,
+          "details": {
+            "idle_fraction": 0.2972222222222222,
+            "idle_runs": 1,
+            "leading_idle_s": 3.566666666666667,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 420: 32% of frames idle in runs >= 2s; starts idle for 3.9s (teaches waiting at the start)",
+          "episode_index": 420,
+          "details": {
+            "idle_fraction": 0.325,
+            "idle_runs": 1,
+            "leading_idle_s": 3.9,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 422: 32% of frames idle in runs >= 2s; starts idle for 3.8s (teaches waiting at the start)",
+          "episode_index": 422,
+          "details": {
+            "idle_fraction": 0.31666666666666665,
+            "idle_runs": 1,
+            "leading_idle_s": 3.8,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 427: starts idle for 2.0s (teaches waiting at the start)",
+          "episode_index": 427,
+          "details": {
+            "idle_fraction": 0.16991643454038996,
+            "idle_runs": 1,
+            "leading_idle_s": 2.033333333333333,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 431: starts idle for 2.5s (teaches waiting at the start)",
+          "episode_index": 431,
+          "details": {
+            "idle_fraction": 0.20555555555555555,
+            "idle_runs": 1,
+            "leading_idle_s": 2.466666666666667,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 436: starts idle for 2.7s (teaches waiting at the start)",
+          "episode_index": 436,
+          "details": {
+            "idle_fraction": 0.2222222222222222,
+            "idle_runs": 1,
+            "leading_idle_s": 2.6666666666666665,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 438: starts idle for 2.7s (teaches waiting at the start)",
+          "episode_index": 438,
+          "details": {
+            "idle_fraction": 0.2222222222222222,
+            "idle_runs": 1,
+            "leading_idle_s": 2.6666666666666665,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 440: starts idle for 3.5s (teaches waiting at the start)",
+          "episode_index": 440,
+          "details": {
+            "idle_fraction": 0.28888888888888886,
+            "idle_runs": 1,
+            "leading_idle_s": 3.466666666666667,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 441: starts idle for 3.0s (teaches waiting at the start)",
+          "episode_index": 441,
+          "details": {
+            "idle_fraction": 0.25,
+            "idle_runs": 1,
+            "leading_idle_s": 3.0,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "episode 443: starts idle for 3.4s (teaches waiting at the start)",
+          "episode_index": 443,
+          "details": {
+            "idle_fraction": 0.28055555555555556,
+            "idle_runs": 1,
+            "leading_idle_s": 3.3666666666666667,
+            "trailing_idle_s": 0.0
+          }
+        }
+      ],
+      "charge": 6
+    },
+    {
+      "id": "stuck-actuator",
+      "title": "Stuck actuators (joints that never move)",
+      "verdict": "WARN",
+      "weight": 10,
+      "weight_basis": "measured",
+      "summary": "6/250 episodes with stuck joints",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "robustness": {
+          "probed": [
+            "unit-milli",
+            "unit-kilo",
+            "order-reversed",
+            "half-sample"
+          ]
+        }
+      },
+      "findings": [
+        {
+          "severity": "WARN",
+          "message": "joint 4 (wrist_roll.pos) does not move in 6/250 episodes [320, 340, 345, 354, 363, 365] - it moves in the others - dead or disabled motor during those recordings?",
+          "episode_index": null,
+          "details": {
+            "joint": 4,
+            "episodes": [
+              320,
+              340,
+              345,
+              354,
+              363,
+              365
+            ],
+            "share": 0.024
+          }
+        }
+      ],
+      "charge": 10
+    },
+    {
+      "id": "action-saturation",
+      "title": "Action saturation (commands clipped at the limits)",
+      "verdict": "PASS",
+      "weight": 6,
+      "weight_basis": "measured",
+      "summary": "no continuous action dim pinned at a limit above 5% (5 dims checked)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "nan-and-normalization",
+      "title": "NaN / Inf and normalization hazards",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "no NaN/Inf; all dims have usable variance",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "duplicate-and-leakage",
+      "title": "Duplicate episodes / train-eval leakage",
+      "verdict": "PASS",
+      "weight": 2,
+      "weight_basis": "measured",
+      "summary": "no exact, partial or near duplicates",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "outlier-episodes",
+      "title": "Outlier episodes (duration, jerk, velocity, static, end-pose)",
+      "verdict": "WARN",
+      "weight": 6,
+      "weight_basis": "measured",
+      "summary": "1 episode(s) to review, 8 mild, of 250; worst: [102, 11, 113, 170, 220, 272, 273, 397, 409]",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "metrics": {
+          "duration_s": {
+            "0": 1.0,
+            "2": 1.0,
+            "4": 1.0,
+            "5": 1.0,
+            "7": 1.0,
+            "9": 1.0,
+            "11": 1.0,
+            "13": 1.0,
+            "14": 0.9966666666666667,
+            "16": 1.0,
+            "18": 1.0,
+            "20": 1.0,
+            "21": 1.0,
+            "23": 1.0,
+            "25": 1.0,
+            "27": 1.0,
+            "29": 1.0,
+            "30": 1.0,
+            "32": 1.0,
+            "34": 1.0,
+            "36": 1.0,
+            "38": 1.0,
+            "39": 1.0,
+            "41": 1.0,
+            "43": 0.9966666666666667,
+            "45": 1.0,
+            "46": 1.0,
+            "48": 1.0,
+            "50": 1.0,
+            "52": 1.0,
+            "54": 1.0,
+            "55": 1.0,
+            "57": 1.0,
+            "59": 1.0,
+            "61": 1.0,
+            "63": 1.0,
+            "64": 1.0,
+            "66": 1.0,
+            "68": 1.0,
+            "70": 1.0,
+            "71": 1.0,
+            "73": 1.0,
+            "75": 1.0,
+            "77": 1.0,
+            "79": 1.0,
+            "80": 1.0,
+            "82": 1.0,
+            "84": 1.0,
+            "86": 1.0,
+            "88": 1.0,
+            "89": 1.0,
+            "91": 1.0,
+            "93": 1.0,
+            "95": 1.0,
+            "97": 1.0,
+            "98": 1.0,
+            "100": 1.0,
+            "102": 1.0,
+            "104": 1.0,
+            "105": 1.0,
+            "107": 1.0,
+            "109": 1.0,
+            "111": 1.0,
+            "113": 1.0,
+            "114": 1.0,
+            "116": 1.0,
+            "118": 1.0,
+            "120": 1.0,
+            "122": 1.0,
+            "123": 1.0,
+            "125": 1.0,
+            "127": 1.0,
+            "129": 1.0,
+            "130": 1.0,
+            "132": 1.0,
+            "134": 1.0,
+            "136": 1.0,
+            "138": 1.0,
+            "139": 1.0,
+            "141": 1.0,
+            "143": 1.0,
+            "145": 1.0,
+            "147": 1.0,
+            "148": 1.0,
+            "150": 1.0,
+            "152": 1.0,
+            "154": 1.0,
+            "155": 1.0,
+            "157": 1.0,
+            "159": 1.0,
+            "161": 1.0,
+            "163": 1.0,
+            "164": 1.0,
+            "166": 1.0,
+            "168": 1.0,
+            "170": 1.0,
+            "172": 1.0,
+            "173": 1.0,
+            "175": 1.0,
+            "177": 1.0,
+            "179": 1.0,
+            "181": 1.0,
+            "182": 1.0,
+            "184": 1.0,
+            "186": 1.0,
+            "188": 1.0,
+            "189": 1.0,
+            "191": 1.0,
+            "193": 1.0,
+            "195": 1.0,
+            "197": 1.0,
+            "198": 1.0,
+            "200": 1.0,
+            "202": 1.0,
+            "204": 1.0,
+            "206": 1.0,
+            "207": 1.0,
+            "209": 1.0,
+            "211": 1.0,
+            "213": 1.0,
+            "214": 1.0,
+            "216": 1.0,
+            "218": 1.0,
+            "220": 1.0,
+            "222": 1.0,
+            "223": 1.0,
+            "225": 1.0,
+            "227": 1.0,
+            "229": 1.0,
+            "231": 1.0,
+            "232": 1.0,
+            "234": 1.0,
+            "236": 1.0,
+            "238": 1.0,
+            "239": 1.0,
+            "241": 1.0,
+            "243": 1.0,
+            "245": 1.0,
+            "247": 1.0,
+            "248": 1.0,
+            "250": 1.0,
+            "252": 1.0,
+            "254": 1.0,
+            "256": 1.0,
+            "257": 1.0,
+            "259": 1.0,
+            "261": 1.0,
+            "263": 1.0,
+            "264": 1.0,
+            "266": 1.0,
+            "268": 1.0,
+            "270": 1.0,
+            "272": 1.0,
+            "273": 1.0,
+            "275": 1.0,
+            "277": 1.0,
+            "279": 1.0,
+            "281": 1.0,
+            "282": 1.0,
+            "284": 1.0,
+            "286": 1.0,
+            "288": 1.0,
+            "290": 1.0,
+            "291": 1.0,
+            "293": 1.0,
+            "295": 1.0,
+            "297": 1.0,
+            "298": 1.0,
+            "300": 1.0,
+            "302": 1.0,
+            "304": 1.0,
+            "306": 1.0,
+            "307": 1.0,
+            "309": 1.0,
+            "311": 1.0,
+            "313": 1.0,
+            "315": 1.0,
+            "316": 1.0,
+            "318": 1.0,
+            "320": 1.0,
+            "322": 1.0,
+            "323": 1.0,
+            "325": 1.0,
+            "327": 1.0,
+            "329": 1.0,
+            "331": 1.0,
+            "332": 1.0,
+            "334": 1.0,
+            "336": 1.0,
+            "338": 1.0,
+            "340": 1.0,
+            "341": 1.0,
+            "343": 1.0,
+            "345": 1.0,
+            "347": 1.0,
+            "348": 1.0,
+            "350": 1.0,
+            "352": 1.0,
+            "354": 1.0,
+            "356": 1.0,
+            "357": 1.0,
+            "359": 1.0,
+            "361": 1.0,
+            "363": 1.0,
+            "365": 1.0,
+            "366": 1.0,
+            "368": 0.9777777777777777,
+            "370": 1.0,
+            "372": 0.9916666666666667,
+            "374": 1.0,
+            "375": 1.0,
+            "377": 1.0,
+            "379": 1.0,
+            "381": 1.0,
+            "382": 1.0,
+            "384": 1.0,
+            "386": 1.0,
+            "388": 1.0,
+            "390": 1.0,
+            "391": 1.0,
+            "393": 1.0,
+            "395": 1.0,
+            "397": 1.0,
+            "399": 1.0,
+            "400": 1.0,
+            "402": 1.0,
+            "404": 1.0,
+            "406": 1.0,
+            "407": 1.0,
+            "409": 1.0,
+            "411": 1.0,
+            "413": 1.0,
+            "415": 1.0,
+            "416": 0.9944444444444445,
+            "418": 1.0,
+            "420": 1.0,
+            "422": 1.0,
+            "424": 0.9972222222222222,
+            "425": 0.9722222222222222,
+            "427": 0.9972222222222222,
+            "429": 0.9972222222222222,
+            "431": 1.0,
+            "432": 1.0,
+            "434": 1.0,
+            "436": 1.0,
+            "438": 1.0,
+            "440": 1.0,
+            "441": 1.0,
+            "443": 1.0,
+            "445": 1.0
+          },
+          "p95_jerk": {
+            "0": 0.055656235875500115,
+            "2": 0.06096973169822675,
+            "4": 0.069569700518594,
+            "5": 0.06094377384768101,
+            "7": 0.05510278691189368,
+            "9": 0.06096973231978749,
+            "11": 0.05644910569302773,
+            "13": 0.0556563641743989,
+            "14": 0.062200720838768306,
+            "16": 0.05565606229463705,
+            "18": 0.05565606229463706,
+            "20": 0.06094350940036081,
+            "21": 0.05565610757660133,
+            "23": 0.06957001937909246,
+            "25": 0.06957000239835585,
+            "27": 0.06094339606579501,
+            "29": 0.05223741250318772,
+            "30": 0.05565593399573827,
+            "32": 0.05565606229463705,
+            "34": 0.05644919443503533,
+            "36": 0.062238350359488215,
+            "38": 0.04433605485625466,
+            "39": 0.05565606229463705,
+            "41": 0.052750187330922904,
+            "43": 0.04353105115869445,
+            "45": 0.052237525837753526,
+            "46": 0.05644923506495587,
+            "48": 0.05565606229463706,
+            "50": 0.055656084935619195,
+            "52": 0.06757976101982455,
+            "54": 0.06094301828390902,
+            "55": 0.05644910569302773,
+            "57": 0.055656067954882586,
+            "59": 0.05565606229463705,
+            "61": 0.04939488399163404,
+            "63": 0.052237091388584636,
+            "64": 0.0551027813754548,
+            "66": 0.05565591135475612,
+            "68": 0.05565611701034387,
+            "70": 0.05565606370969844,
+            "71": 0.05565607314344099,
+            "73": 0.060943887182246796,
+            "75": 0.055102781375454796,
+            "77": 0.06757975472942748,
+            "79": 0.05565606229463705,
+            "80": 0.055656092954300365,
+            "82": 0.05644923506495588,
+            "84": 0.06094301828390902,
+            "86": 0.05565593399573826,
+            "88": 0.05565606229463706,
+            "89": 0.060944208296849905,
+            "91": 0.05565607361512812,
+            "93": 0.06238485897154995,
+            "95": 0.0695700982098037,
+            "97": 0.06096972175325463,
+            "98": 0.055102781375454796,
+            "100": 0.06223770813028203,
+            "102": 0.05565606229463706,
+            "104": 0.060943131618474825,
+            "105": 0.05644910970236831,
+            "107": 0.06094313161847482,
+            "109": 0.05565611701034389,
+            "111": 0.05565606229463705,
+            "113": 0.05739218707298046,
+            "114": 0.05644910569302773,
+            "116": 0.043531485607863324,
+            "118": 0.05223709138858463,
+            "120": 0.06722851377560395,
+            "122": 0.05565593399573827,
+            "123": 0.06956974580055827,
+            "125": 0.052652567190151545,
+            "127": 0.04353180672246641,
+            "129": 0.052236770273981534,
+            "130": 0.05565606229463703,
+            "132": 0.052750232612887187,
+            "134": 0.055656062294637036,
+            "136": 0.05265192993343142,
+            "138": 0.0609438871822468,
+            "139": 0.06094301828390902,
+            "141": 0.06094345273307791,
+            "143": 0.056475305177038054,
+            "145": 0.055656065124759825,
+            "147": 0.06111682696160358,
+            "148": 0.05565606229463705,
+            "150": 0.05565606229463705,
+            "152": 0.06096973169822675,
+            "154": 0.05510275873447266,
+            "155": 0.05565606229463706,
+            "157": 0.052237846952356615,
+            "159": 0.056449105693027725,
+            "161": 0.06957001371884693,
+            "163": 0.05565580569683947,
+            "164": 0.061886479118510335,
+            "166": 0.05510273609349052,
+            "168": 0.05265320941935772,
+            "170": 0.060969731698226746,
+            "172": 0.06957007928335769,
+            "173": 0.05565608493561919,
+            "175": 0.05510280955287582,
+            "177": 0.05565593399573827,
+            "179": 0.06223836167997929,
+            "181": 0.05565636417439891,
+            "182": 0.061116839651802375,
+            "184": 0.04353180672246642,
+            "186": 0.06094301828390902,
+            "188": 0.06958209394904451,
+            "189": 0.05565621323451796,
+            "191": 0.06957000239835585,
+            "193": 0.05565606229463706,
+            "195": 0.04483776092414022,
+            "197": 0.06957008199555868,
+            "198": 0.05644923399192651,
+            "200": 0.06094345273307792,
+            "202": 0.05565591135475612,
+            "204": 0.06957008918878739,
+            "206": 0.06094313161847483,
+            "207": 0.05644912173039008,
+            "209": 0.06722850673124871,
+            "211": 0.05565610002960728,
+            "213": 0.06957007786829632,
+            "214": 0.060943074951191924,
+            "216": 0.060943773847681015,
+            "218": 0.06238480789997436,
+            "220": 0.06094339606579502,
+            "222": 0.06203357888820265,
+            "223": 0.06957008918878739,
+            "225": 0.055656087647820165,
+            "227": 0.060943773847681,
+            "229": 0.060943131618474825,
+            "231": 0.0556559226752472,
+            "232": 0.06094301828390902,
+            "234": 0.06957009956590418,
+            "236": 0.05876641741456626,
+            "238": 0.062033578577422276,
+            "239": 0.05565606229463706,
+            "241": 0.05565636417439891,
+            "243": 0.060943131618474825,
+            "245": 0.05565606229463706,
+            "247": 0.05275082956012909,
+            "248": 0.05275082956012909,
+            "250": 0.05223741250318772,
+            "252": 0.043531164493260235,
+            "254": 0.05223720472315043,
+            "256": 0.05510273609349052,
+            "257": 0.052652573405759115,
+            "259": 0.05223741250318771,
+            "261": 0.04174205804146886,
+            "263": 0.05510273609349053,
+            "264": 0.06094301828390903,
+            "266": 0.06958192394719581,
+            "268": 0.052653229309301976,
+            "270": 0.07020364362658553,
+            "272": 0.0498102709384553,
+            "273": 0.055656065124759825,
+            "275": 0.052237412503187725,
+            "277": 0.05565606229463705,
+            "279": 0.055102758734472665,
+            "281": 0.05565593399573827,
+            "282": 0.05565606229463704,
+            "284": 0.052237412503187725,
+            "286": 0.055656060289966745,
+            "288": 0.060969731698226746,
+            "290": 0.060969731698226746,
+            "291": 0.06957001371884693,
+            "293": 0.05510273609349053,
+            "295": 0.052237412503187725,
+            "297": 0.05223709138858463,
+            "298": 0.043531164493260235,
+            "300": 0.05565606229463705,
+            "302": 0.05565608116212215,
+            "304": 0.05223741250318772,
+            "306": 0.05275082956012909,
+            "307": 0.04889346219084361,
+            "309": 0.05223677027398154,
+            "311": 0.055656084935619195,
+            "313": 0.052237412503187725,
+            "315": 0.05275080691914695,
+            "316": 0.06188584310491173,
+            "318": 0.04353105115869444,
+            "320": 0.043530730044091345,
+            "322": 0.04483764758957442,
+            "323": 0.043531051158694434,
+            "325": 0.05565578305585734,
+            "327": 0.04201057487065044,
+            "329": 0.05565609295430036,
+            "331": 0.05565608493561921,
+            "332": 0.05644923399192652,
+            "334": 0.05223752583775352,
+            "336": 0.06094301828390904,
+            "338": 0.05565606229463705,
+            "340": 0.05565606229463705,
+            "341": 0.05223746917047063,
+            "343": 0.055656084935619195,
+            "345": 0.05223784695235661,
+            "347": 0.05644923399192652,
+            "348": 0.05565580569683948,
+            "350": 0.06956974580055827,
+            "352": 0.0695700778682963,
+            "354": 0.05223752583775352,
+            "356": 0.0556561717260507,
+            "357": 0.05223741250318771,
+            "359": 0.052236656939415746,
+            "361": 0.05223752583775352,
+            "363": 0.04483753425500862,
+            "365": 0.04483689202580244,
+            "366": 0.06757976668007008,
+            "368": 0.06957015333823678,
+            "370": 0.06094345273307791,
+            "372": 0.0695700778682963,
+            "374": 0.06957000239835585,
+            "375": 0.055656149085068586,
+            "377": 0.06757974032703098,
+            "379": 0.060943773847681,
+            "381": 0.0709555416101134,
+            "382": 0.06094237605470284,
+            "384": 0.056475305177038054,
+            "386": 0.05565606229463705,
+            "388": 0.052750187330922904,
+            "390": 0.044335733741651555,
+            "391": 0.04353040892948826,
+            "393": 0.05223665693941573,
+            "395": 0.060943131618474825,
+            "397": 0.06957004768032013,
+            "399": 0.060969721753254616,
+            "400": 0.06956974580055827,
+            "402": 0.05644905650791133,
+            "404": 0.06094377384768101,
+            "406": 0.069570025039338,
+            "407": 0.055656213234517984,
+            "409": 0.06188648906348245,
+            "411": 0.06094377384768101,
+            "413": 0.05565606229463705,
+            "415": 0.060943566067643715,
+            "416": 0.060987036931923914,
+            "418": 0.06964981407757119,
+            "420": 0.06203358064929147,
+            "422": 0.06957007786829632,
+            "424": 0.05565607738862515,
+            "425": 0.06094350940036081,
+            "427": 0.05565606229463706,
+            "429": 0.07038781769262158,
+            "431": 0.06096972175325465,
+            "432": 0.06094345273307791,
+            "434": 0.05565606229463705,
+            "436": 0.052237091388584636,
+            "438": 0.05223752583775352,
+            "440": 0.05223709138858463,
+            "441": 0.0556560462572747,
+            "443": 0.06957009720746855,
+            "445": 0.06096973169822675
+          },
+          "peak_velocity": {
+            "0": 0.29219440251678497,
+            "2": 0.2698926682966599,
+            "4": 0.3569547706140488,
+            "5": 0.2176552557934722,
+            "7": 0.3047177358927471,
+            "9": 0.2785990296411532,
+            "11": 0.25248032338955934,
+            "13": 0.3200224336641035,
+            "14": 0.2611870625159386,
+            "16": 0.2873053909856465,
+            "18": 0.26436637136946645,
+            "20": 0.30471811367463303,
+            "21": 0.2698926682966599,
+            "23": 0.3047177358927471,
+            "25": 0.3656611319585421,
+            "27": 0.2176552557934722,
+            "29": 0.2698926682966599,
+            "30": 0.2698926682966599,
+            "32": 0.23506797848245875,
+            "34": 0.2002432886682576,
+            "36": 0.2698926682966599,
+            "38": 0.2504522803258667,
+            "39": 0.2643662204295855,
+            "41": 0.2089492722308649,
+            "43": 0.17412420463477776,
+            "45": 0.23506797848245875,
+            "46": 0.26436633363449624,
+            "48": 0.30471811367463303,
+            "50": 0.2611870625159386,
+            "52": 0.26118630695216666,
+            "54": 0.30610836148798887,
+            "55": 0.2226242491785482,
+            "57": 0.2611870625159386,
+            "59": 0.2176552557934722,
+            "61": 0.2611870625159386,
+            "63": 0.33083644214434094,
+            "64": 0.2611870625159386,
+            "66": 0.3482484092695555,
+            "68": 0.24377433982695204,
+            "70": 0.33083644214434094,
+            "71": 0.23506797848245875,
+            "73": 0.2873046354218745,
+            "75": 0.3221300807998476,
+            "77": 0.31342371945535435,
+            "79": 0.18283056597927105,
+            "80": 0.23506797848245875,
+            "82": 0.31342447501912635,
+            "84": 0.26118630695216666,
+            "86": 0.2365383024871777,
+            "88": 0.20871015813494848,
+            "89": 0.2782803315198882,
+            "91": 0.23506797848245875,
+            "93": 0.38959247379742956,
+            "95": 0.3047173581108611,
+            "97": 0.38307385464752863,
+            "98": 0.16696818688391116,
+            "100": 0.37567845822377033,
+            "102": 0.3482491648333275,
+            "104": 0.2785990296411532,
+            "105": 0.37436749330303537,
+            "107": 0.24377433982695204,
+            "109": 0.2611870625159386,
+            "111": 0.2089492722308649,
+            "113": 0.31342447501912635,
+            "114": 0.2698926682966599,
+            "116": 0.30471811367463303,
+            "118": 0.2089488944489789,
+            "120": 0.2785997852049252,
+            "122": 0.3482491648333275,
+            "123": 0.2873046354218745,
+            "125": 0.2176552557934722,
+            "127": 0.3221304585817336,
+            "129": 0.25248070117144533,
+            "130": 0.2698926682966599,
+            "132": 0.29601175233013977,
+            "134": 0.2785986518592672,
+            "136": 0.27828033034067035,
+            "138": 0.24377433982695204,
+            "139": 0.2873057687675325,
+            "141": 0.2785990296411532,
+            "143": 0.23506797848245875,
+            "145": 0.31342371945535435,
+            "147": 0.2611866847340526,
+            "148": 0.23506797848245875,
+            "150": 0.3200224336641035,
+            "152": 0.3047177358927471,
+            "154": 0.19479621803122968,
+            "155": 0.2785990296411532,
+            "157": 0.18088212698762995,
+            "159": 0.2698930460785459,
+            "161": 0.22636237270173745,
+            "163": 0.26118630695216666,
+            "164": 0.22262432464848866,
+            "166": 0.2263616171379655,
+            "168": 0.2782803444912842,
+            "170": 0.3656611319585421,
+            "172": 0.31342409723724035,
+            "173": 0.23506797848245875,
+            "175": 0.2002432886682576,
+            "177": 0.2782803492081555,
+            "179": 0.25247994560767334,
+            "181": 0.2263616171379655,
+            "182": 0.2785990296411532,
+            "184": 0.25248070117144533,
+            "186": 0.2263616171379655,
+            "188": 0.3200223959291333,
+            "189": 0.19153654954187835,
+            "191": 0.3221300807998476,
+            "193": 0.2263616171379655,
+            "195": 0.2002432886682576,
+            "197": 0.3482487870514415,
+            "198": 0.23653849116202885,
+            "200": 0.33083644214434094,
+            "202": 0.24377358426318008,
+            "204": 0.25248070117144533,
+            "206": 0.2611866847340526,
+            "207": 0.31342409723724035,
+            "209": 0.2698926682966599,
+            "211": 0.30471811367463303,
+            "213": 0.29601175233013977,
+            "214": 0.29601137454825377,
+            "216": 0.2698930460785459,
+            "218": 0.2611870625159386,
+            "220": 0.2263616171379655,
+            "222": 0.2698934238604319,
+            "223": 0.4174204955110055,
+            "225": 0.2263616171379655,
+            "227": 0.2643660694897046,
+            "229": 0.24377433982695204,
+            "231": 0.19153617175999235,
+            "232": 0.23506760070057278,
+            "234": 0.2504522991933518,
+            "236": 0.2698934238604319,
+            "238": 0.3728126480138578,
+            "239": 0.23506797848245875,
+            "241": 0.2611870625159386,
+            "243": 0.26891403521247154,
+            "245": 0.2176552557934722,
+            "247": 0.2611870625159386,
+            "248": 0.20024253310448564,
+            "250": 0.19153692732376432,
+            "252": 0.2263616171379655,
+            "254": 0.20871015813494848,
+            "256": 0.27828031147318527,
+            "257": 0.22636237270173745,
+            "259": 0.2960109967663678,
+            "261": 0.2002432886682576,
+            "263": 0.2226242491785482,
+            "264": 0.2782803492081555,
+            "266": 0.20871023360488894,
+            "268": 0.32002228272422256,
+            "270": 0.3478503138715411,
+            "272": 0.22262428691351843,
+            "273": 0.2504522803258667,
+            "275": 0.22613227345816825,
+            "277": 0.2782803492081555,
+            "279": 0.24377433982695204,
+            "281": 0.2089488944489789,
+            "282": 0.2698926682966599,
+            "284": 0.32002228272422256,
+            "286": 0.347850464811422,
+            "288": 0.36176440491514084,
+            "290": 0.41742054267971834,
+            "291": 0.2873053909856465,
+            "293": 0.2921943270468445,
+            "295": 0.20871015813494848,
+            "297": 0.33083568658056894,
+            "298": 0.264366295899526,
+            "300": 0.29219440251678497,
+            "302": 0.3200224336641035,
+            "304": 0.3339364115027925,
+            "306": 0.2263616171379655,
+            "307": 0.1915373051056503,
+            "309": 0.25247994560767334,
+            "311": 0.30471811367463303,
+            "313": 0.21765601135724416,
+            "315": 0.26118630695216666,
+            "316": 0.2226242491785482,
+            "318": 0.19153692732376432,
+            "320": 0.20871023360488894,
+            "322": 0.22636237270173745,
+            "323": 0.2785990296411532,
+            "325": 0.29601175233013977,
+            "327": 0.26436637136946645,
+            "329": 0.3061083426205038,
+            "331": 0.27828031147318527,
+            "332": 0.2698934238604319,
+            "334": 0.2263616171379655,
+            "336": 0.26118630695216666,
+            "338": 0.27828031147318527,
+            "340": 0.2611870625159386,
+            "341": 0.236538189282267,
+            "343": 0.264366295899526,
+            "345": 0.2089496500127509,
+            "347": 0.2921943270468445,
+            "348": 0.2002432886682576,
+            "350": 0.23506797848245875,
+            "352": 0.25248032338955934,
+            "354": 0.19153692732376432,
+            "356": 0.2960109967663678,
+            "357": 0.2176552557934722,
+            "359": 0.2785990296411532,
+            "361": 0.23653834022214792,
+            "363": 0.2504522803258667,
+            "365": 0.2176552557934722,
+            "366": 0.3911476875817768,
+            "368": 0.38503600496331153,
+            "370": 0.3178073635605653,
+            "372": 0.3055843298227056,
+            "374": 0.3911476875817768,
+            "375": 0.23224400580149412,
+            "377": 0.3221300807998476,
+            "379": 0.2994725477545191,
+            "381": 0.33614270976512484,
+            "382": 0.2872489836181461,
+            "384": 0.32391914562875185,
+            "386": 0.2089488944489789,
+            "388": 0.2176552557934722,
+            "390": 0.16696818688391116,
+            "391": 0.17412420463477776,
+            "393": 0.2263616171379655,
+            "395": 0.23653828361969256,
+            "397": 0.39178021599202195,
+            "399": 0.31342371945535435,
+            "400": 0.3221308363636196,
+            "402": 0.33083644214434094,
+            "404": 0.26891403521247154,
+            "406": 0.4178985444617298,
+            "407": 0.30558406462344895,
+            "409": 0.44401762849520965,
+            "411": 0.36670108970754406,
+            "413": 0.29601175233013977,
+            "415": 0.3221300807998476,
+            "416": 0.31169584669163547,
+            "418": 0.3972594696499633,
+            "420": 0.256690669975541,
+            "422": 0.317807628759822,
+            "424": 0.30471811367463303,
+            "425": 0.3830730990837567,
+            "427": 0.23506797848245875,
+            "429": 0.36566150974042805,
+            "431": 0.3221300807998476,
+            "432": 0.2933607656863326,
+            "434": 0.2087103090748294,
+            "436": 0.18283056597927105,
+            "438": 0.2089496500127509,
+            "440": 0.17412458241666376,
+            "441": 0.2002432886682576,
+            "443": 0.2611866847340526,
+            "445": 0.39178021599202195
+          },
+          "velocity_spike": {
+            "0": null,
+            "2": null,
+            "4": null,
+            "5": null,
+            "7": null,
+            "9": null,
+            "11": null,
+            "13": null,
+            "14": null,
+            "16": null,
+            "18": null,
+            "20": null,
+            "21": null,
+            "23": null,
+            "25": null,
+            "27": null,
+            "29": null,
+            "30": null,
+            "32": null,
+            "34": null,
+            "36": null,
+            "38": null,
+            "39": null,
+            "41": null,
+            "43": null,
+            "45": null,
+            "46": null,
+            "48": null,
+            "50": null,
+            "52": null,
+            "54": null,
+            "55": null,
+            "57": null,
+            "59": null,
+            "61": null,
+            "63": null,
+            "64": null,
+            "66": null,
+            "68": null,
+            "70": null,
+            "71": null,
+            "73": null,
+            "75": null,
+            "77": null,
+            "79": null,
+            "80": null,
+            "82": null,
+            "84": null,
+            "86": null,
+            "88": null,
+            "89": null,
+            "91": null,
+            "93": null,
+            "95": null,
+            "97": null,
+            "98": null,
+            "100": null,
+            "102": null,
+            "104": null,
+            "105": null,
+            "107": null,
+            "109": null,
+            "111": null,
+            "113": null,
+            "114": null,
+            "116": null,
+            "118": null,
+            "120": null,
+            "122": null,
+            "123": null,
+            "125": null,
+            "127": null,
+            "129": null,
+            "130": null,
+            "132": null,
+            "134": null,
+            "136": null,
+            "138": null,
+            "139": null,
+            "141": null,
+            "143": null,
+            "145": null,
+            "147": null,
+            "148": null,
+            "150": null,
+            "152": null,
+            "154": null,
+            "155": null,
+            "157": null,
+            "159": null,
+            "161": null,
+            "163": null,
+            "164": null,
+            "166": null,
+            "168": null,
+            "170": null,
+            "172": null,
+            "173": null,
+            "175": null,
+            "177": null,
+            "179": null,
+            "181": null,
+            "182": null,
+            "184": null,
+            "186": null,
+            "188": null,
+            "189": null,
+            "191": null,
+            "193": null,
+            "195": null,
+            "197": null,
+            "198": null,
+            "200": null,
+            "202": null,
+            "204": null,
+            "206": null,
+            "207": null,
+            "209": null,
+            "211": null,
+            "213": null,
+            "214": null,
+            "216": null,
+            "218": null,
+            "220": null,
+            "222": null,
+            "223": null,
+            "225": null,
+            "227": null,
+            "229": null,
+            "231": null,
+            "232": null,
+            "234": null,
+            "236": null,
+            "238": null,
+            "239": null,
+            "241": null,
+            "243": null,
+            "245": null,
+            "247": null,
+            "248": null,
+            "250": null,
+            "252": null,
+            "254": null,
+            "256": null,
+            "257": null,
+            "259": null,
+            "261": null,
+            "263": null,
+            "264": null,
+            "266": null,
+            "268": null,
+            "270": null,
+            "272": null,
+            "273": null,
+            "275": null,
+            "277": null,
+            "279": null,
+            "281": null,
+            "282": null,
+            "284": null,
+            "286": null,
+            "288": null,
+            "290": null,
+            "291": null,
+            "293": null,
+            "295": null,
+            "297": null,
+            "298": null,
+            "300": null,
+            "302": null,
+            "304": null,
+            "306": null,
+            "307": null,
+            "309": null,
+            "311": null,
+            "313": null,
+            "315": null,
+            "316": null,
+            "318": null,
+            "320": null,
+            "322": null,
+            "323": null,
+            "325": null,
+            "327": null,
+            "329": null,
+            "331": null,
+            "332": null,
+            "334": null,
+            "336": null,
+            "338": null,
+            "340": null,
+            "341": null,
+            "343": null,
+            "345": null,
+            "347": null,
+            "348": null,
+            "350": null,
+            "352": null,
+            "354": null,
+            "356": null,
+            "357": null,
+            "359": null,
+            "361": null,
+            "363": null,
+            "365": null,
+            "366": null,
+            "368": null,
+            "370": null,
+            "372": null,
+            "374": null,
+            "375": null,
+            "377": null,
+            "379": null,
+            "381": null,
+            "382": null,
+            "384": null,
+            "386": null,
+            "388": null,
+            "390": null,
+            "391": null,
+            "393": null,
+            "395": null,
+            "397": null,
+            "399": null,
+            "400": null,
+            "402": null,
+            "404": null,
+            "406": null,
+            "407": null,
+            "409": null,
+            "411": null,
+            "413": null,
+            "415": null,
+            "416": null,
+            "418": null,
+            "420": null,
+            "422": null,
+            "424": null,
+            "425": null,
+            "427": null,
+            "429": null,
+            "431": null,
+            "432": null,
+            "434": null,
+            "436": null,
+            "438": null,
+            "440": null,
+            "441": null,
+            "443": null,
+            "445": null
+          },
+          "static_fraction": {
+            "0": 0.4414715719063545,
+            "2": 0.4214046822742475,
+            "4": 0.36454849498327757,
+            "5": 0.43812709030100333,
+            "7": 0.46488294314381273,
+            "9": 0.4214046822742475,
+            "11": 0.45819397993311034,
+            "13": 0.4414715719063545,
+            "14": 0.4161073825503356,
+            "16": 0.4080267558528428,
+            "18": 0.35785953177257523,
+            "20": 0.38127090301003347,
+            "21": 0.3010033444816054,
+            "23": 0.39464882943143814,
+            "25": 0.4013377926421405,
+            "27": 0.3612040133779264,
+            "29": 0.46153846153846156,
+            "30": 0.43812709030100333,
+            "32": 0.3511705685618729,
+            "34": 0.3712374581939799,
+            "36": 0.27424749163879597,
+            "38": 0.431438127090301,
+            "39": 0.38127090301003347,
+            "41": 0.4682274247491639,
+            "43": 0.44966442953020136,
+            "45": 0.3879598662207358,
+            "46": 0.431438127090301,
+            "48": 0.44816053511705684,
+            "50": 0.4280936454849498,
+            "52": 0.46488294314381273,
+            "54": 0.41471571906354515,
+            "55": 0.411371237458194,
+            "57": 0.39464882943143814,
+            "59": 0.43812709030100333,
+            "61": 0.45484949832775917,
+            "63": 0.47491638795986624,
+            "64": 0.48494983277591974,
+            "66": 0.39464882943143814,
+            "68": 0.46488294314381273,
+            "70": 0.43478260869565216,
+            "71": 0.3879598662207358,
+            "73": 0.4414715719063545,
+            "75": 0.40468227424749165,
+            "77": 0.46153846153846156,
+            "79": 0.3745819397993311,
+            "80": 0.4214046822742475,
+            "82": 0.4682274247491639,
+            "84": 0.44816053511705684,
+            "86": 0.4782608695652174,
+            "88": 0.4214046822742475,
+            "89": 0.44481605351170567,
+            "91": 0.451505016722408,
+            "93": 0.42474916387959866,
+            "95": 0.5317725752508361,
+            "97": 0.4816053511705686,
+            "98": 0.4080267558528428,
+            "100": 0.38127090301003347,
+            "102": 0.38461538461538464,
+            "104": 0.4916387959866221,
+            "105": 0.41471571906354515,
+            "107": 0.451505016722408,
+            "109": 0.46488294314381273,
+            "111": 0.451505016722408,
+            "113": 0.44481605351170567,
+            "114": 0.3745819397993311,
+            "116": 0.4682274247491639,
+            "118": 0.4682274247491639,
+            "120": 0.44481605351170567,
+            "122": 0.5016722408026756,
+            "123": 0.4280936454849498,
+            "125": 0.4782608695652174,
+            "127": 0.4682274247491639,
+            "129": 0.411371237458194,
+            "130": 0.3879598662207358,
+            "132": 0.45484949832775917,
+            "134": 0.43478260869565216,
+            "136": 0.4414715719063545,
+            "138": 0.4816053511705686,
+            "139": 0.44816053511705684,
+            "141": 0.431438127090301,
+            "143": 0.4983277591973244,
+            "145": 0.48494983277591974,
+            "147": 0.45484949832775917,
+            "148": 0.46153846153846156,
+            "150": 0.4214046822742475,
+            "152": 0.4782608695652174,
+            "154": 0.4916387959866221,
+            "155": 0.43812709030100333,
+            "157": 0.42474916387959866,
+            "159": 0.38461538461538464,
+            "161": 0.3745819397993311,
+            "163": 0.4882943143812709,
+            "164": 0.45484949832775917,
+            "166": 0.45484949832775917,
+            "168": 0.45819397993311034,
+            "170": 0.391304347826087,
+            "172": 0.3879598662207358,
+            "173": 0.4682274247491639,
+            "175": 0.3879598662207358,
+            "177": 0.43478260869565216,
+            "179": 0.4080267558528428,
+            "181": 0.431438127090301,
+            "182": 0.4414715719063545,
+            "184": 0.4816053511705686,
+            "186": 0.47491638795986624,
+            "188": 0.43478260869565216,
+            "189": 0.41471571906354515,
+            "191": 0.4682274247491639,
+            "193": 0.46488294314381273,
+            "195": 0.46488294314381273,
+            "197": 0.49498327759197325,
+            "198": 0.451505016722408,
+            "200": 0.44481605351170567,
+            "202": 0.48494983277591974,
+            "204": 0.411371237458194,
+            "206": 0.44481605351170567,
+            "207": 0.5050167224080268,
+            "209": 0.49498327759197325,
+            "211": 0.44816053511705684,
+            "213": 0.4782608695652174,
+            "214": 0.48494983277591974,
+            "216": 0.46488294314381273,
+            "218": 0.4414715719063545,
+            "220": 0.42474916387959866,
+            "222": 0.46488294314381273,
+            "223": 0.47157190635451507,
+            "225": 0.4180602006688963,
+            "227": 0.411371237458194,
+            "229": 0.46153846153846156,
+            "231": 0.4180602006688963,
+            "232": 0.4280936454849498,
+            "234": 0.44816053511705684,
+            "236": 0.46153846153846156,
+            "238": 0.411371237458194,
+            "239": 0.391304347826087,
+            "241": 0.4782608695652174,
+            "243": 0.45819397993311034,
+            "245": 0.39464882943143814,
+            "247": 0.5459610027855153,
+            "248": 0.5988857938718662,
+            "250": 0.5125348189415042,
+            "252": 0.520891364902507,
+            "254": 0.4818941504178273,
+            "256": 0.4818941504178273,
+            "257": 0.43454038997214484,
+            "259": 0.5069637883008357,
+            "261": 0.4596100278551532,
+            "263": 0.5069637883008357,
+            "264": 0.5264623955431755,
+            "266": 0.43175487465181056,
+            "268": 0.39275766016713093,
+            "270": 0.3426183844011142,
+            "272": 0.4568245125348189,
+            "273": 0.44846796657381616,
+            "275": 0.4596100278551532,
+            "277": 0.45403899721448465,
+            "279": 0.5041782729805014,
+            "281": 0.48746518105849584,
+            "282": 0.5125348189415042,
+            "284": 0.5181058495821727,
+            "286": 0.5181058495821727,
+            "288": 0.48467966573816157,
+            "290": 0.4818941504178273,
+            "291": 0.4401114206128134,
+            "293": 0.4428969359331476,
+            "295": 0.4401114206128134,
+            "297": 0.5264623955431755,
+            "298": 0.46518105849582175,
+            "300": 0.4401114206128134,
+            "302": 0.5069637883008357,
+            "304": 0.5069637883008357,
+            "306": 0.520891364902507,
+            "307": 0.4623955431754875,
+            "309": 0.42618384401114207,
+            "311": 0.48467966573816157,
+            "313": 0.4456824512534819,
+            "315": 0.4763231197771588,
+            "316": 0.4623955431754875,
+            "318": 0.3816155988857939,
+            "320": 0.4958217270194986,
+            "322": 0.49025069637883006,
+            "323": 0.479108635097493,
+            "325": 0.46518105849582175,
+            "327": 0.5013927576601671,
+            "329": 0.5097493036211699,
+            "331": 0.4818941504178273,
+            "332": 0.43175487465181056,
+            "334": 0.45125348189415043,
+            "336": 0.479108635097493,
+            "338": 0.47075208913649025,
+            "340": 0.5348189415041783,
+            "341": 0.48746518105849584,
+            "343": 0.532033426183844,
+            "345": 0.4735376044568245,
+            "347": 0.5264623955431755,
+            "348": 0.5236768802228412,
+            "350": 0.5376044568245125,
+            "352": 0.4818941504178273,
+            "354": 0.5236768802228412,
+            "356": 0.5571030640668524,
+            "357": 0.5403899721448467,
+            "359": 0.5125348189415042,
+            "361": 0.5459610027855153,
+            "363": 0.5069637883008357,
+            "365": 0.4986072423398329,
+            "366": 0.40947075208913647,
+            "368": 0.32193732193732194,
+            "370": 0.39275766016713093,
+            "372": 0.3342696629213483,
+            "374": 0.3732590529247911,
+            "375": 0.3565459610027855,
+            "377": 0.4623955431754875,
+            "379": 0.3955431754874652,
+            "381": 0.42896935933147634,
+            "382": 0.3955431754874652,
+            "384": 0.4373259052924791,
+            "386": 0.36768802228412256,
+            "388": 0.38997214484679665,
+            "390": 0.42896935933147634,
+            "391": 0.34818941504178275,
+            "393": 0.43175487465181056,
+            "395": 0.3203342618384401,
+            "397": 0.24233983286908078,
+            "399": 0.2841225626740947,
+            "400": 0.2841225626740947,
+            "402": 0.29526462395543174,
+            "404": 0.28133704735376047,
+            "406": 0.2590529247910863,
+            "407": 0.3008356545961003,
+            "409": 0.26740947075208915,
+            "411": 0.2924791086350975,
+            "413": 0.362116991643454,
+            "415": 0.2924791086350975,
+            "416": 0.4061624649859944,
+            "418": 0.45403899721448465,
+            "420": 0.48467966573816157,
+            "422": 0.35097493036211697,
+            "424": 0.27932960893854747,
+            "425": 0.28653295128939826,
+            "427": 0.3994413407821229,
+            "429": 0.3463687150837989,
+            "431": 0.35376044568245124,
+            "432": 0.39275766016713093,
+            "434": 0.38440111420612816,
+            "436": 0.47075208913649025,
+            "438": 0.34818941504178275,
+            "440": 0.3955431754874652,
+            "441": 0.40668523676880225,
+            "443": 0.4568245125348189,
+            "445": 0.39275766016713093
+          },
+          "end_pose_deviation": {
+            "0": 0.15346536514467157,
+            "2": 0.14851484350942648,
+            "4": 0.0742574486063108,
+            "5": 0.1132075582325136,
+            "7": 0.08805031785797084,
+            "9": 0.04898530921104573,
+            "11": 0.4025157244638712,
+            "13": 0.25157233338664114,
+            "14": 0.374501854281097,
+            "16": 0.08415841132200833,
+            "18": 0.15346536514467157,
+            "20": 0.10062893378107333,
+            "21": 0.03773585416556083,
+            "23": 0.16831682264401665,
+            "25": 0.037735850167902506,
+            "27": 0.0643564590390157,
+            "29": 0.29559749338166874,
+            "30": 0.07425742175471324,
+            "32": 0.08415841132200833,
+            "34": 0.22641510154043612,
+            "36": 0.14465409377610097,
+            "38": 0.01195203970920668,
+            "39": 0.09405942774090098,
+            "41": 0.301980208654098,
+            "43": 0.22012579357888487,
+            "45": 0.3459119570740788,
+            "46": 0.17821782228066085,
+            "48": 0.20792079433899582,
+            "50": 0.03773584776930751,
+            "52": 0.06918239583889096,
+            "54": 0.18316831874253325,
+            "55": 0.08910890610565587,
+            "57": 0.09405940088930342,
+            "59": 0.18811881520440563,
+            "61": 0.009900989567295099,
+            "63": 0.057471272474804075,
+            "64": 0.049504961262274265,
+            "66": 0.28930817475969534,
+            "68": 0.1509433996055678,
+            "70": 0.2673267384556658,
+            "71": 0.24257426118097838,
+            "73": 0.07920791653836079,
+            "75": 0.38993711920119084,
+            "77": 0.05031447008866333,
+            "79": 0.03773585416556083,
+            "80": 0.09770115911842517,
+            "82": 0.21383647922108032,
+            "84": 0.14851485693522526,
+            "86": 0.04382472185783545,
+            "88": 0.14851485693522526,
+            "89": 0.12578617202353165,
+            "91": 0.20792079433899582,
+            "93": 0.11320755183626029,
+            "95": 0.19306930830982835,
+            "97": 0.11881188823333995,
+            "98": 0.2169811417301937,
+            "100": 0.07425742175471324,
+            "102": 0.9978632749721355,
+            "104": 0.07232705008617715,
+            "105": 0.18553460192243743,
+            "107": 0.1039604038823973,
+            "109": 0.1237623830169875,
+            "111": 0.24752475932107562,
+            "113": 0.8103448785192401,
+            "114": 0.11006289785548466,
+            "116": 0.11881188823333995,
+            "118": 0.0786163580477284,
+            "120": 0.15841584650252036,
+            "122": 0.14779875415312993,
+            "123": 0.2079208077647946,
+            "125": 0.11006289785548466,
+            "127": 0.05974842989890577,
+            "129": 0.11881188823333995,
+            "130": 0.0057471252031095245,
+            "132": 0.2376237764666799,
+            "134": 0.0057471252031095245,
+            "136": 0.1732673174276642,
+            "138": 0.18553460192243743,
+            "139": 0.11635220581703591,
+            "141": 0.11635220581703591,
+            "143": 0.21782179061919033,
+            "145": 0.22277228540283786,
+            "147": 0.07471265830598706,
+            "148": 0.09748428086633994,
+            "150": 0.10891089866604485,
+            "152": 0.12068965993086327,
+            "154": 0.18553460298847965,
+            "155": 0.04950494783647549,
+            "157": 0.024752473918237743,
+            "159": 0.08910890610565587,
+            "161": 0.26100629852709467,
+            "163": 0.15841584650252036,
+            "164": 0.11881187480754117,
+            "166": 0.034653463485532846,
+            "168": 0.07861635484960174,
+            "170": 0.5139442768303721,
+            "172": 0.24752475932107562,
+            "173": 0.08910890610565587,
+            "175": 0.16037737114227466,
+            "177": 0.2376237764666799,
+            "179": 0.05345912300339673,
+            "181": 0.21513948080129283,
+            "182": 0.14150944512553645,
+            "184": 0.09748428086633994,
+            "186": 0.07471265830598706,
+            "188": 0.09748428086633994,
+            "189": 0.08910890610565587,
+            "191": 0.2673267384556658,
+            "193": 0.12264151484462937,
+            "195": 0.024752473918237743,
+            "197": 0.3118812015778428,
+            "198": 0.054455456045921814,
+            "200": 0.04402516212711208,
+            "202": 0.09900989567295097,
+            "204": 0.11320755610042917,
+            "206": 0.20297030962469736,
+            "207": 0.16831684278271483,
+            "209": 0.1446541001723543,
+            "211": 0.1138613934496924,
+            "213": 0.1465517233448561,
+            "214": 0.08805031999005528,
+            "216": 0.03773584776930751,
+            "218": 0.060344835076358835,
+            "220": 0.625498145718903,
+            "222": 0.024752473918237743,
+            "223": 0.10062893591315777,
+            "225": 0.19252872496973233,
+            "227": 0.04455445305282794,
+            "229": 0.06435643218741814,
+            "231": 0.03144654407192513,
+            "232": 0.19252872496973233,
+            "234": 0.22772278354293513,
+            "236": 0.17528735958225816,
+            "238": 0.16831684278271483,
+            "239": 0.2578616349519391,
+            "241": 0.3663366408415162,
+            "243": 0.26415095997016586,
+            "245": 0.17821783235000993,
+            "247": 0.30188680773947335,
+            "248": 0.059405937403770585,
+            "250": 0.11320755210277084,
+            "252": 0.16352201979283917,
+            "254": 0.2376237764666799,
+            "256": 0.15346533829307402,
+            "257": 0.06918239184123265,
+            "259": 0.15094340386973668,
+            "261": 0.22012579571096932,
+            "263": 0.03773585629764527,
+            "264": 0.2128712891226434,
+            "266": 0.07425742175471324,
+            "268": 0.1782178390629093,
+            "270": 0.1823899479416618,
+            "272": 0.6188119016591387,
+            "273": 0.410891095572569,
+            "275": 0.17821782563711053,
+            "277": 0.15094340386973668,
+            "279": 0.2227722652641397,
+            "281": 0.07547170406695278,
+            "282": 0.14465409164401655,
+            "284": 0.2623762369591189,
+            "286": 0.08910890610565587,
+            "288": 0.21782178390629092,
+            "290": 0.18811881520440563,
+            "291": 0.2128712891226434,
+            "293": 0.24752475260817622,
+            "295": 0.22012579571096932,
+            "297": 0.23267326825723358,
+            "298": 0.23270441163407182,
+            "300": 0.039840593369951036,
+            "302": 0.12376236959118872,
+            "304": 0.10691824387470902,
+            "306": 0.30188680773947335,
+            "307": 0.11320755210277084,
+            "309": 0.14465409164401655,
+            "311": 0.1761006314517728,
+            "313": 0.07547170193486834,
+            "315": 0.029702968701885293,
+            "316": 0.07547170406695278,
+            "318": 0.06930692697106569,
+            "320": 0.06918239583889096,
+            "322": 0.16666668199944829,
+            "323": 0.1782178390629093,
+            "325": 0.10691824600679346,
+            "327": 0.1823899479416618,
+            "329": 0.22988506945550746,
+            "331": 0.06918239583889096,
+            "332": 0.15094340813390555,
+            "334": 0.21264370406803332,
+            "336": 0.09405940088930342,
+            "338": 0.059405937403770585,
+            "340": 0.059405937403770585,
+            "341": 0.15517243159322924,
+            "343": 0.13366335915848382,
+            "345": 0.14851485693522526,
+            "347": 0.10062893591315777,
+            "348": 0.11949686406198042,
+            "350": 0.14851485693522526,
+            "352": 0.11320755183626029,
+            "354": 0.08910890610565587,
+            "356": 0.14851485693522526,
+            "357": 0.22641511220085833,
+            "359": 0.1494252961682653,
+            "361": 0.12871287780063506,
+            "363": 0.11881187480754117,
+            "365": 0.06918238757706377,
+            "366": 0.2641509535739125,
+            "368": 0.1886792580352975,
+            "370": 0.23270441376615625,
+            "372": 0.24752475932107562,
+            "374": 0.30188680134322005,
+            "375": 0.11949686192989598,
+            "377": 0.11949686192989598,
+            "379": 0.10691824600679346,
+            "381": 0.20125786969423112,
+            "382": 0.03773585416556083,
+            "384": 0.09405940088930342,
+            "386": 0.03144654193984069,
+            "388": 0.11881187480754117,
+            "390": 0.17610063784802613,
+            "391": 0.1509434060018211,
+            "393": 0.10891088524024607,
+            "395": 0.2227722652641397,
+            "397": 0.46039601487922205,
+            "399": 0.34158414007168086,
+            "400": 0.22641510154043612,
+            "402": 0.11386138002389362,
+            "404": 0.1039604038823973,
+            "406": 0.1980198181974995,
+            "407": 0.04455445305282794,
+            "409": 0.18238994580957738,
+            "411": 0.11949686619406485,
+            "413": 0.252475233966025,
+            "415": 0.04455445305282794,
+            "416": 0.1237623830169875,
+            "418": 0.22012579357888487,
+            "420": 0.11949686192989598,
+            "422": 0.1930692965622544,
+            "424": 0.12376236959118872,
+            "425": 0.33663367213963086,
+            "427": 0.04455445305282794,
+            "429": 0.10396039045659852,
+            "431": 0.15841584650252036,
+            "432": 0.06930692697106569,
+            "434": 0.24257426453742806,
+            "436": 0.037735850167902506,
+            "438": 0.15723270969920347,
+            "440": 0.10891088524024607,
+            "441": 0.009900989567295099,
+            "443": 0.12871287780063506,
+            "445": 0.22012579784305375
+          }
+        },
+        "flagged": {
+          "11": [
+            "end_pose_deviation"
+          ],
+          "102": [
+            "end_pose_deviation"
+          ],
+          "113": [
+            "end_pose_deviation"
+          ],
+          "170": [
+            "end_pose_deviation"
+          ],
+          "220": [
+            "end_pose_deviation"
+          ],
+          "272": [
+            "end_pose_deviation"
+          ],
+          "273": [
+            "end_pose_deviation"
+          ],
+          "397": [
+            "end_pose_deviation"
+          ],
+          "409": [
+            "peak_velocity"
+          ]
+        },
+        "robustness": {
+          "probed": [
+            "unit-milli",
+            "unit-kilo",
+            "order-reversed",
+            "half-sample"
+          ]
+        }
+      },
+      "findings": [
+        {
+          "severity": "WARN",
+          "message": "episode 102: IQR outlier on end_pose_deviation (far out)",
+          "episode_index": 102,
+          "details": {
+            "metrics": [
+              "end_pose_deviation"
+            ],
+            "far_out": true
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 11: IQR outlier on end_pose_deviation",
+          "episode_index": 11,
+          "details": {
+            "metrics": [
+              "end_pose_deviation"
+            ],
+            "far_out": false
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 113: IQR outlier on end_pose_deviation",
+          "episode_index": 113,
+          "details": {
+            "metrics": [
+              "end_pose_deviation"
+            ],
+            "far_out": false
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 170: IQR outlier on end_pose_deviation",
+          "episode_index": 170,
+          "details": {
+            "metrics": [
+              "end_pose_deviation"
+            ],
+            "far_out": false
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 220: IQR outlier on end_pose_deviation",
+          "episode_index": 220,
+          "details": {
+            "metrics": [
+              "end_pose_deviation"
+            ],
+            "far_out": false
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 272: IQR outlier on end_pose_deviation",
+          "episode_index": 272,
+          "details": {
+            "metrics": [
+              "end_pose_deviation"
+            ],
+            "far_out": false
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 273: IQR outlier on end_pose_deviation",
+          "episode_index": 273,
+          "details": {
+            "metrics": [
+              "end_pose_deviation"
+            ],
+            "far_out": false
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 397: IQR outlier on end_pose_deviation",
+          "episode_index": 397,
+          "details": {
+            "metrics": [
+              "end_pose_deviation"
+            ],
+            "far_out": false
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 409: IQR outlier on peak_velocity",
+          "episode_index": 409,
+          "details": {
+            "metrics": [
+              "peak_velocity"
+            ],
+            "far_out": false
+          }
+        }
+      ],
+      "charge": 6
+    },
+    {
+      "id": "embedded-images",
+      "title": "Embedded images in the parquet shards",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "no image features declared",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "camera-coverage",
+      "title": "Per-episode camera coverage",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "2 camera(s) over 250 episodes; 0 missing segments",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "episode-file-pointers",
+      "title": "Episode file pointers (v3 shard metadata)",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "every shard pointer matches its file's contents (446 episodes, 1 shard(s))",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "broken": [],
+        "judged": 446,
+        "catalogued": 446,
+        "local_shards": 1
+      },
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "video-file-pointers",
+      "title": "Video file pointers (metadata vs repo contents)",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "all 22 metadata-referenced video files exist (the repo file listing)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "referenced": 22,
+        "missing": 0
+      },
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "task-strings",
+      "title": "Task strings",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "250 episodes, 8 tasks in meta/tasks; 0 finding(s)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "reward-done",
+      "title": "Reward / done fields",
+      "verdict": "SKIP",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "no reward/done fields (position-control datasets rarely have them)",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "visual-quality",
+      "title": "Visual quality (blur, lighting)",
+      "verdict": "PASS",
+      "weight": 6,
+      "weight_basis": "placeholder",
+      "summary": "26 episodes x 1 camera(s) sampled; median blur observation.images.side 273",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "median_blur_per_camera": {
+          "observation.images.side": 272.847244189324
+        },
+        "median_p95_brightness_per_camera": {
+          "observation.images.side": 254.0
+        },
+        "median_saturated_fraction_per_camera": {
+          "observation.images.side": 0.09380533854166667
+        }
+      },
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "deployment-readiness",
+      "title": "Deployment readiness (would this dataset serve a policy?)",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "no deployment blockers found",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "stats-f32-fingerprint",
+      "title": "Stats f32 accumulation fingerprint",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "no float32-accumulation fingerprint in 5 sampled episode(s)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    }
+  ]
+}

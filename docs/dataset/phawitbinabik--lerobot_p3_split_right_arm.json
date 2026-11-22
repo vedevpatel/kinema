@@ -1,0 +1,923 @@
+{
+  "source": "phawitbinabik/lerobot_p3_split_right_arm",
+  "format_version": "v3.0",
+  "episodes": 31,
+  "frames": 3292,
+  "fps": 5.0,
+  "truncated": false,
+  "video_audited": 5,
+  "score": 100,
+  "score_model": "tiered-v3",
+  "verdict": "INFO",
+  "checks": [
+    {
+      "id": "stats-drift",
+      "title": "Stats drift (stored normalization stats vs actual data)",
+      "verdict": "PASS",
+      "weight": 6,
+      "weight_basis": "measured",
+      "summary": "data matches the stored stats (worst 0% of the FAIL threshold)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "timestamp-grid",
+      "title": "Timestamp grid (spacing, monotonic, start at 0)",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "evenly spaced at 5 fps and monotonic",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "dropped-frames",
+      "title": "Dropped / duplicated frames",
+      "verdict": "PASS",
+      "weight": 2,
+      "weight_basis": "measured",
+      "summary": "frame_index contiguous; episode lengths and video segments match the data",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "calibration-drift",
+      "title": "Calibration drift (action vs state on still frames)",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "measured",
+      "summary": "7 joint(s) + 1 gripper(s) agree; worst offset -0.6% of range (joint 7)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "per_joint": {
+          "0": {
+            "joint": 0,
+            "offset_fraction": 0.000144441124132787,
+            "scale_error": -1.2089709265033716e-05,
+            "r2": 3.4543806662901133e-06,
+            "line_vs_step": 0.9888982271318839,
+            "still_frames": 1379
+          },
+          "1": {
+            "joint": 1,
+            "offset_fraction": -9.49554179797582e-05,
+            "scale_error": -0.0019184413663540557,
+            "r2": 0.004516948786399078,
+            "line_vs_step": 0.990771512728085,
+            "still_frames": 1378
+          },
+          "2": {
+            "joint": 2,
+            "offset_fraction": 0.0003640624480169417,
+            "scale_error": -0.0004850861798197605,
+            "r2": 0.0017719891204850402,
+            "line_vs_step": 0.9924385684242852,
+            "still_frames": 1379
+          },
+          "3": {
+            "joint": 3,
+            "offset_fraction": -0.0008134224862186123,
+            "scale_error": -0.0009525146311617399,
+            "r2": 0.00297193558165032,
+            "line_vs_step": 0.995950963005175,
+            "still_frames": 1384
+          },
+          "4": {
+            "joint": 4,
+            "offset_fraction": 0.0003455687868869182,
+            "scale_error": -0.0008537708849935488,
+            "r2": 0.0008224568304727731,
+            "line_vs_step": 0.9904230023383821,
+            "still_frames": 1384
+          },
+          "5": {
+            "joint": 5,
+            "offset_fraction": -0.0001275103458452082,
+            "scale_error": -0.002555746352414628,
+            "r2": 0.003963111773802708,
+            "line_vs_step": 0.9893438133894998,
+            "still_frames": 1375
+          },
+          "6": {
+            "joint": 6,
+            "offset_fraction": -0.0004519279593240929,
+            "scale_error": 0.0017013592482184293,
+            "r2": 0.002292172797016656,
+            "line_vs_step": 0.9908648382191081,
+            "still_frames": 1377
+          },
+          "7": {
+            "joint": 7,
+            "free_end": "high",
+            "offset_fraction": -0.005578700049015104,
+            "still_frames": 2279,
+            "kind": "gripper"
+          }
+        },
+        "compared_joints": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "compared_grippers": [
+          7
+        ],
+        "compared_deltas": [],
+        "excluded_joints": {}
+      },
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "idle-segments",
+      "title": "Idle segments (policy learns to do nothing)",
+      "verdict": "INFO",
+      "weight": 6,
+      "weight_basis": "measured",
+      "summary": "26/31 episodes flagged; worst 57% idle [published as INFO: held for review - more than 10 new idle-segments WARN/FAIL verdicts this run]",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "robustness": {
+          "probed": [
+            "unit-milli",
+            "unit-kilo",
+            "order-reversed"
+          ],
+          "held": true
+        }
+      },
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "episode 0: 49% of frames idle in runs >= 2s; ends with 6.8s idle [published as INFO: held for review - more than 10 new idle-segments WARN/FAIL verdicts this run]",
+          "episode_index": 0,
+          "details": {
+            "idle_fraction": 0.4863013698630137,
+            "idle_runs": 2,
+            "leading_idle_s": 0.0,
+            "trailing_idle_s": 6.8
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 1: 34% of frames idle in runs >= 2s; starts idle for 2.0s (teaches waiting at the start) [published as INFO: held for review - more than 10 new idle-segments WARN/FAIL verdicts this run]",
+          "episode_index": 1,
+          "details": {
+            "idle_fraction": 0.3358208955223881,
+            "idle_runs": 2,
+            "leading_idle_s": 2.0,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 2: ends with 3.6s idle - trim if you want shorter episodes",
+          "episode_index": 2,
+          "details": {
+            "idle_fraction": 0.1267605633802817,
+            "idle_runs": 1,
+            "leading_idle_s": 0.0,
+            "trailing_idle_s": 3.6
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 3: 33% of frames idle in runs >= 2s; starts idle for 4.2s (teaches waiting at the start); ends with 3.8s idle [published as INFO: held for review - more than 10 new idle-segments WARN/FAIL verdicts this run]",
+          "episode_index": 3,
+          "details": {
+            "idle_fraction": 0.3333333333333333,
+            "idle_runs": 2,
+            "leading_idle_s": 4.2,
+            "trailing_idle_s": 3.8
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 4: 31% of frames idle in runs >= 2s; starts idle for 3.4s (teaches waiting at the start); ends with 3.4s idle [published as INFO: held for review - more than 10 new idle-segments WARN/FAIL verdicts this run]",
+          "episode_index": 4,
+          "details": {
+            "idle_fraction": 0.3119266055045872,
+            "idle_runs": 2,
+            "leading_idle_s": 3.4,
+            "trailing_idle_s": 3.4
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 5: 39% of frames idle in runs >= 2s; starts idle for 4.4s (teaches waiting at the start); ends with 3.6s idle [published as INFO: held for review - more than 10 new idle-segments WARN/FAIL verdicts this run]",
+          "episode_index": 5,
+          "details": {
+            "idle_fraction": 0.39215686274509803,
+            "idle_runs": 2,
+            "leading_idle_s": 4.4,
+            "trailing_idle_s": 3.6
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 6: 36% of frames idle in runs >= 2s; starts idle for 3.2s (teaches waiting at the start); ends with 4.4s idle [published as INFO: held for review - more than 10 new idle-segments WARN/FAIL verdicts this run]",
+          "episode_index": 6,
+          "details": {
+            "idle_fraction": 0.3619047619047619,
+            "idle_runs": 2,
+            "leading_idle_s": 3.2,
+            "trailing_idle_s": 4.4
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 7: 35% of frames idle in runs >= 2s; starts idle for 4.2s (teaches waiting at the start); ends with 3.8s idle [published as INFO: held for review - more than 10 new idle-segments WARN/FAIL verdicts this run]",
+          "episode_index": 7,
+          "details": {
+            "idle_fraction": 0.3508771929824561,
+            "idle_runs": 2,
+            "leading_idle_s": 4.2,
+            "trailing_idle_s": 3.8
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 8: 40% of frames idle in runs >= 2s; starts idle for 3.6s (teaches waiting at the start); ends with 4.6s idle [published as INFO: held for review - more than 10 new idle-segments WARN/FAIL verdicts this run]",
+          "episode_index": 8,
+          "details": {
+            "idle_fraction": 0.4019607843137255,
+            "idle_runs": 2,
+            "leading_idle_s": 3.6,
+            "trailing_idle_s": 4.6
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 9: 40% of frames idle in runs >= 2s; starts idle for 3.6s (teaches waiting at the start); ends with 4.2s idle [published as INFO: held for review - more than 10 new idle-segments WARN/FAIL verdicts this run]",
+          "episode_index": 9,
+          "details": {
+            "idle_fraction": 0.3979591836734694,
+            "idle_runs": 2,
+            "leading_idle_s": 3.6,
+            "trailing_idle_s": 4.2
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 10: 33% of frames idle in runs >= 2s; starts idle for 2.6s (teaches waiting at the start); ends with 4.0s idle [published as INFO: held for review - more than 10 new idle-segments WARN/FAIL verdicts this run]",
+          "episode_index": 10,
+          "details": {
+            "idle_fraction": 0.33,
+            "idle_runs": 2,
+            "leading_idle_s": 2.6,
+            "trailing_idle_s": 4.0
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 11: 32% of frames idle in runs >= 2s; starts idle for 2.6s (teaches waiting at the start); ends with 3.6s idle [published as INFO: held for review - more than 10 new idle-segments WARN/FAIL verdicts this run]",
+          "episode_index": 11,
+          "details": {
+            "idle_fraction": 0.3163265306122449,
+            "idle_runs": 2,
+            "leading_idle_s": 2.6,
+            "trailing_idle_s": 3.6
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 12: 43% of frames idle in runs >= 2s; starts idle for 3.8s (teaches waiting at the start); ends with 4.2s idle [published as INFO: held for review - more than 10 new idle-segments WARN/FAIL verdicts this run]",
+          "episode_index": 12,
+          "details": {
+            "idle_fraction": 0.43010752688172044,
+            "idle_runs": 2,
+            "leading_idle_s": 3.8,
+            "trailing_idle_s": 4.2
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 13: 38% of frames idle in runs >= 2s; starts idle for 2.4s (teaches waiting at the start); ends with 5.0s idle [published as INFO: held for review - more than 10 new idle-segments WARN/FAIL verdicts this run]",
+          "episode_index": 13,
+          "details": {
+            "idle_fraction": 0.37755102040816324,
+            "idle_runs": 2,
+            "leading_idle_s": 2.4,
+            "trailing_idle_s": 5.0
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 14: starts idle for 2.0s (teaches waiting at the start); ends with 3.8s idle [published as INFO: held for review - more than 10 new idle-segments WARN/FAIL verdicts this run]",
+          "episode_index": 14,
+          "details": {
+            "idle_fraction": 0.29591836734693877,
+            "idle_runs": 2,
+            "leading_idle_s": 2.0,
+            "trailing_idle_s": 3.8
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 15: 44% of frames idle in runs >= 2s; starts idle for 3.2s (teaches waiting at the start); ends with 5.2s idle [published as INFO: held for review - more than 10 new idle-segments WARN/FAIL verdicts this run]",
+          "episode_index": 15,
+          "details": {
+            "idle_fraction": 0.4421052631578947,
+            "idle_runs": 2,
+            "leading_idle_s": 3.2,
+            "trailing_idle_s": 5.2
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 16: 38% of frames idle in runs >= 2s; starts idle for 2.0s (teaches waiting at the start); ends with 5.2s idle [published as INFO: held for review - more than 10 new idle-segments WARN/FAIL verdicts this run]",
+          "episode_index": 16,
+          "details": {
+            "idle_fraction": 0.3829787234042553,
+            "idle_runs": 2,
+            "leading_idle_s": 2.0,
+            "trailing_idle_s": 5.2
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 17: 37% of frames idle in runs >= 2s; starts idle for 2.0s (teaches waiting at the start) [published as INFO: held for review - more than 10 new idle-segments WARN/FAIL verdicts this run]",
+          "episode_index": 17,
+          "details": {
+            "idle_fraction": 0.3684210526315789,
+            "idle_runs": 2,
+            "leading_idle_s": 2.0,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 18: ends with 2.6s idle - trim if you want shorter episodes",
+          "episode_index": 18,
+          "details": {
+            "idle_fraction": 0.08024691358024691,
+            "idle_runs": 1,
+            "leading_idle_s": 0.0,
+            "trailing_idle_s": 2.6
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 19: 49% of frames idle in runs >= 2s; starts idle for 8.4s (teaches waiting at the start); ends with 5.0s idle [published as INFO: held for review - more than 10 new idle-segments WARN/FAIL verdicts this run]",
+          "episode_index": 19,
+          "details": {
+            "idle_fraction": 0.49264705882352944,
+            "idle_runs": 2,
+            "leading_idle_s": 8.4,
+            "trailing_idle_s": 5.0
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 20: 33% of frames idle in runs >= 2s; starts idle for 2.2s (teaches waiting at the start); ends with 5.0s idle [published as INFO: held for review - more than 10 new idle-segments WARN/FAIL verdicts this run]",
+          "episode_index": 20,
+          "details": {
+            "idle_fraction": 0.3333333333333333,
+            "idle_runs": 2,
+            "leading_idle_s": 2.2,
+            "trailing_idle_s": 5.0
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 21: 37% of frames idle in runs >= 2s; starts idle for 2.2s (teaches waiting at the start); ends with 4.6s idle [published as INFO: held for review - more than 10 new idle-segments WARN/FAIL verdicts this run]",
+          "episode_index": 21,
+          "details": {
+            "idle_fraction": 0.3695652173913043,
+            "idle_runs": 2,
+            "leading_idle_s": 2.2,
+            "trailing_idle_s": 4.6
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 22: 35% of frames idle in runs >= 2s; starts idle for 2.4s (teaches waiting at the start) [published as INFO: held for review - more than 10 new idle-segments WARN/FAIL verdicts this run]",
+          "episode_index": 22,
+          "details": {
+            "idle_fraction": 0.3484848484848485,
+            "idle_runs": 2,
+            "leading_idle_s": 2.4,
+            "trailing_idle_s": 0.0
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 23: 57% of frames idle in runs >= 2s; ends with 4.4s idle [published as INFO: held for review - more than 10 new idle-segments WARN/FAIL verdicts this run]",
+          "episode_index": 23,
+          "details": {
+            "idle_fraction": 0.5704697986577181,
+            "idle_runs": 2,
+            "leading_idle_s": 0.0,
+            "trailing_idle_s": 4.4
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 24: 44% of frames idle in runs >= 2s; starts idle for 4.0s (teaches waiting at the start); ends with 4.0s idle [published as INFO: held for review - more than 10 new idle-segments WARN/FAIL verdicts this run]",
+          "episode_index": 24,
+          "details": {
+            "idle_fraction": 0.4444444444444444,
+            "idle_runs": 2,
+            "leading_idle_s": 4.0,
+            "trailing_idle_s": 4.0
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 25: 35% of frames idle in runs >= 2s; starts idle for 2.0s (teaches waiting at the start); ends with 3.4s idle [published as INFO: held for review - more than 10 new idle-segments WARN/FAIL verdicts this run]",
+          "episode_index": 25,
+          "details": {
+            "idle_fraction": 0.35064935064935066,
+            "idle_runs": 2,
+            "leading_idle_s": 2.0,
+            "trailing_idle_s": 3.4
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 26: 48% of frames idle in runs >= 2s; starts idle for 3.2s (teaches waiting at the start); ends with 4.4s idle [published as INFO: held for review - more than 10 new idle-segments WARN/FAIL verdicts this run]",
+          "episode_index": 26,
+          "details": {
+            "idle_fraction": 0.475,
+            "idle_runs": 2,
+            "leading_idle_s": 3.2,
+            "trailing_idle_s": 4.4
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 27: ends with 4.8s idle - trim if you want shorter episodes",
+          "episode_index": 27,
+          "details": {
+            "idle_fraction": 0.2926829268292683,
+            "idle_runs": 1,
+            "leading_idle_s": 0.0,
+            "trailing_idle_s": 4.8
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 29: 50% of frames idle in runs >= 2s [published as INFO: held for review - more than 10 new idle-segments WARN/FAIL verdicts this run]",
+          "episode_index": 29,
+          "details": {
+            "idle_fraction": 0.5,
+            "idle_runs": 1,
+            "leading_idle_s": 0.0,
+            "trailing_idle_s": 0.0
+          }
+        }
+      ],
+      "charge": 0
+    },
+    {
+      "id": "stuck-actuator",
+      "title": "Stuck actuators (joints that never move)",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "measured",
+      "summary": "every joint moves wherever the dataset uses it",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "action-saturation",
+      "title": "Action saturation (commands clipped at the limits)",
+      "verdict": "PASS",
+      "weight": 6,
+      "weight_basis": "measured",
+      "summary": "no continuous action dim pinned at a limit above 5% (7 dims checked)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "nan-and-normalization",
+      "title": "NaN / Inf and normalization hazards",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "no NaN/Inf; all dims have usable variance",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "duplicate-and-leakage",
+      "title": "Duplicate episodes / train-eval leakage",
+      "verdict": "PASS",
+      "weight": 2,
+      "weight_basis": "measured",
+      "summary": "no exact, partial or near duplicates",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "outlier-episodes",
+      "title": "Outlier episodes (duration, jerk, velocity, static, end-pose)",
+      "verdict": "INFO",
+      "weight": 6,
+      "weight_basis": "measured",
+      "summary": "0 episode(s) to review, 2 mild, of 31; worst: [22, 23]",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "metrics": {
+          "duration_s": {
+            "0": 1.46,
+            "1": 1.34,
+            "2": 1.42,
+            "3": 1.2,
+            "4": 1.09,
+            "5": 1.02,
+            "6": 1.05,
+            "7": 1.1400000000000001,
+            "8": 1.02,
+            "9": 0.9800000000000001,
+            "10": 1.0,
+            "11": 0.9800000000000001,
+            "12": 0.93,
+            "13": 0.9800000000000001,
+            "14": 0.9800000000000001,
+            "15": 0.95,
+            "16": 0.9400000000000001,
+            "17": 1.33,
+            "18": 1.6199999999999999,
+            "19": 1.3599999999999999,
+            "20": 1.08,
+            "21": 0.9199999999999999,
+            "22": 1.3199999999999998,
+            "23": 1.49,
+            "24": 0.9,
+            "25": 0.77,
+            "26": 0.8,
+            "27": 0.82,
+            "28": 0.58,
+            "29": 0.72,
+            "30": 0.73
+          },
+          "p95_jerk": {
+            "0": 0.4260083960875399,
+            "1": 0.6638633074584935,
+            "2": 0.6440489722449799,
+            "3": 0.6986585134305365,
+            "4": 0.4786141748729563,
+            "5": 0.47681342532031445,
+            "6": 0.6559538380303103,
+            "7": 0.398084503491542,
+            "8": 0.3987228159153696,
+            "9": 0.5150550103415846,
+            "10": 0.6570519426707603,
+            "11": 0.5735540147481467,
+            "12": 0.5233900655700104,
+            "13": 0.4773380079645362,
+            "14": 0.5678347229939489,
+            "15": 0.4999413154546175,
+            "16": 0.7059152530744313,
+            "17": 0.6938774084485733,
+            "18": 0.8339208199369773,
+            "19": 0.5117990418678053,
+            "20": 0.5151809609535447,
+            "21": 0.4531367036574868,
+            "22": 0.48091546080127573,
+            "23": 0.39139183987806736,
+            "24": 0.4477873705907847,
+            "25": 0.695100387951412,
+            "26": 0.6563491550868528,
+            "27": 0.8122031174577418,
+            "28": 0.8551076933282138,
+            "29": 0.9343204250262571,
+            "30": 0.669211151777507
+          },
+          "peak_velocity": {
+            "0": 1.0377335680934565,
+            "1": 1.0136642169425467,
+            "2": 1.564251964117482,
+            "3": 1.2324576261885258,
+            "4": 0.8748849784898614,
+            "5": 1.3606015579083983,
+            "6": 1.1292704342909141,
+            "7": 0.6856052160798555,
+            "8": 0.793983927221744,
+            "9": 1.1414985057749218,
+            "10": 1.3549303101730068,
+            "11": 1.1928206185071302,
+            "12": 0.959981433240148,
+            "13": 0.903106493700521,
+            "14": 1.117791746532477,
+            "15": 0.9706562131429844,
+            "16": 1.7831707896052889,
+            "17": 1.4978763930221355,
+            "18": 1.5378503659819602,
+            "19": 1.0906302978110642,
+            "20": 0.7871528877931939,
+            "21": 0.8751798031666186,
+            "22": 0.8320263635615812,
+            "23": 0.9118994916780147,
+            "24": 0.7543339714148667,
+            "25": 1.0895703149470917,
+            "26": 0.927926354434193,
+            "27": 1.0364162660636946,
+            "28": 1.3153155718962226,
+            "29": 1.4711317349594626,
+            "30": 1.1896319884886033
+          },
+          "velocity_spike": {
+            "0": null,
+            "1": null,
+            "2": null,
+            "3": null,
+            "4": null,
+            "5": null,
+            "6": null,
+            "7": null,
+            "8": null,
+            "9": null,
+            "10": null,
+            "11": null,
+            "12": null,
+            "13": null,
+            "14": null,
+            "15": null,
+            "16": null,
+            "17": null,
+            "18": null,
+            "19": null,
+            "20": null,
+            "21": null,
+            "22": null,
+            "23": null,
+            "24": null,
+            "25": null,
+            "26": null,
+            "27": null,
+            "28": null,
+            "29": null,
+            "30": null
+          },
+          "static_fraction": {
+            "0": 0.4896551724137931,
+            "1": 0.3308270676691729,
+            "2": 0.28368794326241137,
+            "3": 0.3277310924369748,
+            "4": 0.3055555555555556,
+            "5": 0.38613861386138615,
+            "6": 0.3557692307692308,
+            "7": 0.34513274336283184,
+            "8": 0.39603960396039606,
+            "9": 0.3917525773195876,
+            "10": 0.32323232323232326,
+            "11": 0.30927835051546393,
+            "12": 0.42391304347826086,
+            "13": 0.3711340206185567,
+            "14": 0.28865979381443296,
+            "15": 0.43617021276595747,
+            "16": 0.43010752688172044,
+            "17": 0.4015151515151515,
+            "18": 0.2360248447204969,
+            "19": 0.4888888888888889,
+            "20": 0.32710280373831774,
+            "21": 0.3626373626373626,
+            "22": 0.3435114503816794,
+            "23": 0.6283783783783784,
+            "24": 0.43820224719101125,
+            "25": 0.34210526315789475,
+            "26": 0.46835443037974683,
+            "27": 0.37037037037037035,
+            "28": 0.12280701754385964,
+            "29": 0.5070422535211268,
+            "30": 0.1388888888888889
+          },
+          "end_pose_deviation": {
+            "0": 0.5,
+            "1": 0.48881204747800017,
+            "2": 0.3795304653919261,
+            "3": 0.5,
+            "4": 0.5,
+            "5": 0.11738068154626785,
+            "6": 0.1333981073959271,
+            "7": 0.09865350820954139,
+            "8": 0.5,
+            "9": 0.17341661854144538,
+            "10": 0.5,
+            "11": 0.2795986496117908,
+            "12": 0.5,
+            "13": 0.5,
+            "14": 0.5,
+            "15": 0.5,
+            "16": 0.3025191658101121,
+            "17": 0.6600420206282446,
+            "18": 0.3399579793717554,
+            "19": 0.2944965478540368,
+            "20": 0.5,
+            "21": 0.20541616334593238,
+            "22": 0.9527508321379567,
+            "23": 0.5,
+            "24": 0.10919050424257978,
+            "25": 0.1723034803067011,
+            "26": 0.09669935450002745,
+            "27": 0.5,
+            "28": 0.5445720577532636,
+            "29": 0.7109227651523252,
+            "30": 0.5
+          }
+        },
+        "flagged": {
+          "22": [
+            "end_pose_deviation"
+          ],
+          "23": [
+            "static_fraction"
+          ]
+        }
+      },
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "episode 22: IQR outlier on end_pose_deviation",
+          "episode_index": 22,
+          "details": {
+            "metrics": [
+              "end_pose_deviation"
+            ],
+            "far_out": false
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "episode 23: IQR outlier on static_fraction",
+          "episode_index": 23,
+          "details": {
+            "metrics": [
+              "static_fraction"
+            ],
+            "far_out": false
+          }
+        }
+      ],
+      "charge": 0
+    },
+    {
+      "id": "embedded-images",
+      "title": "Embedded images in the parquet shards",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "no image features declared",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "camera-coverage",
+      "title": "Per-episode camera coverage",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "2 camera(s) over 31 episodes; 0 missing segments",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "episode-file-pointers",
+      "title": "Episode file pointers (v3 shard metadata)",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "every shard pointer matches its file's contents (31 episodes, 1 shard(s))",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "broken": [],
+        "judged": 31,
+        "catalogued": 31,
+        "local_shards": 1
+      },
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "video-file-pointers",
+      "title": "Video file pointers (metadata vs repo contents)",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "all 2 metadata-referenced video files exist (the repo file listing)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "referenced": 2,
+        "missing": 0
+      },
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "task-strings",
+      "title": "Task strings",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "31 episodes, 1 tasks in meta/tasks; 0 finding(s)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "reward-done",
+      "title": "Reward / done fields",
+      "verdict": "SKIP",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "no reward/done fields (position-control datasets rarely have them)",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "visual-quality",
+      "title": "Visual quality (blur, lighting)",
+      "verdict": "PASS",
+      "weight": 6,
+      "weight_basis": "placeholder",
+      "summary": "31 episodes x 2 camera(s) sampled; median blur observation.images.head_right_rgb 498, observation.images.right_wrist_rgb 399",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "median_blur_per_camera": {
+          "observation.images.head_right_rgb": 497.9051715359951,
+          "observation.images.right_wrist_rgb": 399.2271463501671
+        },
+        "median_p95_brightness_per_camera": {
+          "observation.images.head_right_rgb": 171.0,
+          "observation.images.right_wrist_rgb": 176.0
+        },
+        "median_saturated_fraction_per_camera": {
+          "observation.images.head_right_rgb": 1.3020833333333334e-05,
+          "observation.images.right_wrist_rgb": 7.161458333333333e-05
+        }
+      },
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "deployment-readiness",
+      "title": "Deployment readiness (would this dataset serve a policy?)",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "no deployment blockers found",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "stats-f32-fingerprint",
+      "title": "Stats f32 accumulation fingerprint",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "no float32-accumulation fingerprint in 5 sampled episode(s)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    }
+  ]
+}
