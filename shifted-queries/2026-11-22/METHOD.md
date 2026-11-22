@@ -106,7 +106,11 @@ D=shifted-queries/2026-11-22
 /tmp/kinema-phase2-v3/bin/python -I $D/probe.py r1:c1:f0
 /tmp/kinema-phase2-v2/bin/python -I $D/probe.py r71:c1:f1
 /tmp/kinema-phase2-v2/bin/python -I $D/probe.py r94:c1:f1
-python $D/make_report.py
+# Post-hoc, descriptive only (not preregistered): stream rate, frame count and pts range
+/tmp/kinema-phase2-v3/bin/python -I $D/video_facts.py r1:c1:f0
+/tmp/kinema-phase2-v2/bin/python -I $D/video_facts.py r71:c1:f1
+/tmp/kinema-phase2-v2/bin/python -I $D/video_facts.py r94:c1:f1
+python $D/make_report.py   # needs numpy only
 python -m pytest tests/test_shifted_queries.py -q
 /tmp/kinema-phase2-v2/bin/python -I -m unittest discover -s $D -p 'test_probe_env.py'
 ```

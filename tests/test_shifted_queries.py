@@ -166,3 +166,43 @@ def test_fineart_worst_grid_anchor_matches_phase2_decoder_probe():
     phase2 = json.loads((ROOT / "loader-verification/2026-11-22/evidence/r1_c1_f0_decoder.json").read_text())
     rows = {p["position"]: p["row_index"] for p in phase2["probes"]}
     assert record["plan"]["anchors"] == {"first": rows["first"], "middle": rows["middle"], "worst_grid": rows["worst_grid"], "last": rows["last"]}
+
+
+# --- report consistency -------------------------------------------------------
+
+def _report():
+    return json.loads((HERE / "report.json").read_text())
+
+
+def test_report_verdicts_recompute_from_evidence_with_preregistered_rules():
+    report = _report()
+    assert report["preregistered_files"] == json.loads((HERE / "preregistration.json").read_text())["sha256"]
+    for case in report["cases"]:
+        probe = json.loads((HERE / "evidence" / f"{case['case_id'].replace(':', '_')}_probe.json").read_text())
+        assert probe["status"] == "executed" and probe["inputs_rehashed_ok"]
+        summary = qp.summarize(probe["batches"])
+        for bucket, stats in case["buckets"].items():
+            assert stats["counts"] == summary[bucket]
+            assert stats["verdict"] == qp.bucket_verdict(summary[bucket])
+        loader = [b for b in probe["batches"] if b["query_class"] == "loader_derived"]
+        bad = sum(b["outcome"] != "ok" for b in loader)
+        expected = "refuted" if bad == 0 else ("confirmed" if any(b["outcome"] == "tolerance_error" for b in loader) else "unresolved")
+        assert case["conclusions"]["shifted_loader_derived_lookup"]["result"] == expected
+        assert not any(b["outcome"] == "harness_discrepancy" for b in probe["batches"])
+        assert {b["config"] for b in probe["batches"]} == {b["config"] for b in json.loads((HERE / "plan" / f"{case['case_id'].replace(':', '_')}.json").read_text())["plan"]["batches"]}
+
+
+def test_report_keeps_scope_narrow_and_originals_verbatim():
+    report = _report()
+    phase2 = {c["case_id"]: c for c in json.loads((ROOT / "loader-verification/2026-11-22/report.json").read_text())["cases"]}
+    for case in report["cases"]:
+        assert case["conclusions"]["full_loader"]["result"] == "unresolved"
+        assert case["conclusions"]["default_torchcodec_backend"]["result"] == "unresolved"
+        scope = case["conclusions"]["shifted_loader_derived_lookup"]["scope"]
+        assert case["loader_release"] in scope and "pyav" in scope and "direct decoder" in scope and f"episode {case['episode']}" in scope
+        assert case["original"]["assertion"] == AUDIT_CASES[case["case_id"]]["message"]
+        assert case["original"]["phase2_classification"] == phase2[case["case_id"]]["classification"]
+        assert set(case["conclusions"]["nominal_grid_comparator"].values()) <= {"tolerance failure observed", "all within tolerance", "unresolved"}
+    text = (HERE / "report.md").read_text() + (HERE / "severity-proposal.md").read_text()
+    for banned in ("accuracy of", "improves training", "training benefit"):
+        assert banned not in text.lower()
