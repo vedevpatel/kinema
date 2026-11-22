@@ -190,7 +190,8 @@ def test_leaderboard_rescore_site(tmp_path):
     (out / "data.json").write_text(json.dumps({"generated": "2026-11-14 00:01 UTC",
                                                "datasets": entries}))
     stamp = "audited 2026-11-13 22:10 UTC by"
-    (out / "dataset" / "org--ds.html").write_text(f"<h2>Health score: 94/100</h2><p>{stamp}</p>")
+    (out / "dataset" / "org--ds.html").write_text(
+        f"<title>org/ds - kinema audit</title><h2>Health score: 94/100</h2><p>{stamp}</p>")
 
     assert lb.rescore_site(out) == 0
 
@@ -203,8 +204,11 @@ def test_leaderboard_rescore_site(tmp_path):
     assert all(e["report"]["score_model"] == "tiered-v3" for e in by_id.values() if "report" in e)
     assert "report" not in by_id["org/gated"]
 
+    # the legacy page (render-time "audited" stamp) became a dateless redirect
     page = (out / "dataset" / "org--ds.html").read_text()
-    assert "Health score: 90/100" in page and stamp in page and "tiered-v3" in page
+    target = f"../d/{lb.audit_page_id('org/ds')}.html"
+    assert f'url={target}"' in page and "Health score" not in page and "2026-11-13" not in page
+    assert "<span class=score>90</span>/100" in (out / "d" / target.removeprefix("../d/")).read_text()
     assert json.loads((out / "dataset" / "org--dup.json").read_text())["score"] == 98
     index = (out / "index.html").read_text()
     assert "tiered-v3" in index and "legacy-v0" not in index
@@ -451,13 +455,18 @@ def test_rescore_drops_a_stale_waiver():
     assert stuck["charge"] == 10 and "waived_by" not in stuck and "waiver_evidence" not in stuck
 
 
-def test_dataset_page_annotates_the_waived_row():
+def test_audit_page_annotates_the_waived_row():
     lb = _load_leaderboard()
-    waived = lb.render_dataset_page(report_from_dict(_stored_pair([8], [8, 23])), audited="x")
-    assert "Health score: 90/100" in waived
-    assert "charge waived - same episodes as idle-segments" in waived
-    charged = lb.render_dataset_page(report_from_dict(_stored_pair([8], [30, 31])), audited="x")
-    assert "Health score: 84/100" in charged and "charge waived" not in charged
+
+    def page(rep):  # stored score and charge fields, as the board rescore leaves them
+        return lb.render_audit_page({"id": "org/ds", "engine": "e0",
+                                     "report": lb.rescore_report_dict(rep)}, "e0")
+
+    waived = page(_stored_pair([8], [8, 23]))
+    assert "<span class=score>90</span>/100" in waived
+    assert "charge waived: same episodes as idle-segments" in waived
+    charged = page(_stored_pair([8], [30, 31]))
+    assert "<span class=score>84</span>/100" in charged and "charge waived" not in charged
 
 
 def test_info_only_overlap_does_not_waive_separate_warn_defects():
