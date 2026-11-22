@@ -1,0 +1,350 @@
+{
+  "source": "introvoyz041/kuka_lerobot",
+  "format_version": "v2.0",
+  "episodes": 5,
+  "frames": 47,
+  "fps": 10.0,
+  "truncated": true,
+  "video_audited": 5,
+  "score": 75,
+  "score_model": "tiered-v3",
+  "verdict": "FAIL",
+  "checks": [
+    {
+      "id": "stats-drift",
+      "title": "Stats drift (stored normalization stats vs actual data)",
+      "verdict": "INFO",
+      "weight": 6,
+      "weight_basis": "measured",
+      "summary": "data matches stored range (worst 0% of the FAIL threshold)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "sampled subset, too few loaded episodes for a bootstrap reference: only gross mean/std shifts and range containment are checked",
+          "episode_index": null,
+          "details": {}
+        }
+      ],
+      "charge": 0
+    },
+    {
+      "id": "timestamp-grid",
+      "title": "Timestamp grid (spacing, monotonic, start at 0)",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "evenly spaced at 10 fps and monotonic",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "dropped-frames",
+      "title": "Dropped / duplicated frames",
+      "verdict": "FAIL",
+      "weight": 2,
+      "weight_basis": "measured",
+      "summary": "35 unreadable data file(s)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "robustness": {
+          "probed": [
+            "unit-milli",
+            "unit-kilo",
+            "order-reversed",
+            "half-sample"
+          ]
+        }
+      },
+      "findings": [
+        {
+          "severity": "FAIL",
+          "message": "35 data file(s) cannot be read: data/chunk-000/episode_000000.parquet (the Hub cannot serve data/chunk-000/episode_000000.parquet: Xet storage has no data for it (RuntimeError: Task error: File reconstruction error: CAS Client Error: Request error: HTTP s ... [truncated]); data/chunk-005/episode_005382.parquet (the Hub cannot serve data/chunk-005/episode_005382.parquet: Xet storage has no data for it (RuntimeError: Task error: File reconstruction error: CAS Client Error: Request error: HTTP s ... [truncated]); data/chunk-010/episode_010763.parquet (the Hub cannot serve data/chunk-010/episode_010763.parquet: Xet storage has no data for it (RuntimeError: Task error: File reconstruction error: CAS Client Error: Request error: HTTP s ... [truncated]) - loading this dataset will crash; their episodes were not audited",
+          "episode_index": null,
+          "details": {
+            "files": [
+              "data/chunk-000/episode_000000.parquet",
+              "data/chunk-005/episode_005382.parquet",
+              "data/chunk-010/episode_010763.parquet",
+              "data/chunk-016/episode_016145.parquet",
+              "data/chunk-021/episode_021526.parquet",
+              "data/chunk-026/episode_026908.parquet",
+              "data/chunk-032/episode_032289.parquet",
+              "data/chunk-037/episode_037671.parquet",
+              "data/chunk-043/episode_043052.parquet",
+              "data/chunk-048/episode_048434.parquet",
+              "data/chunk-053/episode_053815.parquet",
+              "data/chunk-064/episode_064578.parquet",
+              "data/chunk-075/episode_075341.parquet",
+              "data/chunk-080/episode_080723.parquet",
+              "data/chunk-086/episode_086104.parquet",
+              "data/chunk-091/episode_091486.parquet",
+              "data/chunk-096/episode_096867.parquet",
+              "data/chunk-102/episode_102249.parquet",
+              "data/chunk-107/episode_107630.parquet",
+              "data/chunk-113/episode_113012.parquet",
+              "data/chunk-118/episode_118393.parquet",
+              "data/chunk-123/episode_123775.parquet",
+              "data/chunk-129/episode_129156.parquet",
+              "data/chunk-134/episode_134538.parquet",
+              "data/chunk-139/episode_139919.parquet",
+              "data/chunk-150/episode_150682.parquet",
+              "data/chunk-156/episode_156064.parquet",
+              "data/chunk-161/episode_161445.parquet",
+              "data/chunk-166/episode_166827.parquet",
+              "data/chunk-182/episode_182971.parquet",
+              "data/chunk-188/episode_188353.parquet",
+              "data/chunk-193/episode_193734.parquet",
+              "data/chunk-199/episode_199116.parquet",
+              "data/chunk-204/episode_204497.parquet",
+              "data/chunk-209/episode_209879.parquet"
+            ]
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "no per-episode video segments in the metadata (v2.x or no videos): video frame counts not cross-checked",
+          "episode_index": null,
+          "details": {}
+        }
+      ],
+      "charge": 25
+    },
+    {
+      "id": "calibration-drift",
+      "title": "Calibration drift (action vs state on still frames)",
+      "verdict": "SKIP",
+      "weight": 10,
+      "weight_basis": "measured",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "not enough still frames to measure calibration",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "idle-segments",
+      "title": "Idle segments (policy learns to do nothing)",
+      "verdict": "PASS",
+      "weight": 6,
+      "weight_basis": "measured",
+      "summary": "no episode starts idle or idles >= 30%",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "stuck-actuator",
+      "title": "Stuck actuators (joints that never move)",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "measured",
+      "summary": "every joint moves wherever the dataset uses it",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "action-saturation",
+      "title": "Action saturation (commands clipped at the limits)",
+      "verdict": "PASS",
+      "weight": 6,
+      "weight_basis": "measured",
+      "summary": "no continuous action dim pinned at a limit above 5% (4 dims checked)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "nan-and-normalization",
+      "title": "NaN / Inf and normalization hazards",
+      "verdict": "INFO",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "2 constant dim(s)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [
+        {
+          "severity": "INFO",
+          "message": "action dim 3: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 3
+          }
+        },
+        {
+          "severity": "INFO",
+          "message": "action dim 4: constant (std=0) - carries no signal; if it ever varies at deployment, mean/std normalization (std + 1e-8) blows it up. Usually padding; consider dropping it",
+          "episode_index": null,
+          "details": {
+            "feature": "action",
+            "dim": 4
+          }
+        }
+      ],
+      "charge": 0
+    },
+    {
+      "id": "duplicate-and-leakage",
+      "title": "Duplicate episodes / train-eval leakage",
+      "verdict": "PASS",
+      "weight": 2,
+      "weight_basis": "measured",
+      "summary": "no exact, partial or near duplicates",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "outlier-episodes",
+      "title": "Outlier episodes (duration, jerk, velocity, static, end-pose)",
+      "verdict": "SKIP",
+      "weight": 6,
+      "weight_basis": "measured",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "fewer than 8 episodes - IQR flagging needs a population",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "embedded-images",
+      "title": "Embedded images in the parquet shards",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "no image features declared",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "camera-coverage",
+      "title": "Per-episode camera coverage",
+      "verdict": "SKIP",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "episode videos only partially fetched - camera coverage needs a full video audit",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "episode-file-pointers",
+      "title": "Episode file pointers (v3 shard metadata)",
+      "verdict": "SKIP",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "v2.x layout: one parquet per episode, no shard pointers to check",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "video-file-pointers",
+      "title": "Video file pointers (metadata vs repo contents)",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "all 209880 metadata-referenced video files exist (the repo file listing)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {
+        "referenced": 209880,
+        "missing": 0
+      },
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "task-strings",
+      "title": "Task strings",
+      "verdict": "PASS",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "5 episodes, 1 tasks in meta/tasks; 0 finding(s)",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "reward-done",
+      "title": "Reward / done fields",
+      "verdict": "SKIP",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "no reward/done fields (position-control datasets rarely have them)",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "visual-quality",
+      "title": "Visual quality (blur, lighting)",
+      "verdict": "SKIP",
+      "weight": 6,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "no video files found for the loaded episodes",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "deployment-readiness",
+      "title": "Deployment readiness (would this dataset serve a policy?)",
+      "verdict": "PASS",
+      "weight": 10,
+      "weight_basis": "placeholder",
+      "summary": "no deployment blockers found",
+      "skipped": false,
+      "skip_reason": "",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    },
+    {
+      "id": "stats-f32-fingerprint",
+      "title": "Stats f32 accumulation fingerprint",
+      "verdict": "SKIP",
+      "weight": 8,
+      "weight_basis": "placeholder",
+      "summary": "",
+      "skipped": true,
+      "skip_reason": "no per-episode stats",
+      "details": {},
+      "findings": [],
+      "charge": 0
+    }
+  ]
+}
