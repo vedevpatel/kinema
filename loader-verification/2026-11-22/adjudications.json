@@ -1,0 +1,117 @@
+{
+  "r15:c17:f0": {
+    "classification": "unresolved",
+    "evidence": [
+      "r15_c17_f0_loader.json"
+    ],
+    "observation": "81/81 episode rows selected; first, middle and last item access succeeded. Source has no stats file; feature is state, not observation.state.",
+    "reason": "Raw frame loading cannot settle the stated inference normalization failure without a policy/checkpoint and feature mapping.",
+    "remaining_gap": "Test a specified policy/checkpoint and feature mapping.",
+    "tested_scope": "LeRobot 0.3.3 v2.0 episode-0 iteration"
+  },
+  "r1:c1:f0": {
+    "classification": "unresolved",
+    "evidence": [
+      "r1_c1_f0_loader_0.4.0.json",
+      "r1_c1_f0_loader_0.5.1.json",
+      "r1_c1_f0_decoder.json"
+    ],
+    "observation": "Pinned episode has 26946 rows, about 1/90-s spacing, and maximum 30-fps grid deviation 0.022225 s. Direct decoder returned frames at first/middle/worst-grid/last raw frame timestamps across all four cameras (16/16). No shifted training query (raw timestamp + k/30) was tested. LeRobotDataset construction in 0.4.0 and 0.5.1 fails earlier on source dtype language.",
+    "reason": "Successful raw-timestamp lookups do not establish that shifted training queries pass the default tolerance. The schema failure prevents exercising the full loader query path, so the original tolerance consequence is not settled.",
+    "remaining_gap": "Probe pinned shifted queries (raw timestamp + k/30) on the relevant video path or use a compatible unmodified loader; do not change the source schema just to reach the probe.",
+    "tested_scope": "LeRobot 0.4.0 v3.0 direct pyav video lookup at raw episode-40455 frame timestamps only"
+  },
+  "r256:c2:f0": {
+    "classification": "refuted",
+    "evidence": [
+      "r256_c2_f0_loader.json"
+    ],
+    "observation": "Pinned parquet omits frame_index; all 229 rows were selected, and first, middle and last item/video access succeeded. Returned feature keys omit frame_index.",
+    "reason": "The default dataset path tested does not require frame_index to index or access these frames.",
+    "remaining_gap": "Other downstream tools that explicitly require frame_index were not tested.",
+    "tested_scope": "LeRobot 0.3.3 v2.0 episode-0 item and video access"
+  },
+  "r261:c2:f4": {
+    "classification": "confirmed",
+    "evidence": [
+      "r261_c2_f4_loader.json",
+      "r261_c2_f4_hand_right.json"
+    ],
+    "observation": "Pinned catalog declares 3241 frames and hand_right video ending at 544.0667 s; selected shard contains 9903 rows labeled episode 59. First/middle hand_right lookups succeeded; final row timestamp 109.1667 s shifts to 545.2 s and hand_right lookup fails. Full item access at the final row first fails on head camera.",
+    "reason": "The specific hand_right frame access fails after the declared segment end on the affected pinned episode.",
+    "remaining_gap": "Other cameras and training behavior beyond first/middle/last were not exhaustively tested; duplicate episode labels may be the underlying source issue.",
+    "tested_scope": "LeRobot 0.4.0 v3.0 episode-59 item and hand_right lookup"
+  },
+  "r36:c12:f1": {
+    "classification": "confirmed",
+    "evidence": [
+      "r36_c12_f1_loader.json"
+    ],
+    "observation": "Pinned catalog names file-101 and length 181; selected loader table had 85 rows from that shard but zero rows labeled episode 129.",
+    "reason": "The normal episode-selection path does not expose the catalogued episode from the metadata-named file.",
+    "remaining_gap": "No training run; cannot establish whether a trainer silently omits it or errors.",
+    "tested_scope": "LeRobot 0.4.0 v3.0 episode-129 selection from metadata-named file"
+  },
+  "r51:c17:f1": {
+    "classification": "unresolved",
+    "evidence": [
+      "r51_c17_f1_loader.json"
+    ],
+    "observation": "93/93 episode rows selected; first, middle and last item access succeeded. Source has no stats file; feature is actions, not action.",
+    "reason": "The asserted action inference normalization cannot be tested without a named action feature mapping and policy checkpoint.",
+    "remaining_gap": "Test a specified policy/checkpoint and feature mapping.",
+    "tested_scope": "LeRobot 0.3.3 v2.0 episode-0 iteration"
+  },
+  "r67:c17:f0": {
+    "classification": "unresolved",
+    "evidence": [
+      "r67_c17_f0_loader.json"
+    ],
+    "observation": "98/98 episode rows selected; first, middle and last item access succeeded. Source has no stats file, but declares state/actions and no observation.state.",
+    "reason": "A loader returning raw frames does not test the stated inference-policy normalization consequence. No policy configuration or checkpoint is specified; the named feature is absent.",
+    "remaining_gap": "Test a specified policy/checkpoint and its feature mapping and normalization path.",
+    "tested_scope": "LeRobot 0.3.3 v2.0 episode-0 iteration"
+  },
+  "r71:c1:f1": {
+    "classification": "refuted",
+    "evidence": [
+      "r71_c1_f1_loader.json",
+      "r71_c1_f1_decoder.json"
+    ],
+    "observation": "Pinned first timestamp is 0.733333 s. Direct decoder returned frames at first/middle/last raw timestamps for all three cameras (9/9). Dataset construction separately raises KeyError(stats) in episode metadata.",
+    "reason": "A nonzero start did not make the tested timestamp-to-video lookups miss.",
+    "remaining_gap": "The other 22 named episodes and complete dataset iteration remain untested; episode-stats schema blocks construction.",
+    "tested_scope": "LeRobot 0.3.3 v2.1 direct pyav video lookup on episode 0"
+  },
+  "r75:c12:f4": {
+    "classification": "confirmed",
+    "evidence": [
+      "r75_c12_f4_loader.json"
+    ],
+    "observation": "Pinned catalog names file-006 and length 71; selected loader table had 751774 rows from that shard but zero rows labeled episode 2035.",
+    "reason": "The normal episode-selection path does not expose the catalogued episode from the metadata-named file.",
+    "remaining_gap": "No training run; cannot establish whether a trainer silently omits it, errors, or uses another representation.",
+    "tested_scope": "LeRobot 0.4.0 v3.0 episode-2035 selection from metadata-named file"
+  },
+  "r79:c17:f0": {
+    "classification": "unresolved",
+    "evidence": [
+      "r79_c17_f0_loader.json"
+    ],
+    "observation": "Pinned info.json omits features; construction raises KeyError(features) before episode access. No stats file is present.",
+    "reason": "The observed schema failure is separate from the asserted missing-stats inference consequence. No normalization path was reached.",
+    "remaining_gap": "Identify a supported feature schema and specific policy/checkpoint before an inference test.",
+    "tested_scope": "LeRobot 0.3.3 v2.0 dataset construction"
+  },
+  "r94:c1:f1": {
+    "classification": "confirmed",
+    "evidence": [
+      "r94_c1_f1_loader.json",
+      "r94_c1_f1_decoder.json"
+    ],
+    "observation": "Default dataset construction rejects timestamp spacing after float32 conversion of epoch-scale values. Direct decode_video_frames at pinned first/middle/last raw timestamps failed for all four cameras (12/12); video times were about 0\u201315 s versus raw timestamps about 1.784e9 s.",
+    "reason": "The asserted video lookup miss is reproduced on the affected pinned episode with the relevant decoder, although dataset construction fails earlier.",
+    "remaining_gap": "The other 39 named episodes were not probed; the first load failure is timestamp validation rather than a video lookup error.",
+    "tested_scope": "LeRobot 0.3.3 v2.0 episode-0 construction and direct pyav video lookup"
+  }
+}
