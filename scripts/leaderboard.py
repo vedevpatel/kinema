@@ -4,6 +4,12 @@ Hugging Face Hub and render a static site (docs/ -> GitHub Pages).
 
 Usage: python scripts/leaderboard.py [--limit 50] [--out docs] [--max-episodes 50]
        python scripts/leaderboard.py --rescore [--out docs]
+       python scripts/leaderboard.py --render-pages [--out docs] [--max-episodes 250]
+
+Every board row links to a shareable audit page, docs/d/<page id>.html,
+rendered from data.json alone (see "shareable per-dataset audit pages").
+--render-pages re-renders index.html and those pages from the stored
+data.json without auditing or rescoring anything.
 
 --rescore recomputes every stored score from its stored per-check verdicts
 under the current score model (kinema.report.SCORE_MODEL) and re-renders
@@ -1523,8 +1529,12 @@ def _correction_summary(entries: list[dict]) -> tuple[str, int, int]:
             sum(c["status"] == "invalidated-pending-reaudit" for c in corrections))
 
 
-def render_index(entries: list[dict], generated: str, harm_table: bool = False, max_episodes: int = 0) -> str:
+def render_index(entries: list[dict], generated: str, harm_table: bool = False, max_episodes: int = 0,
+                 page_ids: dict[str, str] | None = None) -> str:
     engine = engine_version()
+    # every row links to its audit page (docs/d/); a page-id collision raises
+    # here, before any link is rendered
+    ids = page_ids if page_ids is not None else audit_page_ids(entries)
     corrected_at, verified, pending = _correction_summary(entries)
     correction_note = (
         f". Targeted video-pointer corrections through {esc(corrected_at)}: "
@@ -1545,7 +1555,7 @@ def render_index(entries: list[dict], generated: str, harm_table: bool = False, 
         n_stale += bool(stale)
         if e.get("report"):
             r = e["report"]
-            link = f"<a href='dataset/{esc(e['slug'])}.html'>{esc(e['id'])}</a>"
+            link = audit_page_link(ids[e["id"]], e["id"])
             if e.get("lane") == "new":
                 link += ' <span class=dim title="newest-uploads probation lane">(new)</span>'
             if e.get("lane") == "flagship":
@@ -1575,7 +1585,7 @@ def render_index(entries: list[dict], generated: str, harm_table: bool = False, 
                        else f"audited at {r.get('episodes')} episodes - deepening to {max_episodes} queued")
                 checks += f' <span class=dim title="{why}">(stale - re-audit needed)</span>'
         else:
-            link = esc(e["id"])
+            link = audit_page_link(ids[e["id"]], e["id"])
             score = '<span class=dim>-</span>'
             verdict = badge("NA")
             label = _STATUS_LABELS.get(e.get("status") or "error", _STATUS_LABELS["error"])
@@ -1625,6 +1635,606 @@ def render_index(entries: list[dict], generated: str, harm_table: bool = False, 
         "</script>"
     )
     return page("LeRobot dataset health leaderboard", body)
+
+
+# --- shareable per-dataset audit pages (docs/d/) ----------------------------
+# One static page per board row, rendered from the serialized docs/data.json
+# alone: no live fetches, no scripts, no render clock. The same data.json,
+# engine hash and --max-episodes give byte-identical pages. Every dataset
+# string (ids, reasons, summaries, findings) is untrusted: it is escaped and
+# stripped of control/bidi characters, and it never becomes a path or a URL
+# by itself. Page files are named by audit_page_id; outbound links are
+# rebuilt from validated parts and must pass an https host allowlist.
+
+AUDIT_PAGE_DIR = "d"
+AUDIT_PAGE_SCHEME = "kinema-audit-page/1"
+# prune_audit_pages deletes only files that carry this marker in their head
+_AUDIT_PAGE_MARKER = f'<meta name="generator" content="{AUDIT_PAGE_SCHEME}">'
+_PAGE_READABLE_MAX = 48
+_PAGE_ID_RE = re.compile(r"[a-z0-9][a-z0-9_-]{0,47}-[0-9a-f]{12}")
+_HUB_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,95}")
+_PATH_PART_RE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9._-]{0,199}")
+_GIT_SHA_RE = re.compile(r"[0-9a-f]{40}")
+_GCS_DIGEST_RE = re.compile(r"gcs:[0-9a-f]{12}")
+_GCS_BUCKET_RE = re.compile(r"[a-z0-9][a-z0-9._-]{1,61}[a-z0-9]")
+_AUDITED_AT_RE = re.compile(r"(\d{4}-\d\d-\d\d)T(\d\d:\d\d:\d\d)Z")
+_OUTBOUND_HOSTS = frozenset({"huggingface.co", "console.cloud.google.com", "github.com"})
+# C0/C1 controls (tab and newline kept), bidi overrides/isolates, lone surrogates
+_UNSAFE_CHARS = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f\u061c\u200e\u200f"
+                           "\u202a-\u202e\u2066-\u2069\ud800-\udfff]")
+_SERIOUS_SHOWN = 20  # WARN/FAIL findings per check before the rest fold away
+_NR = "<span class=dim>not recorded</span>"
+
+AUDIT_PAGE_CSS = """
+h1.id { font-size: 1.5rem; line-height: 1.3; margin: .5rem 0 .2rem; }
+h1.id, code { overflow-wrap: anywhere; }
+td, li, p, summary { overflow-wrap: break-word; }
+.badge { white-space: nowrap; }
+.state { border-left: 4px solid #888; background: #8881; padding: .6rem .9rem; margin: 1rem 0; }
+.state p { margin: .2rem 0; }
+.s-current { border-color: #2da44e; }
+.s-stale { border-color: #bf8700; }
+.s-error, .s-gated { border-color: #cf222e; }
+.kv th { position: static; width: 12rem; vertical-align: top; }
+.kv td, .checks td { vertical-align: top; }
+.scroll { overflow-x: auto; }
+.findings h3 { font-size: 1rem; margin: 1.2rem 0 .3rem; }
+.findings ul, .limits { padding-left: 1.2rem; }
+.findings li { margin: .15rem 0; }
+summary { cursor: pointer; color: #0969da; margin: .3rem 0; }
+footer { margin: 2.5rem 0 1rem; font-size: .9rem; }
+@media (max-width: 640px) {
+  body { margin: 1rem auto; }
+  .kv tr, .checks tr { display: block; border-bottom: 1px solid #8884; padding: .35rem 0; }
+  .kv th, .kv td, .checks td { display: block; width: auto; border: 0; padding: .1rem 0; }
+  .checks thead { display: none; }
+  .checks td.v, .checks td.c { display: inline-block; margin-right: .8rem; }
+  .checks td.c::before { content: "score charge "; color: #888; }
+}
+"""
+
+
+class PageIdCollision(RuntimeError):
+    """Two board rows would share one audit page: refuse rather than overwrite."""
+
+
+def _t(s) -> str:
+    """Untrusted text -> inert HTML text: escaped (quotes too), with control,
+    bidi-override and lone-surrogate characters replaced by U+FFFD."""
+    return html.escape(_UNSAFE_CHARS.sub("\ufffd", "" if s is None else str(s)), quote=True)
+
+
+def _page_digest(row_id: str) -> str:
+    import hashlib
+
+    return hashlib.sha256(row_id.encode("utf-8", "surrogatepass")).hexdigest()[:12]
+
+
+def audit_page_id(row_id) -> str:
+    """A row's stable, URL-safe page id: a lowercase readable prefix plus 12
+    hex of the SHA-256 of the exact row id (nested repo//subpath ids too).
+    The prefix is lossy and only for people; the digest carries identity,
+    and audit_page_ids refuses any case-folded clash. Never starts with '_'
+    or '.', which the Pages (Jekyll) build would silently drop."""
+    if not isinstance(row_id, str) or not row_id:
+        raise ValueError(f"board row id must be a non-empty string, got {row_id!r}")
+    readable = re.sub(r"[^a-z0-9_]+", "-", row_id.lower()).strip("-_")
+    readable = readable[:_PAGE_READABLE_MAX].rstrip("-_") or "dataset"
+    pid = f"{readable}-{_page_digest(row_id)}"
+    if not _PAGE_ID_RE.fullmatch(pid):  # a guard on the construction, not a filter
+        raise ValueError(f"unsafe audit page id {pid!r}")
+    return pid
+
+
+def audit_page_ids(entries: list) -> dict[str, str]:
+    """{row id: page id} for every row. Raises PageIdCollision when two rows
+    (a duplicated id included) would land on one page, compared case-folded
+    so a case-insensitive checkout cannot merge them either."""
+    ids: dict[str, str] = {}
+    owner: dict[str, str] = {}
+    for e in entries:
+        rid = e.get("id") if isinstance(e, dict) else None
+        pid = audit_page_id(rid)
+        key = pid.casefold()
+        if key in owner:
+            raise PageIdCollision(f"audit page {pid}.html would serve both {owner[key]!r} "
+                                  f"and {rid!r}; refusing to overwrite")
+        owner[key] = rid
+        ids[rid] = pid
+    return ids
+
+
+def audit_page_link(pid: str, row_id: str) -> str:
+    """The board row's link: relative, so it resolves under the Pages project path."""
+    if not _PAGE_ID_RE.fullmatch(pid):
+        raise ValueError(f"unsafe audit page id {pid!r}")
+    return f"<a href='{AUDIT_PAGE_DIR}/{pid}.html'>{_t(row_id)}</a>"
+
+
+def safe_outbound_url(url) -> str | None:
+    """url if it is a plain https link to an allowlisted host, else None."""
+    import urllib.parse
+
+    if (not isinstance(url, str) or _UNSAFE_CHARS.search(url) or "\\" in url
+            or any(c.isspace() for c in url)):
+        return None
+    try:
+        u = urllib.parse.urlsplit(url)
+        if u.port is not None:
+            return None
+    except ValueError:
+        return None
+    if u.scheme != "https" or u.netloc != u.hostname or u.hostname not in _OUTBOUND_HOSTS:
+        return None  # netloc == hostname: no userinfo, no port, no case games
+    return url
+
+
+def _ext(url: str | None, label_html: str) -> str:
+    url = safe_outbound_url(url)
+    if url is None:
+        return label_html
+    return f'<a href="{_t(url)}" rel="noopener noreferrer">{label_html}</a>'
+
+
+def _hub_dataset_url(row_id: str, revision=None) -> str | None:
+    """The Hub tree for a row (at the audited commit when that is a valid
+    SHA), built from validated, percent-quoted parts; None if the id is not
+    a plausible Hub dataset id."""
+    import urllib.parse
+
+    base, sub = _split_subpath(row_id)
+    parts = base.split("/")
+    sub_parts = sub.split("/") if sub else []
+    if len(parts) != 2 or not all(_HUB_NAME_RE.fullmatch(p) for p in parts):
+        return None
+    if not all(_PATH_PART_RE.fullmatch(p) for p in sub_parts):
+        return None
+    q = urllib.parse.quote
+    url = "https://huggingface.co/datasets/" + "/".join(q(p, safe="") for p in parts)
+    ref = revision if isinstance(revision, str) and _GIT_SHA_RE.fullmatch(revision) else None
+    if ref or sub_parts:
+        url += f"/tree/{ref or 'main'}" + "".join("/" + q(p, safe="") for p in sub_parts)
+    return safe_outbound_url(url)
+
+
+def _rlds_url(e: dict) -> str | None:
+    """The row's recorded GCS bucket/prefix; no link when either is missing
+    or malformed (never a guessed default bucket)."""
+    import urllib.parse
+
+    bucket, prefix = e.get("rlds_bucket"), e.get("rlds_prefix")
+    if not (isinstance(bucket, str) and _GCS_BUCKET_RE.fullmatch(bucket) and isinstance(prefix, str)):
+        return None
+    parts = prefix.strip("/").split("/")
+    if not all(_PATH_PART_RE.fullmatch(p) for p in parts):
+        return None
+    return safe_outbound_url("https://console.cloud.google.com/storage/browser/" + bucket + "/"
+                             + "/".join(urllib.parse.quote(p, safe="") for p in parts))
+
+
+def _as_dict(x) -> dict:
+    return x if isinstance(x, dict) else {}
+
+
+def _as_list(x) -> list:
+    return x if isinstance(x, list) else []
+
+
+def _int(x) -> int | None:
+    return x if isinstance(x, int) and not isinstance(x, bool) else None
+
+
+def _vbadge(v) -> str:
+    if v not in VERDICTS:
+        return '<span class="badge b-NA">not recorded</span>'
+    return badge(v)
+
+
+def _bytes_label(n: int) -> str:
+    return f"{n / 2 ** 30:.1f} GiB" if n >= 2 ** 30 else f"{n / 2 ** 20:.1f} MiB"
+
+
+def _audited_at_html(value) -> str:
+    if not value:
+        return _NR
+    m = _AUDITED_AT_RE.fullmatch(value) if isinstance(value, str) else None
+    if m:
+        return f"<time datetime='{_t(value)}'>{m.group(1)} {m.group(2)} UTC</time>"
+    return f"{_t(value)} <span class=dim>(as recorded; not a recognized timestamp)</span>"
+
+
+def _revision_html(e: dict, is_rlds: bool) -> str:
+    rev = e.get("revision")
+    if not rev:
+        return _NR
+    if isinstance(rev, str) and _GIT_SHA_RE.fullmatch(rev) and not is_rlds:
+        return (_ext(_hub_dataset_url(e["id"], rev), f"<code title='{rev}'>{rev[:12]}</code>")
+                + " <span class=dim>(Hub commit at audit time)</span>")
+    if isinstance(rev, str) and _GCS_DIGEST_RE.fullmatch(rev):
+        return (f"shard-inventory digest <code>{rev[4:]}</code> "
+                "<span class=dim>(RLDS buckets have no commits)</span>")
+    return f"<code>{_t(rev)}</code> <span class=dim>(as recorded; unrecognized format)</span>"
+
+
+def _stale_reasons(e: dict, rep: dict, engine: str, max_episodes: int) -> list[str]:
+    """Why the board queues this stored result for re-audit, in the terms of
+    audit_stale (which decides); HTML-safe fragments."""
+    why = []
+    if e.get("last_audit_error"):
+        why.append(f"the latest re-audit attempt failed ({_t(e['last_audit_error'])}); "
+                   "the result below is from the audit before it")
+    row_engine = e.get("engine")
+    if not row_engine:
+        why.append("the engine that produced it was not recorded")
+    elif row_engine != engine:
+        why.append(f"it was produced by older check logic (engine <code>{_t(row_engine)}</code>; "
+                   f"the board now runs <code>{_t(engine)}</code>)")
+    vid = _int(rep.get("video_audited"))
+    if vid is None or vid < VIDEO_AUDIT_MARK:
+        why.append("it predates the board's current video audit")
+    eps, cap = _int(rep.get("episodes")) or 0, _int(e.get("audit_max_episodes")) or 0
+    if rep.get("truncated") and max(eps, cap) < max_episodes:
+        why.append(f"it read {eps} episodes and a deeper audit ({max_episodes}) is queued")
+    return why
+
+
+def _coverage_limits(e: dict, rep: dict, checks: list, is_rlds: bool) -> list[str]:
+    """Only what the row records about its own coverage; HTML-safe items."""
+    lim = []
+    if is_rlds:
+        lim.append("Metadata and listing only: this audit read the TFDS metadata and the GCS "
+                   "shard listing. It downloaded no episode data and decoded no video.")
+    else:
+        eps, cap = _int(rep.get("episodes")), _int(e.get("audit_max_episodes"))
+        if rep.get("truncated") is True:
+            lim.append(f"Episode sample: the audit loaded {eps if eps is not None else 'an unrecorded number of'} "
+                       "episodes" + (f" (that run's cap was {cap})" if cap else "")
+                       + ". Episodes outside the sample were not checked.")
+        elif rep.get("truncated") is False:
+            lim.append(f"The audit loaded {eps if eps is not None else 'an unrecorded number of'} episodes "
+                       "and did not mark the load as truncated. That is what was read, not a "
+                       "check of every file in the repo.")
+        else:
+            lim.append("Whether the episode load was truncated was not recorded.")
+        size = _int(e.get("data_bytes"))
+        if e.get("sampled") is True:
+            lim.append("The listed parquet payload"
+                       + (f" ({_bytes_label(size)})" if size else "")
+                       + " is over the board's full-download size cap, so only part of it was fetched.")
+        sample = e.get("sample")
+        if isinstance(sample, dict):
+            vids = _int(sample.get("videos"))
+            if vids == 0:
+                lim.append("No video files were fetched for this audit.")
+            elif vids:
+                lim.append(f"{vids} video file(s) were fetched; video checks cover only those files.")
+        else:
+            lim.append("Which episodes and video files the audit read (its sample signature) "
+                       "was not recorded.")
+    skipped = [c for c in checks if c.get("skipped") or c.get("verdict") == "SKIP"]
+    if skipped:
+        lim.append(f"{len(skipped)} of {len(checks)} checks were skipped and say nothing about "
+                   "the data (reasons in the table below).")
+    capped = set()
+    for c in checks:
+        dets = [_as_dict(c.get("details"))] + [_as_dict(f.get("details"))
+                                               for f in _as_list(c.get("findings")) if isinstance(f, dict)]
+        for det in dets:
+            for k, v in det.items():
+                if isinstance(k, str) and k.endswith("_total") and _int(v) is not None:
+                    capped.add((str(c.get("id")), k.removesuffix("_total"), v))
+    if capped:
+        lim.append(f"Stored evidence lists are capped at {_DETAIL_LIST_CAP} entries on the board: "
+                   + ", ".join(f"<code>{_t(cid)}</code> {_t(k)} ({n} in total)" for cid, k, n in sorted(capped))
+                   + ".")
+    if e.get("subpath"):
+        lim.append("Nested dataset: it lives in a subfolder of a larger repo. The recorded "
+                   "revision is the whole repo's commit, and its download count is repo-level.")
+    if is_rlds:
+        lim.append("The recorded revision is what was audited. RLDS buckets have no commits, "
+                   "so the board does not detect later changes to them.")
+    else:
+        lim.append("The recorded revision is what was audited. This page does not check whether "
+                   "the dataset changed since; the nightly job compares Hub commits and queues a "
+                   "re-audit when one moved.")
+    lim.append("These are automated checks over what the audit read. A clean result is not a "
+               "guarantee about the whole dataset or its fitness for training.")
+    return lim
+
+
+def _kv(rows: list[tuple[str, str]]) -> str:
+    return ("<div class=scroll><table class=kv>"
+            + "".join(f"<tr><th>{k}</th><td>{v}</td></tr>" for k, v in rows)
+            + "</table></div>")
+
+
+def _discovery_notes(e: dict) -> list[str]:
+    notes = []
+    if e.get("discovery_current") is False:
+        notes.append("Not listed by the latest discovery run; this stored row is kept from an earlier one.")
+    misses = _int(e.get("discovery_misses"))
+    if misses:
+        notes.append(f"Missing from {misses} fresh discovery run(s) in a row; the board drops a row "
+                     f"after {PRUNE_AFTER_MISSES}.")
+    if e.get("discovery_uncertain"):
+        notes.append("The latest discovery probe for this row errored, which says nothing about the dataset.")
+    corr = e.get("video_pointer_correction")
+    if isinstance(corr, dict):
+        notes.append(f"Video-pointer result corrected {_t(corr.get('at') or 'at an unrecorded time')}: "
+                     f"{_t(corr.get('status') or 'status not recorded')} "
+                     f"({_t(corr.get('scope') or 'scope not recorded')}).")
+    return notes
+
+
+def _finding_li(f: dict) -> str:
+    ep = _int(f.get("episode_index"))
+    msg = str(f.get("message") or "")
+    show_ep = ep is not None and f"episode {ep}" not in msg.lower()  # most messages name it already
+    return (f"<li>{_vbadge(f.get('severity'))} "
+            + (f"<span class=dim>episode {ep}</span> " if show_ep else "")
+            + f"{_t(f.get('message'))}</li>")
+
+
+def _findings_html(checks: list) -> str:
+    rank = {"FAIL": 0, "WARN": 1}
+    groups = []
+    for i, c in enumerate(checks):
+        fs = [f for f in _as_list(c.get("findings")) if isinstance(f, dict)]
+        if fs:
+            serious = sorted((f for f in fs if f.get("severity") in rank),
+                             key=lambda f: rank[f["severity"]])  # stable: FAIL first, order kept
+            other = [f for f in fs if f.get("severity") not in rank]
+            worst = min((rank[f["severity"]] for f in serious), default=2)
+            groups.append((worst, i, c, serious, other))
+    if not groups:
+        return "<p>No findings recorded.</p>"
+    out = []
+    for _, _, c, serious, other in sorted(groups, key=lambda g: g[:2]):
+        n = {s: sum(f.get("severity") == s for f in serious + other) for s in ("FAIL", "WARN", "INFO")}
+        counts = " &middot; ".join(f"{v} {k}" for k, v in n.items() if v)
+        n_odd = len(serious) + len(other) - sum(n.values())
+        if n_odd:
+            counts += f" &middot; {n_odd} unrecognized severity"
+        part = f"<h3><code>{_t(c.get('id'))}</code> <span class=dim>{counts}</span></h3>"
+        if serious:
+            part += "<ul>" + "".join(_finding_li(f) for f in serious[:_SERIOUS_SHOWN]) + "</ul>"
+            if len(serious) > _SERIOUS_SHOWN:
+                part += (f"<details><summary>{len(serious) - _SERIOUS_SHOWN} more warnings and "
+                         "failures</summary><ul>"
+                         + "".join(_finding_li(f) for f in serious[_SERIOUS_SHOWN:]) + "</ul></details>")
+        if other:
+            part += (f"<details><summary>{len(other)} informational note(s)</summary><ul>"
+                     + "".join(_finding_li(f) for f in other) + "</ul></details>")
+        out.append(part)
+    return "<div class=findings>" + "".join(out) + "</div>"
+
+
+def _checks_table(checks: list) -> str:
+    if not checks:
+        return "<p>No check results recorded.</p>"
+    rows = []
+    for c in checks:
+        skipped = bool(c.get("skipped")) or c.get("verdict") == "SKIP"
+        text = c.get("skip_reason") if skipped else c.get("summary")
+        charge = c.get("charge")
+        charge_html = (f"&minus;{charge}" if _int(charge) else "0" if charge == 0
+                       else "<span class=dim>-</span>")
+        waiver = (f" <span class=dim>(charge waived: same episodes as {_t(c['waived_by'])})</span>"
+                  if c.get("waived_by") else "")
+        rows.append(
+            f"<tr><td><code>{_t(c.get('id'))}</code><br><span class=dim>{_t(c.get('title'))}</span></td>"
+            f"<td class=v>{_vbadge('SKIP' if skipped else c.get('verdict'))}</td>"
+            f"<td class=c>{charge_html}</td>"
+            f"<td>{_t(text) or '<span class=dim>no summary recorded</span>'}{waiver}</td></tr>")
+    return ("<div class=scroll><table class=checks><thead><tr><th>check</th><th>verdict</th>"
+            "<th>score charge</th><th>summary or skip reason</th></tr></thead><tbody>"
+            + "".join(rows) + "</tbody></table></div>")
+
+
+def _audit_page_html(title: str, body: str) -> str:
+    return (
+        "<!doctype html><html lang=en><head><meta charset=utf-8>"
+        + _AUDIT_PAGE_MARKER
+        + "<meta name=viewport content='width=device-width,initial-scale=1'>"
+        "<meta http-equiv=Content-Security-Policy content=\"default-src 'none'; "
+        "style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'\">"
+        "<meta name=referrer content=no-referrer>"
+        f"<title>{_t(title)}</title><style>{CSS}{AUDIT_PAGE_CSS}</style></head>"
+        f"<body>{body}</body></html>\n"
+    )
+
+
+def render_audit_page(e: dict, engine: str, max_episodes: int = 0) -> str:
+    """One board row's audit page, from its serialized data.json form."""
+    rid = e["id"]
+    rep = _as_dict(e.get("report"))
+    checks = [c for c in _as_list(rep.get("checks")) if isinstance(c, dict)]
+    is_rlds = bool(e.get("rlds")) or rid.startswith("rlds/")
+    tags = [t for t, on in (
+        (f"lane: {_t(e.get('lane'))}", bool(e.get("lane"))),
+        ("nested in a larger repo", bool(e.get("subpath"))),
+        ("RLDS on GCS", is_rlds)) if on]
+    where = _rlds_url(e) if is_rlds else _hub_dataset_url(rid)
+    src_label = "GCS bucket" if is_rlds else "dataset on the Hub (current files)"
+    tags.append(_ext(where, src_label) if where else
+                f"<span title='not a recognized dataset location'>{src_label}: no link</span>")
+    head = (f"<p><a href='../index.html'>&larr; leaderboard</a></p>"
+            f"<h1 class=id>{_t(rid)}</h1><p class=dim>{' | '.join(tags)}</p>")
+    downloads = _int(e.get("downloads"))
+    dl_html = ("<span class=dim>n/a (GCS)</span>" if is_rlds else _NR if downloads is None
+               else f"{downloads:,}" + (" <span class=dim>(repo-level)</span>" if e.get("subpath") else ""))
+    notes = _discovery_notes(e)
+    notes_html = "".join(f"<p class=dim>{n}</p>" for n in notes)
+
+    if not e.get("report"):
+        status = e.get("status")
+        state = {
+            "gated": ("s-gated", "Not audited: the repository could not be read (recorded status: "
+                                 "<b>gated</b>). There is no score and no check ran."),
+            "unsupported": ("s-gated", "Not audited: the dataset is not in a format kinema audits "
+                                       "(recorded status: <b>unsupported</b>). There is no score."),
+            "error": ("s-error", "Not audited: the last audit attempt failed (recorded status: "
+                                 "<b>error</b>) and is queued for retry. There is no score."),
+        }.get(status, ("s-error", "Not audited: no result is stored for this row and its status "
+                                  f"is {'not recorded' if not status else '<b>' + _t(status) + '</b>'}."
+                                  " There is no score."))
+        body = head + (
+            f"<div class='state {state[0]}'><p>{state[1]}</p></div>"
+            + _kv([
+                ("recorded reason", f"<code>{_t(e['reason'])}</code>" if e.get("reason") else _NR),
+                ("engine at last attempt", f"<code>{_t(e['engine'])}</code>" if e.get("engine") else _NR),
+                ("attempt time", _NR + " <span class=dim>(the board stores no time for failed attempts)</span>"),
+                ("dataset revision", _NR),
+                ("downloads at discovery", dl_html),
+            ])
+            + notes_html)
+    else:
+        try:
+            stale = audit_stale(e, engine, max_episodes)
+        except (TypeError, ValueError):
+            stale = True
+        why = _stale_reasons(e, rep, engine, max_episodes) if stale else []
+        when = _audited_at_html(e.get("audited_at"))
+        if stale:
+            state = ("s-error" if e.get("last_audit_error") else "s-stale",
+                     "<b>Stale result.</b> The board has queued this dataset for re-audit because "
+                     + ("; ".join(why) if why else "its stored result no longer counts as current")
+                     + f". The score below is the stored result of the audit at {when}, not a current one.")
+        else:
+            state = ("s-current", f"Latest stored result: the audit at {when}, produced by the "
+                                  "check engine the board currently runs. It covers only what that "
+                                  "audit read (see coverage limits).")
+        score = _int(rep.get("score"))
+        model = rep.get("score_model")
+        score_html = (f"<span class=score>{score}</span>/100" if score is not None else _NR)
+        if stale and score is not None:
+            score_html += " <span class=dim>(stored, stale)</span>"
+        model_html = (f"<code>{_t(model)}</code>" if model else _NR)
+        if model and model != SCORE_MODEL:
+            model_html += f" <span class=dim>(not comparable with <code>{_t(SCORE_MODEL)}</code> scores)</span>"
+        row_engine = e.get("engine")
+        engine_html = (f"<code>{_t(row_engine)}</code>" if row_engine else _NR) + (
+            " <span class=dim>(the board's current engine)</span>" if row_engine == engine
+            else f" <span class=dim>(the board now runs <code>{_t(engine)}</code>)</span>")
+        if is_rlds:
+            kind = "RLDS metadata/listing audit (no data download)"
+        elif rep.get("truncated") or e.get("sampled"):
+            kind = "Sampled Hub audit"
+        else:
+            kind = "Hub audit"
+        fps = rep.get("fps")
+        n_eps, n_frames = _int(rep.get("episodes")), _int(rep.get("frames"))
+        fmt = f"format <code>{_t(rep.get('format_version') or '?')}</code>"
+        if is_rlds:
+            # the RLDS audit reads no episodes: the count is TFDS metadata's,
+            # and frames=0 is a placeholder (TFDS declares no frame counts)
+            shape = (f"{fmt} | {n_eps if n_eps is not None else '?'} episodes declared in the "
+                     "TFDS metadata (none read) | frame count not declared")
+        else:
+            shape = (f"{fmt} | {n_eps if n_eps is not None else '?'} episodes read | "
+                     f"{n_frames if n_frames is not None else '?'} frames | fps "
+                     f"{_t(fps if isinstance(fps, (int, float)) and not isinstance(fps, bool) else '?')}")
+        limits = _coverage_limits(e, rep, checks, is_rlds)
+        body = head + (
+            f"<div class='state {state[0]}'><p>{state[1]}</p></div>"
+            + _kv([
+                ("health score", score_html),
+                ("verdict", _vbadge(rep.get("verdict"))),
+                ("score model", model_html),
+                ("audited at", when),
+                ("dataset revision", _revision_html(e, is_rlds)),
+                ("check engine", engine_html),
+                ("audit type", kind),
+                ("what was read", shape),
+                ("downloads at discovery", dl_html),
+            ])
+            + notes_html
+            + "<h2>Coverage limits</h2><ul class=limits>"
+            + "".join(f"<li>{x}</li>" for x in limits) + "</ul>"
+            + "<h2>Check verdicts</h2>" + _checks_table(checks)
+            + "<h2>Findings</h2>" + _findings_html(checks))
+    footer = (
+        "<footer class=dim>Rendered from the board's stored results (<a href='../data.json'>data.json</a>) "
+        "by kinema's leaderboard script. Nothing on this page is fetched live, and it carries no "
+        f"render time. Board engine <code>{_t(engine)}</code>; board score model "
+        f"<code>{_t(SCORE_MODEL)}</code>; page format <code>{AUDIT_PAGE_SCHEME}</code>. "
+        + _ext(_CHECKS_MD, "What the checks mean") + " | "
+        + _ext("https://github.com/vedevpatel/kinema", "kinema") + "</footer>")
+    return _audit_page_html(f"{rid} - kinema audit", body + footer)
+
+
+def _atomic_text(path: Path, text: str) -> None:
+    """Write via a fresh temp file ('x': never through a planted symlink)."""
+    tmp = path.with_name(f".{path.name}.tmp")
+    tmp.unlink(missing_ok=True)
+    with open(tmp, "x", encoding="utf-8") as fh:
+        fh.write(text)
+    tmp.replace(path)
+
+
+def prune_audit_pages(d_dir: Path, keep: set[str]) -> list[str]:
+    """Delete generated pages no board row owns any more. Only a regular
+    file named like a page id AND carrying the generator marker goes (plus
+    this writer's own leftover temp files); anything else in d/ is left alone."""
+    pruned = []
+    for p in sorted(d_dir.iterdir()):
+        name = p.name
+        if p.is_symlink() or not p.is_file() or name in keep:
+            continue
+        if name.startswith(".") and name.endswith(".html.tmp"):
+            if _PAGE_ID_RE.fullmatch(name[1:-len(".html.tmp")]):
+                p.unlink()
+            continue
+        if not name.endswith(".html") or not _PAGE_ID_RE.fullmatch(name[:-len(".html")]):
+            continue
+        with open(p, "rb") as fh:
+            head = fh.read(512)
+        if _AUDIT_PAGE_MARKER.encode() in head:
+            p.unlink()
+            pruned.append(name)
+    return pruned
+
+
+def write_audit_pages(out: Path, entries: list, max_episodes: int = 0,
+                      engine: str | None = None, page_ids: dict[str, str] | None = None) -> dict:
+    """Render docs/d/<page id>.html for every row of a serialized board,
+    rewrite only pages whose bytes changed, then prune orphaned pages."""
+    engine = engine or engine_version()
+    ids = page_ids if page_ids is not None else audit_page_ids(entries)
+    d_dir = out / AUDIT_PAGE_DIR
+    if d_dir.is_symlink():
+        raise RuntimeError(f"{d_dir} is a symlink; refusing to write audit pages through it")
+    d_dir.mkdir(parents=True, exist_ok=True)
+    keep, written = set(), 0
+    for e in entries:
+        pid = ids[e["id"]]
+        name = f"{pid}.html"
+        path = d_dir / name
+        if path.parent != d_dir or not _PAGE_ID_RE.fullmatch(pid):
+            raise ValueError(f"unsafe audit page path {path}")
+        keep.add(name)
+        text = render_audit_page(e, engine, max_episodes)
+        if path.is_file() and not path.is_symlink() and path.read_text(encoding="utf-8") == text:
+            continue
+        _atomic_text(path, text)
+        written += 1
+    return {"pages": len(keep), "written": written, "pruned": prune_audit_pages(d_dir, keep)}
+
+
+def render_site(out: Path, max_episodes: int = 0) -> int:
+    """--render-pages: re-render index.html and docs/d/ from data.json as
+    stored. No audits, no rescoring, data.json untouched; the board's
+    generated stamp is kept."""
+    board = json.loads((out / "data.json").read_text(encoding="utf-8"))
+    entries = board.get("datasets", [])
+    ids = audit_page_ids(entries)
+    stats = write_audit_pages(out, entries, max_episodes=max_episodes, page_ids=ids)
+    _atomic_text(out / "index.html", render_index(
+        entries, board.get("generated", "unknown"), harm_table=write_harm_table(out),
+        max_episodes=max_episodes, page_ids=ids))
+    print(f"audit pages: {stats['pages']} rows, {stats['written']} written, "
+          f"{len(stats['pruned'])} pruned")
+    return 0
 
 
 HARM_TABLE_SCHEMA = "kinema.harm-table/v1"
@@ -1746,17 +2356,26 @@ def _cap_detail_lists(entries: list) -> list:
 
 
 def _write(out: Path, entries: list, generated: str, max_episodes: int = 0) -> None:
-    """Atomic writes so a kill mid-run never leaves a corrupt or missing site."""
+    """Atomic writes so a kill mid-run never leaves a corrupt or missing site.
+
+    data.json goes first: a page-id collision (or any render error) raises
+    after the audit evidence is saved, before a board link or page could
+    point at the wrong row. Audit pages render from the serialized board,
+    so they are a function of data.json alone, then the index links them."""
     data = json.dumps(
         {"generated": generated, "corrections_updated_at": _correction_summary(entries)[0] or None,
          "score_model": SCORE_MODEL, "datasets": _cap_detail_lists(entries)},
         separators=(",", ":"), default=str,
     )
-    idx = render_index(entries, generated, harm_table=write_harm_table(out), max_episodes=max_episodes)
-    for name, text in (("data.json", data), ("index.html", idx)):
-        tmp = out / f".{name}.tmp"
-        tmp.write_text(text)
-        tmp.replace(out / name)
+    tmp = out / ".data.json.tmp"
+    tmp.write_text(data)
+    tmp.replace(out / "data.json")
+    board = json.loads(data)["datasets"]
+    ids = audit_page_ids(board)
+    write_audit_pages(out, board, max_episodes=max_episodes, page_ids=ids)
+    idx = render_index(entries, generated, harm_table=write_harm_table(out), max_episodes=max_episodes,
+                       page_ids=ids)
+    _atomic_text(out / "index.html", idx)
 
 
 def rescore_entries(entries: list[dict]) -> int:
@@ -1866,11 +2485,16 @@ def main() -> int:
                          "run writes what it has and exits (keep below the shell timeout)")
     ap.add_argument("--rescore", action="store_true",
                     help="recompute stored scores under the current score model; no audits")
+    ap.add_argument("--render-pages", action="store_true",
+                    help="re-render index.html and the docs/d/ audit pages from data.json as "
+                         "stored; no audits, no rescoring (pass the audit run's --max-episodes)")
     args = ap.parse_args()
 
     out = Path(args.out)
     if args.rescore:
         return rescore_site(out)
+    if args.render_pages:
+        return render_site(out, args.max_episodes)
     (out / "dataset").mkdir(parents=True, exist_ok=True)
 
     worklist_path = Path(args.worklist) if args.worklist else None

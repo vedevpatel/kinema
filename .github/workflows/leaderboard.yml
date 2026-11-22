@@ -47,11 +47,17 @@ jobs:
         # runner mid-run and lost every audit of that run).
         # Checkpoints: a killed runner skips every later step, so the board is
         # pushed every 10 minutes from a separate worktree - only the generated
-        # board files (data.json, index.html, dataset/), never hand-edited docs.
+        # board files (data.json, index.html, dataset/, d/), never hand-edited docs.
+        # index.html and the d/ audit pages are re-rendered there from the copied
+        # data.json, so a checkpoint never links a page it does not carry, and
+        # pages for rows that left the board are pruned (generated pages only).
         env:
           HF_HUB_ENABLE_HF_TRANSFER: "1"
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           KINEMA_FRAME_BUDGET_BYTES: "536870912"
+          # the audit and the checkpoint re-render must agree on the depth that
+          # marks a row stale
+          MAX_EPISODES: "250"
         run: |
           git config --global user.name "Ved Patel"
           git config --global user.email "130187703+vedevpatel@users.noreply.github.com"
@@ -59,11 +65,13 @@ jobs:
             rm -rf /tmp/ckpt
             git fetch -q origin main && git worktree add -q -f /tmp/ckpt origin/main || return 1
             mkdir -p /tmp/ckpt/docs/dataset
-            cp docs/data.json docs/index.html /tmp/ckpt/docs/ 2>/dev/null
+            cp docs/data.json /tmp/ckpt/docs/ 2>/dev/null
             cp -R docs/dataset/. /tmp/ckpt/docs/dataset/ 2>/dev/null
+            python scripts/leaderboard.py --render-pages --max-episodes "$MAX_EPISODES" \
+              --out /tmp/ckpt/docs || { git worktree remove -f /tmp/ckpt; return 1; }
             (
               cd /tmp/ckpt || exit 1
-              git add docs/data.json docs/index.html docs/dataset
+              git add docs/data.json docs/index.html docs/dataset docs/d
               git diff --cached --quiet && exit 0
               git commit -q -m "leaderboard: audit checkpoint"
               for attempt in 1 2 3; do
@@ -77,7 +85,7 @@ jobs:
             git worktree remove -f /tmp/ckpt
             return $rc
           }
-          timeout 3300 python scripts/leaderboard.py --limit 200 --max-episodes 250 --workers 8 \
+          timeout 3300 python scripts/leaderboard.py --limit 200 --max-episodes "$MAX_EPISODES" --workers 8 \
             --worklist docs/worklist.json --worklist-max-age-hours 336 \
             --time-budget 2400 --hard-deadline 3000 --out docs &
           pid=$!
