@@ -1,0 +1,119 @@
+{
+  "schema": "kinema.shifted_queries.expectations/1",
+  "date_utc": "2026-11-22",
+  "frozen_before_decoder_probes": true,
+  "purpose": "Test the shifted-timestamp video-lookup consequence left open by phase 2 for r1:c1:f0, and the same query class for r71:c1:f1. r94:c1:f1 is an epoch-scale comparator. No detector, threshold, severity, score or published output is changed by this experiment.",
+  "frozen_sources": {
+    "audit_json": {"path": "audits/2026-11-22/audit.json", "sha256": "d1b13333442049e09b942d7aca0ad7b9824ca24dd9dff71c6732160593b66f40"},
+    "phase2_expectations": {"path": "loader-verification/2026-11-22/expectations.json", "sha256": "ee6d4f27e12e184d310fee484bcb7c162247e36a9f83424645f7ce9ce51a1b91"},
+    "phase2_environments": {"path": "loader-verification/2026-11-22/evidence/environments.json"},
+    "phase2_report": {"path": "loader-verification/2026-11-22/report.json"}
+  },
+  "environments": {
+    "v2": {"lerobot": "0.3.3", "python_path": "/tmp/kinema-phase2-v2/bin/python", "packages_file": "loader-verification/2026-11-22/evidence/v2_packages.txt"},
+    "v3": {"lerobot": "0.4.0", "python_path": "/tmp/kinema-phase2-v3/bin/python", "packages_file": "loader-verification/2026-11-22/evidence/v3_packages.txt"}
+  },
+  "upstream_sources": {
+    "v2": {
+      "datasets/lerobot_dataset.py": "e2c150fe66028f968f5fb242f44d3183c1db7ad9ae4d140644d57bc79f99a6ff",
+      "datasets/video_utils.py": "14a159f67e18a5f379b754539d8fa51ef6059f93b5a8b9ee32de89ff2788661e",
+      "datasets/utils.py": "d5304b7f7039a6c97ab2de51748ad781a40edce15816ed3efe865cf1e261d033",
+      "datasets/factory.py": "26c8ace7bb0ea056114ebdf5103cbccd45f02b3cc6e9f332496cc7197a632ddd",
+      "policies/diffusion/configuration_diffusion.py": "de06c1fd9cdfa3d0c0ed8930e1ce60153003175b9607f48db81e9579a126b4fc",
+      "policies/vqbet/configuration_vqbet.py": "eefc01367b6af85d6eec2c7454f47a6468de28e3b6988ff542cd2412a75c105f",
+      "policies/tdmpc/configuration_tdmpc.py": "4090923d35fa97624640e1fc13c84d1a7cf452bd2558f4b6a0431d595c5cf113",
+      "policies/smolvla/configuration_smolvla.py": "8abeabe530e7a8ebc6a791d4259d8636a75e451d2190976e3795b7fe6f7254ea"
+    },
+    "v3": {
+      "datasets/lerobot_dataset.py": "2fc7bbd5a146f4c41150baa70ff69aabb9eda1e64e17acd3d8fb635a3f3d5cce",
+      "datasets/video_utils.py": "c13ecb84dc7f840d208402547a16fbfa22d9325c1d224fa058e3eda8c0ca7ca0",
+      "datasets/utils.py": "fae288459b2abbcef032c7f195625ae959ca109f36abedcc955573e0b9e36cb0",
+      "datasets/factory.py": "123c08f5e42df811558e8539a0499131d5951df07bf652b7730a16a7faabc515",
+      "policies/diffusion/configuration_diffusion.py": "de06c1fd9cdfa3d0c0ed8930e1ce60153003175b9607f48db81e9579a126b4fc",
+      "policies/vqbet/configuration_vqbet.py": "a7c14eeb0001f78edebdd8ebcd64659c9f44a69197eb5783f6dd0d8d3d194054",
+      "policies/tdmpc/configuration_tdmpc.py": "4090923d35fa97624640e1fc13c84d1a7cf452bd2558f4b6a0431d595c5cf113",
+      "policies/smolvla/configuration_smolvla.py": "f2d9f74db62aa405d551e6cb1d516ed9dafa79f01e21b2a64f8c95bbacbe24b7"
+    }
+  },
+  "offset_selection": {
+    "basis": "LeRobotDataset defaults to delta_timestamps=None, which queries only the current timestamp, so no dataset default determines shifted offsets. Training derives them in datasets/factory.py::resolve_delta_timestamps from the policy config's observation_delta_indices. Rule, fixed before any probe: include every policy configuration shipped in the tested release whose default observation_delta_indices is not None, at its dataclass defaults, plus one no-delta control covering the configs that return None. plan.py rescans policies/*/configuration_*.py and refuses to plan if the set differs.",
+    "configs": {
+      "no_delta": {"observation_delta_indices": null, "covers": ["act", "pi0", "pi0fast (0.3.3)", "pi05 (0.4.0)", "groot (0.4.0)", "sac", "reward_classifier"]},
+      "smolvla": {"observation_delta_indices": [0], "source": "policies/smolvla/configuration_smolvla.py: return [0]"},
+      "diffusion": {"observation_delta_indices": [-1, 0], "source": "policies/diffusion/configuration_diffusion.py: n_obs_steps: int = 2; list(range(1 - self.n_obs_steps, 1))"},
+      "vqbet": {"observation_delta_indices": [-4, -3, -2, -1, 0], "source": "policies/vqbet/configuration_vqbet.py: n_obs_steps: int = 5; list(range(1 - self.n_obs_steps, 1))"},
+      "tdmpc": {"observation_delta_indices": [0, 1, 2, 3, 4, 5], "source": "policies/tdmpc/configuration_tdmpc.py: horizon: int = 5; list(range(self.horizon + 1))"}
+    },
+    "non_none_policy_files": {
+      "v2": ["diffusion", "smolvla", "tdmpc", "vqbet"],
+      "v3": ["diffusion", "smolvla", "tdmpc", "vqbet"]
+    },
+    "nominal_offsets": [-4, -3, -2, -1, 1, 2, 3, 4, 5],
+    "nominal_basis": "The phase-2 remaining-gap text named raw timestamp + k/30. LeRobot 0.3.3/0.4.0 __getitem__ does not construct such queries (it reads stored row timestamps), so this class is a labeled comparator only. k ranges over the nonzero offsets of the configs above.",
+    "limits": "Defaults only. Non-default n_obs_steps/horizon, custom delta_timestamps, action/reward keys (which do not touch video), and policies outside these releases are not covered."
+  },
+  "anchor_rule": "first=0, middle=len//2, worst_grid=argmax(|diff(stored timestamps) - 1/fps|) (first maximum; the same rule as phase-2 decode_fineart.py), last=len-1. Rows are episode-relative.",
+  "decoder": {
+    "primary": "lerobot.datasets.video_utils.decode_video_frames(path, queries, tolerance_s=1e-4, backend='pyav'), the pyav path phase 2 used",
+    "default_backend_attempt": "get_safe_default_codec() returns 'torchcodec' whenever the module spec exists. One decode_video_frames(..., backend=None) attempt per case is recorded. If torchcodec cannot load, that path is unresolved (dependency failure), not passed.",
+    "returned_timestamps": "decode_video_frames returns frames only. probe.py records returned frame pts from an independent replay of the same torchvision VideoReader window (seek(min, keyframes_only=True), read until pts >= max). It asserts that the replayed frames are tensor-equal to the upstream output and that the replayed pass/fail equals the upstream outcome. A mismatch is reported as a harness discrepancy and the batch counts as unresolved."
+  },
+  "decision_rules": {
+    "buckets": "loader_derived/in_range, loader_derived/padded, nominal_grid/in_range and nominal_grid/outside_episode are evaluated separately and never pooled.",
+    "bucket_verdict": "supports_claim if any batch raises the decoder tolerance AssertionError; contradicts_claim if every batch ran and decoded within tolerance; unresolved if any batch had a non-tolerance error or did not run (and none hit tolerance); not_applicable if empty.",
+    "case_scope": "A case conclusion names its query class, loader release, backend and episode. Direct-decoder results never establish full-loader or training behavior. A full-loader construction failure observed in phase 2 keeps the full-loader consequence unresolved.",
+    "identity": "Any input hash or revision mismatch, or upstream source hash mismatch, stops that case: no probe runs and the case stays unresolved."
+  },
+  "cases": [
+    {
+      "case_id": "r1:c1:f0",
+      "role": "primary",
+      "env": "v3",
+      "dataset": "lerobot/FineART",
+      "revision": "15746b76ddc21ffd38d73888fefe2e7a1496385b",
+      "episode": 40455,
+      "data_path": "data/chunk-000/file-210.parquet",
+      "episodes_meta_path": "meta/episodes/chunk-000/file-000.parquet",
+      "video_path_template": "videos/{camera}/chunk-040/file-455.mp4",
+      "cameras": ["observation.images.cam_high", "observation.images.cam_low", "observation.images.cam_left_wrist", "observation.images.cam_right_wrist"],
+      "phase2_classification": "unresolved",
+      "full_loader_status_from_phase2": "LeRobotDataset construction fails in 0.4.0 and 0.5.1 on source dtype 'language' (evidence/r1_c1_f0_loader_0.4.0.json, evidence/r1_c1_f0_loader_0.5.1.json). Not bypassed here.",
+      "prediction_from_source_reading": "Written before probes, not a decision criterion. Rows and videos are both about 90 Hz while info.json declares fps=30, and from_timestamp is 0.0. Loader-derived queries are stored row timestamps, so they are expected to land on video frames and decode. Nominal raw+k/30 equals raw+3k/90, so it is also expected to decode when in range. Separately, a delta index of 1 spans about 1/90 s, not the 1/30 s the config intends."
+    },
+    {
+      "case_id": "r71:c1:f1",
+      "role": "primary",
+      "env": "v2",
+      "dataset": "azsdsadasdsadasd/droid_filter_lerobot",
+      "revision": "7415f67330af40953ea52aa61a74788c75e1a8d6",
+      "episode": 0,
+      "data_path": "data/chunk-000/episode_000000.parquet",
+      "video_path_template": "videos/chunk-000/{camera}/episode_000000.mp4",
+      "cameras": ["observation.images.primary", "observation.images.secondary", "observation.images.wrist"],
+      "phase2_classification": "refuted",
+      "full_loader_status_from_phase2": "LeRobotDataset construction raises KeyError('stats') in episode metadata (evidence/r71_c1_f1_loader.json). Not bypassed here.",
+      "prediction_from_source_reading": "Written before probes, not a decision criterion. Rows start at 0.7333 s on a 1/15 s grid and the video pts start at 0.0, so loader-derived queries are expected to decode in range. Whether the decoded frame is the physically matching image is not testable from timestamps."
+    },
+    {
+      "case_id": "r94:c1:f1",
+      "role": "comparator",
+      "env": "v2",
+      "dataset": "Cybernetic-Labs/openarm-packingbench-v2-groot-lerobot",
+      "revision": "41194807df07267235098a020ae4204f02262a93",
+      "episode": 0,
+      "data_path": "data/chunk-000/episode_000000.parquet",
+      "video_path_template": "videos/chunk-000/{camera}/episode_000000.mp4",
+      "cameras": ["observation.images.front", "observation.images.high_opposite", "observation.images.wrist_left", "observation.images.wrist_right"],
+      "phase2_classification": "confirmed",
+      "full_loader_status_from_phase2": "LeRobotDataset construction raises ValueError from check_timestamps_sync (evidence/r94_c1_f1_loader.json), so __getitem__ is never reached in 0.3.3.",
+      "reuse": "Existing local inputs recovered in phase 2 are reused after hash verification, with no new download. Phase-2 raw-timestamp failures (12/12) remain the comparator baseline.",
+      "prediction_from_source_reading": "Written before probes, not a decision criterion. Epoch-scale queries (about 1.784e9 s, float32-rounded) against video pts 0 to 14.5 s are expected to fail tolerance in every bucket."
+    }
+  ],
+  "scope_limits": [
+    "One episode per case; other listed episodes are not probed.",
+    "pyav backend only; the default torchcodec backend is attempted and recorded, not substituted.",
+    "Direct decoder calls with loader-derived query sets; LeRobotDataset is not constructed or patched.",
+    "No training, policy checkpoint, or image-content alignment check."
+  ]
+}
