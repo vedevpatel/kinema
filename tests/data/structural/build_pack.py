@@ -106,6 +106,67 @@ def roster(repo: str, rev: str, rel: str) -> set[int]:
     return set(pf.read(columns=["episode_index"]).column(0).to_pylist())
 
 
+# --- v2.1 (one parquet and one mp4 per episode), optionally in a repo subfolder
+
+def sub_listing(repo: str, rev: str, subdir: str = "") -> list[tuple[str, int]]:
+    """(path relative to the dataset root, size) for every file under subdir
+    at rev - list_repo_tree paginates; dataset_info's siblings cap at 100k
+    entries, which a multi-dataset repo exceeds."""
+    api, _ = _api()
+    pre = f"{subdir}/" if subdir else ""
+    return sorted((f.path[len(pre):], f.size) for f in api.list_repo_tree(
+        repo, repo_type="dataset", path_in_repo=subdir or None, recursive=True, revision=rev)
+        if hasattr(f, "size") and f.path.startswith(pre))
+
+
+def extract_v21(repo: str, rev: str, case: str, keep: set[int], subdir: str,
+                listing: list[tuple[str, int]], license_text: bytes | None = None,
+                shard_columns: tuple[str, ...] = ("episode_index", "frame_index"),
+                all_videos: bool = True) -> Path:
+    """Write a trimmed v2.1 case: meta/info.json and meta/tasks.jsonl verbatim,
+    meta/episodes.jsonl reduced to the kept episodes' lines (byte-for-byte),
+    each kept episode's data parquet reduced to shard_columns, and listing.txt:
+    every meta/ file of the dataset folder at rev, the kept episodes' data
+    files (no v2.1 check reads the others; their count is in CASE.json) and,
+    with all_videos, EVERY videos/ file, kept episodes or not - the evidence
+    that trimming cannot make a video look absent. Clean controls list only
+    the videos the kept episodes name, as the v3 extracts do."""
+    _, fs = _api()
+    root = HERE / case
+    if root.exists():
+        import shutil
+        shutil.rmtree(root)
+    (root / "meta").mkdir(parents=True)
+    at = f"datasets/{repo}@{rev}" + (f"/{subdir}" if subdir else "")
+    for name in ("meta/info.json", "meta/tasks.jsonl"):
+        (root / name).write_bytes(fs.cat_file(f"{at}/{name}"))
+    lines = fs.cat_file(f"{at}/meta/episodes.jsonl").splitlines(keepends=True)
+    kept = [ln for ln in lines if ln.strip() and json.loads(ln)["episode_index"] in keep]
+    assert {json.loads(ln)["episode_index"] for ln in kept} == keep, "a kept episode is not catalogued"
+    (root / "meta" / "episodes.jsonl").write_bytes(b"".join(kept))
+    info = json.loads((root / "meta" / "info.json").read_text())
+    cs = int(info.get("chunks_size") or 1000)
+    present = {p for p, _ in listing}
+    kept_data, named = set(), set()
+    cams = [k for k, f in (info.get("features") or {}).items() if isinstance(f, dict) and f.get("dtype") == "video"]
+    for ep in sorted(keep):
+        named |= {info["video_path"].format(episode_chunk=ep // cs, video_key=c, episode_index=ep) for c in cams}
+        rel = info["data_path"].format(episode_chunk=ep // cs, episode_index=ep)
+        assert rel in present, f"episode {ep}: data file {rel} absent - not a video-only case"
+        kept_data.add(rel)
+        pf = pq.ParquetFile(f"{at}/{rel}", filesystem=fs)
+        cols = [c for c in shard_columns if c in pf.schema_arrow.names]
+        out = root / rel
+        out.parent.mkdir(parents=True, exist_ok=True)
+        pq.write_table(pf.read(columns=cols), out, compression="zstd")
+    (root / "listing.txt").write_text("".join(f"{p}\t{s}\n" for p, s in listing
+                                              if p.startswith("meta/") or p in kept_data or p in named
+                                              or (all_videos and p.startswith("videos/"))))
+    if license_text is not None:
+        (root / "LICENSE").write_bytes(license_text)
+    return root
+
+
 if __name__ == "__main__":
     sys.path.insert(0, str(HERE))  # the case definitions sit next to this file
     import cases  # noqa: E402

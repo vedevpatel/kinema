@@ -13,7 +13,9 @@ shards, cameras and files, no more and no fewer:
 - video-file-pointers: every referenced video file absent from the listing
 - dropped-frames: episodes catalogued more than once
 
-The clean controls must raise none of these. The pack tests detector
+A check the case's layout gives nothing to compare (CASE.json
+"not_applicable": v2.1 has no declared shards and no segment columns) must
+skip, not pass. The clean controls must raise none of these. The pack tests detector
 correctness on real structure; it says nothing about training outcomes.
 """
 
@@ -35,6 +37,18 @@ CFG = CheckConfig()
 REDISTRIBUTABLE = {"mit", "apache-2.0", "cc-by-4.0", "cc0-1.0", "cc-by-sa-4.0", "odc-by", "bsd-3-clause"}
 # documented policy (docs/checks.md, camera-coverage): WARN at >= 10% of episodes
 COVERAGE_WARN_SHARE = 0.10
+# documented policy (docs/checks.md, video-file-pointers), per camera:
+# INFO under 10% of catalogued episodes, WARN at 10%, FAIL at 50%
+VIDEO_FILE_WARN_SHARE, VIDEO_FILE_FAIL_SHARE = 0.10, 0.50
+
+
+def _not_applicable(doc: dict, check_id: str, res) -> bool:
+    """True (after asserting the skip) when the case's layout gives the check
+    nothing to compare; a finding or a pass there would be a fabrication."""
+    if check_id not in doc.get("not_applicable", {}):
+        return False
+    assert res.verdict == Severity.SKIP and not res.findings, (check_id, res.verdict, res.summary)
+    return True
 
 
 @pytest.fixture(scope="module")
@@ -63,6 +77,11 @@ def test_provenance_and_license_are_recorded(name):
     assert doc["source"] and len(doc["revision"]) == 40
     assert (doc["license"] or "").lower() in REDISTRIBUTABLE, doc["license"]
     assert name in (PACK / "README.md").read_text()
+    if doc.get("license_source", "dataset card") != "dataset card":
+        # a grant outside the card: the evidence, the attribution and the
+        # license text itself travel with the extract
+        assert doc["license_evidence"] and doc["attribution"]
+        assert (PACK / name / "LICENSE").read_text().lstrip().startswith("Apache License")
 
 
 @pytest.mark.parametrize("name", CASES)
@@ -71,6 +90,8 @@ def test_episode_pointers_match_ground_truth(case, name):
     truth = doc["truth"]
     skip = set(truth.get("conflicting_duplicates", []))
     res = C["episode-file-pointers"].run(ctx, CFG)
+    if _not_applicable(doc, "episode-file-pointers", res):
+        return
     want = {(p["episode"], p["declared"], p["actual"]) for p in truth["pointers"]}
     # every broken episode, exactly (details carry the full list) ...
     broken = set((res.details or {}).get("broken", [])) - skip
@@ -90,6 +111,8 @@ def test_episode_pointers_match_ground_truth(case, name):
 def test_camera_segments_match_ground_truth(case, name):
     ctx, doc = case(name)
     res = C["camera-coverage"].run(ctx, CFG)
+    if _not_applicable(doc, "camera-coverage", res):
+        return
     got = {f.details["camera"]: sorted(f.details["episodes"]) for f in res.findings
            if "camera" in (f.details or {}) and f.details.get("episodes")}
     want = {cam: sorted(eps) for cam, eps in doc["truth"]["segments"].items()}
@@ -104,12 +127,34 @@ def test_camera_segments_match_ground_truth(case, name):
 def test_video_files_match_ground_truth(case, name):
     ctx, doc = case(name)
     res = C["video-file-pointers"].run(ctx, CFG)
-    got = {f.details["camera"]: sorted(f.details.get("missing_files", [])) for f in res.findings
-           if "camera" in (f.details or {})}
-    want = {cam: v["missing_files"][:20] for cam, v in doc["truth"]["video_files"].items()}
-    assert got == want
-    if not want:
-        assert res.verdict <= Severity.INFO, res.summary
+    truth = doc["truth"]["video_files"]
+    by_cam = {f.details["camera"]: f for f in res.findings if "camera" in (f.details or {})}
+    # the same cameras, each with exactly the true files (details cap at 20)
+    # and exactly the true affected episodes - nothing missed, nothing extra
+    assert sorted(by_cam) == sorted(truth), (sorted(by_cam), sorted(truth))
+    for cam, v in truth.items():
+        f = by_cam[cam]
+        assert f.details["missing_files"] == v["missing_files"][:20]
+        assert sorted(f.details["episodes"]) == v["episodes"]
+    n_missing = sum(len(v["missing_files"]) for v in truth.values())
+    if not truth:
+        assert res.verdict <= Severity.INFO and not res.findings, res.summary
+        return
+    assert res.details["missing"] == n_missing, (res.details, n_missing)
+    assert sorted(res.details["episodes_affected"]) == sorted({e for v in truth.values() for e in v["episodes"]})
+    # severity per camera from the documented policy, over the kept catalogue
+    n = doc["kept"]["episodes"]
+    if doc.get("subdir") is not None:
+        # v2.1: one rendered path per catalogued episode and camera - the
+        # loader kept every catalogued episode of the extract
+        cams = [k for k, ft in ctx.info["features"].items() if isinstance(ft, dict) and ft.get("dtype") == "video"]
+        assert res.details["referenced"] == n * len(cams), (res.details["referenced"], n, cams)
+    for cam, v in truth.items():
+        share = len(v["episodes"]) / n
+        expected = (Severity.FAIL if share >= VIDEO_FILE_FAIL_SHARE else
+                    Severity.WARN if share >= VIDEO_FILE_WARN_SHARE else Severity.INFO)
+        assert by_cam[cam].severity == expected, (cam, share, by_cam[cam].severity)
+    assert res.verdict == max(f.severity for f in by_cam.values())
 
 
 @pytest.mark.parametrize("name", CASES)
@@ -167,3 +212,25 @@ def test_no_rows_wording_on_a_local_dataset(tmp_path):
                       "data/chunk-000/file-007.parquet"]
     summary = C["episode-file-pointers"].run(ctx, CFG).summary
     assert "no rows in the fetched shards" in summary and "missing data" not in summary
+
+
+def test_the_missing_video_file_case_stays_positive(case):
+    """Pinned: the pack's real missing-video-file case, so neither a rebuild
+    nor an emptied CASE.json can turn its exact-match test into a vacuous
+    pass. 39 of the 71 kept episodes (all 3156-episode-folder counts in
+    CASE.json evidence) name an MP4 the repo never received."""
+    name = "fastumi_video_files_missing"
+    ctx, doc = case(name)
+    cam = "observation.images.camera_rgb_image"
+    eps = doc["truth"]["video_files"][cam]["episodes"]
+    assert len(eps) == 39 and doc["kept"]["episodes"] == 71
+    # isolated misses between present episodes, runs, and both chunk edges
+    assert {189, 289, 999, 1000, 2999} <= set(eps) and not {188, 190, 290, 3000} & set(eps)
+    res = C["video-file-pointers"].run(ctx, CFG)
+    assert res.verdict == Severity.FAIL and res.details["missing"] == 39, res.summary
+    # nothing was trimmed into absence: the listing holds every video file
+    # of the folder at the revision, and none of the missing paths
+    listed = [ln.split("\t")[0] for ln in (PACK / name / "listing.txt").read_text().splitlines()]
+    videos = [p for p in listed if p.startswith("videos/")]
+    assert len(videos) == doc["evidence"]["listing"]["videos"] == 560
+    assert not set(doc["truth"]["video_files"][cam]["missing_files"]) & set(listed)
