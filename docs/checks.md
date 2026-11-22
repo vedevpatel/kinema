@@ -145,6 +145,24 @@ in a dataset's findings can be told apart from a change in the checker.
   current row's upstream commit and re-audits the ones that moved.
 - **Sample.** Each row stores what the audit read: the number of episodes
   and a digest of which, and the same for video files.
+- **Attempts.** Every audit the nightly run actually starts records
+  `latest_attempt`: start and end time (UTC), outcome (`success`, `error`,
+  `gated`, `unsupported`), engine, run configuration (episode cap, size cap,
+  whether the payload was sampled, robustness probes, transition cap) and the
+  dataset revision - only when it was resolved and the attempt then read at
+  it (`revision_status: pinned`); otherwise `unknown`. Revision probes and
+  queue items the time budget never starts are not attempts. A failed retry
+  never changes the last successful audit (`report`, `audit_started_at`,
+  `audited_at`, `revision`, `engine`, `sample`, `audit_config`): the row
+  keeps it, gains the failure marker `last_audit_error` and the failed
+  `latest_attempt`, and stays queued. A successful retry replaces the row
+  and clears the marker. A row with no successful audit keeps its honest
+  `gated` / `error` / `unsupported` status and no score. The audit page
+  shows the latest failed attempt and the last successful audit as separate
+  sections; rows from before attempt records say "not recorded". Failure
+  reasons are sanitized before they are stored: credentials, authorization
+  headers, cookies, URL userinfo and sensitive URL parameters are redacted
+  and the text is capped at 500 characters.
 - **History.** `docs/history/YYYY-MM-DD.json` holds one snapshot per UTC
   day (the last run of the day wins): per row the revision, engine, audit
   time, sample, score, a verdict letter per check (P/I/W/F/S), WARN/FAIL

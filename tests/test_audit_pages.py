@@ -177,7 +177,7 @@ class _Tags(HTMLParser):
 
 _ALLOWED_TAGS = {"html", "head", "meta", "title", "style", "body", "p", "a", "h1", "h2", "h3", "div",
                  "table", "thead", "tbody", "tr", "th", "td", "span", "code", "b", "br", "ul", "li",
-                 "details", "summary", "time", "footer"}
+                 "details", "summary", "time", "footer", "section", "h4", "i"}
 _ALLOWED_ATTRS = {"charset", "name", "content", "http-equiv", "lang", "href", "rel", "class", "title",
                   "datetime"}
 EVIL = "<script>alert(1)</script>\"'><img src=x onerror=alert(2)>&amp;‮\x00\x1b"
@@ -293,7 +293,8 @@ def test_stale_by_depth_and_failed_retry():
     page = lb.render_audit_page(_hub_row(), ENGINE, 250)
     assert "deeper audit (250) is queued" in page
     page = lb.render_audit_page(_hub_row(last_audit_error="audit error: Timeout"), ENGINE, 50)
-    assert "s-error" in page and "latest re-audit attempt failed (audit error: Timeout)" in page
+    assert "s-error" in page and "the latest re-audit attempt (its time was not recorded) failed" in page
+    assert "<h2>Latest attempt: failed</h2>" in page and "<code>audit error: Timeout</code>" in page
 
 
 def test_old_score_model_is_not_presented_as_comparable():
@@ -311,7 +312,8 @@ def test_unaudited_rows(status, needle):
     assert needle in page and "There is no score" in page
     assert "class=score" not in page and "Coverage limits" not in page
     assert "audit error: GatedRepoError: 403" in page and OLD_ENGINE in page
-    assert "the board stores no time for failed attempts" in page
+    assert "this failure predates attempt records" in page  # legacy: no attempt record
+    assert "<h2>Latest attempt</h2>" in page and "<h2>Last successful audit</h2><p>None recorded" in page
 
 
 def test_rlds_page_is_metadata_only():
@@ -343,7 +345,8 @@ def test_missing_fields_say_not_recorded_and_nothing_is_invented():
     today = f"{dt.datetime.now(dt.timezone.utc):%Y-%m-%d}"
     page = lb.render_audit_page({"id": "org/bare", "report": {"checks": [{"id": "x"}]}}, ENGINE)
     body = _body(page)
-    for label in ("health score", "score model", "audited at", "dataset revision", "check engine"):
+    for label in ("health score", "score model", "audit started", "audit completed", "dataset revision",
+                  "check engine", "run configuration"):
         assert re.search(rf"<th>{label}</th><td><span class=dim>not recorded</span>", body), label
     assert "sample signature" in body and "was not recorded" in body
     assert today not in body and "unknown" not in body.lower()
@@ -364,7 +367,7 @@ def test_audit_time_is_never_the_render_time():
     row = _hub_row()
     del row["audited_at"]
     page = lb.render_audit_page(row, ENGINE, 50)
-    assert "<th>audited at</th><td><span class=dim>not recorded</span>" in page
+    assert "<th>audit completed</th><td><span class=dim>not recorded</span>" in page
     assert f"{dt.datetime.now(dt.timezone.utc):%Y-%m-%d}" not in page
     page = lb.render_audit_page(_hub_row(audited_at="last tuesday"), ENGINE, 50)
     assert "last tuesday <span class=dim>(as recorded; not a recognized timestamp)" in page
