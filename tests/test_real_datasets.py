@@ -9,6 +9,8 @@ KINEMA_E2E=1 (CI nightly).
 
 from __future__ import annotations
 
+import hashlib
+
 import pytest
 
 from netcheck import e2e_mark
@@ -96,3 +98,23 @@ def test_known_defect_still_caught():
         f.severity == Severity.WARN and {8, 23} <= set(f.details.get("episodes", []))
         for f in res.findings
     ), [f.message for f in res.findings]
+
+
+def test_pinned_quaternion_component_is_not_a_stuck_motor():
+    # Independent audit PR #16: the board's 40-episode sample at this commit
+    # included episode 279; its base_orient_quat_w action value is near static.
+    # No audit artifacts are imported or updated by this regression test.
+    ctx = load_dataset(
+        "RoboCOIN/Galbot_G1_bag_table_trash_1@e8a2977c4adb0bdf3248b490a34cfb75670d110f",
+        max_episodes=40,
+    )
+    ids = ctx.episode_ids()
+    assert hashlib.sha1("\n".join(map(str, ids)).encode()).hexdigest()[:12] == "71e71af85d7c"
+    assert ctx.action_names[34] == ctx.state_names[34] == "base_orient_quat_w"
+    res = _run_all(ctx)["stuck-actuator"]
+    quat = [f for f in res.findings if f.details.get("joint") == 34 and 279 in f.details.get("episodes", [])]
+    assert len(quat) == 1 and quat[0].severity == Severity.INFO
+    assert quat[0].details["representation"] == "quaternion_component"
+    # An unrelated positional channel keeps its published treatment.
+    assert any(f.details.get("joint") == 26 and f.severity == Severity.WARN
+               for f in res.findings)

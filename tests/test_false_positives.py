@@ -60,6 +60,20 @@ def _set_names(root, state_names, action_names):
     p.write_text(json.dumps(info))
 
 
+def _stalled_named_action(base, state_names, action_names):
+    """Hold action dim 3 in one episode; keep the other channels ordinary."""
+    _set_names(base, state_names, action_names)
+
+    def stall(s, a, ep):
+        a = a.copy()
+        rows = np.flatnonzero(ep == 3)
+        a[rows, 3] = a[rows[0], 3]
+        return s, a
+
+    _rewrite_data(base, stall)
+    return run("stuck-actuator", load_dataset(str(base)))
+
+
 @pytest.fixture()
 def base(tmp_path):
     return make_dataset(tmp_path / "ds", episodes=24)
@@ -218,6 +232,104 @@ def test_real_calibration_drift_still_caught_with_generic_names(tmp_path):
 
 
 # --- stuck-actuator -----------------------------------------------------------
+
+
+@pytest.mark.parametrize("z,w", [
+    ("base_orient_quat_z", "base_orient_quat_w"),
+    ("base.quaternion.z", "base.quaternion.w"),
+    ("hand_quat_z", "hand_quat_w"),
+    ("base_angular_quat_z", "base_angular_quat_w"),
+])
+def test_paired_quaternion_component_stasis_is_info(base, z, w):
+    names = ["joint_0", "joint_1", z, w, "joint_4", "gripper"]
+    res = _stalled_named_action(base, names, names)
+    hits = [f for f in res.findings if f.details.get("joint") == 3 and "does not move in" in f.message]
+    assert len(hits) == 1 and hits[0].severity == Severity.INFO
+    assert hits[0].details["episodes"] == [3]
+    assert hits[0].details["representation"] == "quaternion_component"
+    assert "motor fault" in hits[0].message and "dead or disabled motor" not in hits[0].message
+
+
+@pytest.mark.parametrize("action_names,state_names", [
+    (["joint_0", "joint_1", "joint_2", "joint_3", "joint_4", "gripper"],
+     ["joint_0", "joint_1", "joint_2", "joint_3", "joint_4", "gripper"]),
+    (["joint_0", "joint_1", "joint_2", "base_pos_x_m", "joint_4", "gripper"],
+     ["joint_0", "joint_1", "joint_2", "base_pos_x_m", "joint_4", "gripper"]),
+    (["joint_0", "joint_1", "joint_2", "base_orient_euler_yaw", "joint_4", "gripper"],
+     ["joint_0", "joint_1", "joint_2", "base_orient_euler_yaw", "joint_4", "gripper"]),
+    (["joint_0", "joint_1", "joint_2", "base_orient_quat_w", "joint_4", "gripper"],
+     ["joint_0", "joint_1", "joint_2", "base_orient_quat_w", "joint_4", "gripper"]),
+    (["joint_0", "joint_1", "base_orient_quat_z", "base_orient_quat_w", "joint_4", "gripper"],
+     ["joint_0", "joint_1", "base_orient_quat_z", "joint_3", "joint_4", "gripper"]),
+    (["joint_0", "joint_1", "base_orient_quat_w", "base_orient_quat_w", "joint_4", "gripper"],
+     ["joint_0", "joint_1", "base_orient_quat_w", "base_orient_quat_w", "joint_4", "gripper"]),
+    (["joint_0", "base_orient_quat_z", "base_orient_quat_w", "base_orient_quat_w", "joint_4", "gripper"],
+     ["joint_0", "base_orient_quat_z", "base_orient_quat_w", "base_orient_quat_w", "joint_4", "gripper"]),
+    (["joint_0", "joint_1", "base_orient_quat_z", "base_orient_quat_w", "joint_4", "gripper"],
+     None),
+    (None, None),
+])
+def test_actuator_and_ambiguous_schema_keep_stuck_warning(base, action_names, state_names):
+    res = _stalled_named_action(base, state_names, action_names)
+    hits = [f for f in res.findings if f.details.get("joint") == 3 and "does not move in" in f.message]
+    assert len(hits) == 1 and hits[0].severity == Severity.WARN
+    assert hits[0].details["episodes"] == [3]
+    assert "representation" not in hits[0].details
+
+
+def test_moving_quaternion_channels_do_not_gain_findings(base):
+    names = ["joint_0", "joint_1", "base_orient_quat_z", "base_orient_quat_w", "joint_4", "gripper"]
+    _set_names(base, names, names)
+
+    def moving(s, a, ep):
+        s, a = s.copy(), a.copy()
+        for e in np.unique(ep):
+            rows = np.flatnonzero(ep == e)
+            angle = np.linspace(-0.8, 0.8, len(rows))
+            s[rows, 2] = a[rows, 2] = np.sin(angle / 2)
+            s[rows, 3] = a[rows, 3] = np.cos(angle / 2)
+        return s, a
+
+    _rewrite_data(base, moving)
+    res = run("stuck-actuator", load_dataset(str(base)))
+    assert not [f for f in res.findings if f.details.get("joint") in (2, 3)]
+
+
+def test_quaternion_command_state_mismatch_remains_visible_without_motor_claim(base):
+    names = ["joint_0", "joint_1", "base_orient_quat_z", "base_orient_quat_w", "joint_4", "gripper"]
+    _set_names(base, names, names)
+
+    def mismatch(s, a, ep):
+        s = s.copy()
+        s[:, 3] = 0.0
+        return s, a
+
+    _rewrite_data(base, mismatch)
+    res = run("stuck-actuator", load_dataset(str(base)))
+    hits = [f for f in res.findings if f.details.get("joint") == 3
+            and f.details.get("kind") == "never_followed"]
+    assert len(hits) == 1 and hits[0].severity == Severity.INFO
+    assert hits[0].details["representation"] == "quaternion_component"
+    assert "motor dead" not in hits[0].message
+
+
+def test_quaternion_episode_not_followed_is_info(base):
+    names = ["joint_0", "joint_1", "base_orient_quat_z", "base_orient_quat_w", "joint_4", "gripper"]
+    _set_names(base, names, names)
+
+    def mismatch(s, a, ep):
+        s = s.copy()
+        rows = np.flatnonzero(ep == 5)
+        s[rows, 3] = s[rows[0], 3]
+        return s, a
+
+    _rewrite_data(base, mismatch)
+    res = run("stuck-actuator", load_dataset(str(base)))
+    hits = [f for f in res.findings if f.details.get("joint") == 3
+            and f.details.get("kind") == "not_followed"]
+    assert len(hits) == 1 and hits[0].severity == Severity.INFO
+    assert hits[0].details["episodes"] == [5]
+    assert hits[0].details["representation"] == "quaternion_component"
 
 def test_piecewise_constant_commands_are_not_stuck(base):
     # quantized / low-rate teleop: commands hold for 8 frames, then jump
