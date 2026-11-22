@@ -507,6 +507,20 @@ def test_wallclock_timestamps_on_video_dataset_fail(base):
     assert any(f.severity == Severity.FAIL and "start at 0" in f.message for f in res.findings)
 
 
+def test_nonzero_video_start_does_not_claim_decode_failure(base):
+    # A nonzero frame timestamp is a signal; decoder impact needs the MP4 timeline.
+    _set_timestamps(base, lambda t, ep: t + 0.733333)
+    p = base / "meta" / "info.json"
+    info = json.loads(p.read_text())
+    info["features"]["observation.images.top"] = {"dtype": "video", "shape": [8, 8, 3]}
+    p.write_text(json.dumps(info))
+    res = run("timestamp-grid", load_dataset(str(base)))
+    offsets = [f for f in res.findings if "start at 0" in f.message]
+    assert len(offsets) == 1 and offsets[0].severity == Severity.FAIL
+    assert "nonzero start alone does not prove" in offsets[0].message
+    assert "video timeline" in offsets[0].message
+
+
 def test_dropped_frame_gap_is_reported(base):
     def gap(t, ep):
         t = t.copy()

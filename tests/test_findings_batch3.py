@@ -515,6 +515,7 @@ def test_missing_frame_and_timestamp_columns_do_not_invent_defects(tmp_path):
     # reads it for delta_timestamps and video lookup)
     assert [f.severity for f in result.findings if "frame_index column missing" in f.message] \
         == [Severity.WARN]
+    assert not any("loaders and tools expect" in f.message for f in result.findings)
     ts = run("timestamp-grid", ctx)
     assert [f.severity for f in ts.findings] == [Severity.FAIL]
     assert "timestamp column missing" in ts.findings[0].message
