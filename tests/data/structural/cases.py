@@ -82,6 +82,86 @@ CASES = {
         license_grant="fastumi"),
 }
 
+# License text and attribution shipped with each v3 extract: Apache-2.0
+# section 4(a) asks for a copy of the license, MIT for its copyright and
+# permission notice. Each of these sources declares its license only in the
+# card YAML at the pinned revision - no LICENSE, NOTICE or copyright line in
+# the repo - so the Apache cases carry the canonical text, and the MIT cases
+# the LICENSE of the upstream project the card cites, whose copyright line
+# is retained verbatim. Every text is pinned by sha256.
+_APACHE = ("https://www.apache.org/licenses/LICENSE-2.0.txt",
+           "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30")
+_NO_NOTICE = "the source repo has no LICENSE, NOTICE or copyright line; license from its card at the revision"
+NOTICES = {
+    "bitrobot_pointer_rows_unpacked": dict(
+        text=_APACHE, notice=_NO_NOTICE,
+        attribution="BitRobot/berkeley-frodobots-lerobot-7k, published on the Hugging Face Hub by BitRobot "
+                    "(the card names no paper or homepage). "
+                    "https://huggingface.co/datasets/BitRobot/berkeley-frodobots-lerobot-7k"),
+    "mendelbeans_pointer_no_rows": dict(
+        text=_APACHE, notice=_NO_NOTICE,
+        attribution="MendelBeans/lerobot_dataset_put_pen_in_the_holder, published on the Hugging Face Hub by "
+                    "MendelBeans (the card names no paper or homepage). "
+                    "https://huggingface.co/datasets/MendelBeans/lerobot_dataset_put_pen_in_the_holder"),
+    "yaak_segments_missing": dict(
+        text=_APACHE, notice=_NO_NOTICE,
+        attribution="L2D (yaak-ai/L2D-v3), published on the Hugging Face Hub by Yaak (https://www.yaak.ai/); "
+                    "described in 'LeRobot goes to driving school' "
+                    "(https://huggingface.co/blog/lerobot-goes-to-driving-school). "
+                    "https://huggingface.co/datasets/yaak-ai/L2D-v3"),
+    "svla_so101_clean": dict(
+        text=_APACHE, notice=_NO_NOTICE,
+        attribution="lerobot/svla_so101_pickplace, published on the Hugging Face Hub by LeRobot (Hugging Face) "
+                    "(the card names no paper or homepage). "
+                    "https://huggingface.co/datasets/lerobot/svla_so101_pickplace"),
+    "pusht_clean": dict(
+        text=("https://raw.githubusercontent.com/real-stanford/diffusion_policy/"
+              "5ba07ac6661db573af695b419a7947ecb704690f/LICENSE",
+              "304e99a48271e10820f71a1b86ef395c06c100d7f68dd1d308790d1064fc4d41"),
+        notice="the source repo has no LICENSE or copyright line (card: license mit, homepage "
+               "diffusion-policy.cs.columbia.edu); LICENSE is the MIT LICENSE of the Diffusion Policy code "
+               "repository the card cites, its copyright line retained verbatim",
+        attribution="lerobot/pusht, published on the Hugging Face Hub by LeRobot (Hugging Face), from Diffusion "
+                    "Policy - Cheng Chi, Zhenjia Xu, Siyuan Feng, Eric Cousineau, Yilun Du, Benjamin Burchfiel, "
+                    "Russ Tedrake, Shuran Song. Diffusion Policy: Visuomotor Policy Learning via Action Diffusion. "
+                    "The International Journal of Robotics Research, 2024. https://diffusion-policy.cs.columbia.edu/ "
+                    "https://huggingface.co/datasets/lerobot/pusht"),
+    "vlabench_pointer_rollover": dict(
+        text=("https://raw.githubusercontent.com/OpenMOSS/VLABench/"
+              "cf588fe60c0c7282174fe979f5913170cfe69017/LICENSE.txt",
+              "c28645822e5cdadf816144773ee153332449ae04aa6f0b6a6393e5611092f878"),
+        notice="the source repo has no LICENSE or copyright line (card: license mit, cites VLABench); "
+               "LICENSE is the MIT LICENSE.txt of the VLABench code repository, its copyright line "
+               "('2024 simpler-env', as published there) retained verbatim",
+        attribution="VLABench/vlabench_primitive_ft_lerobot_video, published on the Hugging Face Hub by "
+                    "VLABench, from VLABench - Shiduo Zhang, Zhe Xu, Peiju Liu, Xiaopeng Yu, Yuan Li, Qinghui "
+                    "Gao, Zhaoye Fei, Zhangyue Yin, Zuxuan Wu, Yu-Gang Jiang, et al. VLABench: A Large-Scale "
+                    "Benchmark for Language-Conditioned Robotics Manipulation with Long-Horizon Reasoning Tasks. "
+                    "arXiv:2412.18194, 2024. "
+                    "https://huggingface.co/datasets/VLABench/vlabench_primitive_ft_lerobot_video"),
+}
+
+
+def notice_fields(name: str, root: Path, lic: str) -> dict:
+    """Fetch the case's pinned license text, check its sha256 and family,
+    write it to root/LICENSE; return the CASE.json provenance fields."""
+    import hashlib
+    import urllib.request
+    n = NOTICES[name]
+    url, sha = n["text"]
+    with urllib.request.urlopen(url, timeout=30) as r:
+        text = r.read()
+    if hashlib.sha256(text).hexdigest() != sha:
+        raise SystemExit(f"{name}: {url} changed (sha256 mismatch) - not written")
+    head = text.lstrip().split(b"\n", 1)[0].strip()
+    if head != {"apache-2.0": b"Apache License", "mit": b"MIT License"}[lic.lower()]:
+        raise SystemExit(f"{name}: {url} is not the {lic} text ({head!r})")
+    (root / "LICENSE").write_bytes(text)
+    return {"license_source": "dataset card", "license_notice": n["notice"],
+            "license_file": f"LICENSE (verbatim from {url}, sha256 {sha[:16]})",
+            "attribution": n["attribution"]}
+
+
 # Redistribution grants for sources whose card YAML carries no license field.
 # A grant is accepted only with the publisher's own statement at the pinned
 # revision (checked verbatim at build time) and the license text it names.
@@ -254,7 +334,7 @@ def build_v21(name: str, spec: dict, repo: str, rev: str) -> dict:
     api, fs = B._api()
     sub = spec.get("subdir", "")
     at = f"datasets/{repo}@{rev}" + (f"/{sub}" if sub else "")
-    lic, grant, license_text = B.license_of(repo), None, None
+    lic, grant, license_text = B.license_of(repo, rev), None, None
     if (lic or "").lower() not in B.REDISTRIBUTABLE:
         if "license_grant" not in spec:
             raise SystemExit(f"{name}: {repo} declares license {lic!r} - not packed (no redistribution permission)")
@@ -345,7 +425,7 @@ def build(name: str) -> dict:
     repo, rev = spec["repo"], _full_revision(spec["repo"], spec["revision"])
     if spec.get("subdir") or spec["episodes"] and spec["episodes"][0] == "ranges":
         return build_v21(name, spec, repo, rev)
-    lic = B.license_of(repo)
+    lic = B.license_of(repo, rev)
     if (lic or "").lower() not in B.REDISTRIBUTABLE:
         raise SystemExit(f"{name}: {repo} declares license {lic!r} - not packed (no redistribution permission)")
     _, fs = B._api()
@@ -367,7 +447,7 @@ def build(name: str) -> dict:
         data_shards = [p for p in all_paths if p.startswith("data/") and p.endswith(".parquet")]
         evidence["pointer_rows_anywhere"] = _anywhere(repo, rev, [p["episode"] for p in truth["pointers"]], data_shards)
     doc = {
-        "source": repo, "revision": rev, "license": lic,
+        "source": repo, "revision": rev, "license": lic, **notice_fields(name, root, lic),
         "built": f"{dt.datetime.now(dt.timezone.utc):%Y-%m-%d}",
         "kept": {"episodes": len(keep), "of": len(cat["episode_index"]), "shards": existing,
                  "note": "meta/episodes trimmed to pointer and segment columns; shards reduced to index columns"},
@@ -382,7 +462,31 @@ def build(name: str) -> dict:
     return doc
 
 
+def refresh_notices(name: str) -> None:
+    """Write LICENSE and the CASE.json license/attribution fields of an
+    existing v3 extract without re-extracting it (no data is fetched); the
+    card license at the pinned revision must still match CASE.json."""
+    root = HERE / name
+    doc = json.loads((root / "CASE.json").read_text())
+    lic = B.license_of(doc["source"], doc["revision"])
+    if (lic or "").lower() != (doc["license"] or "").lower():
+        raise SystemExit(f"{name}: card license at {doc['revision'][:12]} is {lic!r}, CASE.json says {doc['license']!r}")
+    fields = notice_fields(name, root, lic)
+    out: dict = {}
+    for k, v in doc.items():
+        if k not in fields:
+            out[k] = v
+        if k == "license":
+            out.update(fields)
+    (root / "CASE.json").write_text(json.dumps(out, indent=1))
+    print(f"{name}: {fields['license_file']}; attribution written")
+
+
 def main(names: list[str]) -> int:
+    if names[:1] == ["--notices"]:
+        for n in names[1:] or NOTICES:
+            refresh_notices(n)
+        return 0
     for n in names or CASES:
         build(n)
     return 0
