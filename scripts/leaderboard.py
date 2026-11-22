@@ -318,13 +318,16 @@ def probe_rlds_lane(workers: int = 8) -> list[dict]:
         return []
 
 
-def audit_rlds(entry: dict) -> DatasetReport:
-    """The rlds audit: metadata checks over the GCS listing, no downloads."""
+def audit_rlds(entry: dict, pin: dict | None = None) -> DatasetReport:
+    """The rlds audit: metadata checks over the GCS listing, no downloads.
+    pin (an attempt record) gets the inventory digest once the probe read it."""
     from kinema.checks.rlds_checks import run_rlds_checks
     from kinema.rlds import GcsClient, RldsDataset
 
     client = GcsClient(entry.get("rlds_bucket", RLDS_BUCKETS[0][0]))
     ds = RldsDataset.probe(client, entry["rlds_prefix"])
+    if pin is not None:
+        pin["revision"] = rlds_revision(ds)
     mirror, mirror_bucket = _probe_rlds_mirror(entry)
     results = run_rlds_checks(ds, client, mirror=mirror, mirror_bucket=mirror_bucket)
     rep = DatasetReport(
@@ -957,7 +960,7 @@ def download_sample(repo_id: str, cap_bytes: int, dest: Path,
         except DatasetError as e:
             if unservable is None or "cannot serve" not in str(e):
                 raise
-            unservable.append((name, str(e)[:200]))
+            unservable.append((name, sanitize_reason(e, cap=200)))
     if chosen and not got:
         raise DatasetError(f"{repo_id}: the Hub could serve none of the sampled data files "
                            f"(e.g. {unservable[0][0] if unservable else chosen[0]})")
@@ -969,6 +972,162 @@ def _clean_reason(msg: str) -> str:
     import re
 
     return re.sub(r"/[\w./-]*kinema-leaderboard-[\w-]+/?\S*", "<sample>", msg)
+
+
+# --- failure reasons: sanitized before they are stored ----------------------
+# Exception text is published (data.json, the board, audit pages), so every
+# reason passes sanitize_reason before it is persisted - at the attempt, again
+# at serialization (legacy rows), and again at render (--render-pages reads
+# data.json as stored). Credentials, auth headers, cookies, URL userinfo and
+# sensitive URL/kv parameters are redacted, whitespace collapses, length caps.
+# The function is idempotent, so the repeated passes never drift.
+REASON_MAX_CHARS = 500
+_REDACTED = "[redacted]"
+_TRUNCATED = " ... [truncated]"
+_NOT_REDACTED = rf"(?!{re.escape(_REDACTED)})"
+# URL query / key=value parameters whose value is a credential
+_SECRET_PARAMS = (
+    r"access[_-]?token|refresh[_-]?token|id[_-]?token|auth[_-]?token|hf[_-]?token|token|"
+    r"api[_-]?key|apikey|access[_-]?key|secret[_-]?key|client[_-]?secret|secret|key|"
+    r"password|passwd|pwd|auth|session[_-]?id|sessionid|session|sig|signature|code|policy|"
+    r"key-pair-id|x-amz-signature|x-amz-credential|x-amz-security-token|"
+    r"x-goog-signature|x-goog-credential|x-goog-security-token")
+# keys whose quoted value is a credential in dict/JSON reprs ('token': '...')
+_SECRET_KEYS = (
+    r"access[_-]?token|refresh[_-]?token|auth[_-]?token|hf[_-]?token|token|api[_-]?key|"
+    r"apikey|secret|client[_-]?secret|password|passwd|x-amz-security-token|cookie|"
+    r"set-cookie|authorization|proxy-authorization")
+_REDACTIONS = [
+    (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)",
+                re.S), _REDACTED),
+    # Authorization: Bearer x / 'Authorization': 'Basic x' (header or dict repr)
+    (re.compile(rf"(?i)\b((?:proxy-)?authorization)(['\"]?\s*[:=]\s*['\"]?){_NOT_REDACTED}"
+                r"(?:(?:bearer|basic|token|digest|negotiate)\s+)?[^\s'\",;}]+"),
+     rf"\1\2{_REDACTED}"),
+    # Cookie: a=b; c=d / Set-Cookie: s=v; Path=/
+    (re.compile(rf"(?i)\b(set-cookie|cookie)(['\"]?\s*[:=]\s*['\"]?){_NOT_REDACTED}"
+                r"((?:[^\s;=,'\"]+=[^\s;,'\"]*(?:;\s*)?)+)"),
+     rf"\1\2{_REDACTED} "),
+    (re.compile(rf"(?i)\b(bearer)\s+{_NOT_REDACTED}[A-Za-z0-9._~+/=-]{{8,}}"), rf"\1 {_REDACTED}"),
+    # quoted credential values in reprs: 'token': 'abc', "password"="abc"
+    (re.compile(rf"(?i)(['\"])({_SECRET_KEYS})\1(\s*[:=]\s*)(['\"]){_NOT_REDACTED}[^'\"]*\4"),
+     rf"\1\2\1\3\4{_REDACTED}\4"),
+    # https://user:pass@host, https://token@host
+    (re.compile(rf"(?i)\b([a-z][a-z0-9+.-]{{1,15}}://){_NOT_REDACTED}[^/\s@:'\"]+(?::[^/\s@'\"]*)?@"),
+     rf"\1{_REDACTED}@"),
+    # ?token=..., &X-Amz-Signature=..., api_key=...
+    (re.compile(rf"(?i)(?<![\w-])({_SECRET_PARAMS})={_NOT_REDACTED}[^&\s'\"<>#,;)\]]+"),
+     rf"\1={_REDACTED}"),
+    # well-known credential shapes, wherever they appear
+    (re.compile(r"\bhf_[A-Za-z0-9]{20,}"), _REDACTED),
+    (re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})"), _REDACTED),
+    (re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"), _REDACTED),
+    (re.compile(r"\bya29\.[0-9A-Za-z_-]{20,}"), _REDACTED),
+    (re.compile(r"\bAIza[0-9A-Za-z_-]{35}"), _REDACTED),
+    (re.compile(r"\bxox[abprs]-[0-9A-Za-z-]{10,}"), _REDACTED),
+    (re.compile(r"\bsk-[A-Za-z0-9_-]{20,}"), _REDACTED),
+    (re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"), _REDACTED),
+]
+
+
+def sanitize_reason(text, cap: int | None = REASON_MAX_CHARS) -> str:
+    """A failure reason that is safe to store and publish (see block comment).
+    cap=None skips only the length cap (classification reads the whole text)."""
+    s = _clean_reason("" if text is None else str(text))
+    for pat, repl in _REDACTIONS:
+        s = pat.sub(repl, s)
+    s = _UNSAFE_CHARS.sub("�", " ".join(s.split()))
+    if cap is not None and len(s) > cap:
+        kept = s[:max(0, cap - len(_TRUNCATED))].rstrip()
+        cut = kept.rfind("[")
+        if cut >= 0 and _REDACTED.startswith(kept[cut:]):  # never leave half a marker
+            kept = kept[:cut].rstrip()
+        s = kept + _TRUNCATED
+    return s
+
+
+# --- audit attempts (docs/checks.md, "Change tracking") ---------------------
+# Every audit the run actually starts records one attempt: UTC start and end,
+# outcome, engine, run configuration and the dataset revision it pinned. The
+# revision is recorded only when resolution succeeded and the audit then read
+# at it; otherwise it is unknown, never guessed. A revision probe or a queue
+# item the run never started is not an attempt. The row keeps its latest
+# attempt in latest_attempt, apart from the last successful result (report,
+# audited_at, revision, engine, sample, ...), which a failed retry never touches.
+ATTEMPT_SCHEME = "kinema-audit-attempt/1"
+ATTEMPT_OUTCOMES = ("success", "error", "gated", "unsupported")
+
+
+def _utcnow() -> dt.datetime:
+    return dt.datetime.now(dt.timezone.utc)
+
+
+def _utc_stamp(t: dt.datetime) -> str:
+    return f"{t.astimezone(dt.timezone.utc):%Y-%m-%dT%H:%M:%SZ}"
+
+
+def attempt_config(d: dict, max_episodes: int, size_cap_mb: int, probes: bool,
+                   transition_cap: int) -> dict:
+    """The run settings that shape what one attempt reads and publishes."""
+    rlds = bool(d.get("rlds"))
+    return {"kind": "rlds-metadata" if rlds else "hub-sample",
+            "max_episodes": max_episodes, "size_cap_mb": size_cap_mb,
+            "sampled": rlds or (d.get("data_bytes") or 0) > size_cap_mb * 1024 * 1024,
+            "probes": bool(probes) and not rlds, "transition_cap": transition_cap}
+
+
+def run_attempt(d: dict, engine: str, config: dict, audit, clock=None,
+                on_success=None) -> dict:
+    """One audit attempt -> the board entry it produced, latest_attempt included.
+
+    audit(d, pin) returns a DatasetReport; it sets pin["revision"] once the
+    revision is resolved and about to be read at. A failure's reason is
+    sanitized here, before anything stores it. on_success(entry) runs inside
+    the attempt (writing the report JSON), so its failure fails the attempt."""
+    clock = clock or _utcnow
+    started = _utc_stamp(clock())
+    pin: dict = {}
+    entry = {**d, "slug": d["id"].replace("/", "--"), "engine": engine,
+             "audit_max_episodes": config["max_episodes"]}
+    if config.get("sampled"):
+        entry["sampled"] = True
+    raw: str | None = None
+    try:
+        rep = audit(d, pin)
+        entry["report"] = report_to_dict(rep)
+        meta = getattr(rep, "audit_meta", None) or {}
+        entry["revision"] = meta.get("revision")  # None: unknown, never guessed
+        entry["sample"] = meta.get("sample")
+        if on_success is not None:
+            on_success(entry)
+    except DatasetError as e:
+        raw = str(e)
+    except Exception as e:  # noqa: BLE001
+        raw = f"audit error: {type(e).__name__}: {e}"
+    finished = _utc_stamp(clock())
+    reason: str | None = None
+    if raw is None:
+        outcome = "success"
+        revision = entry.get("revision")
+    else:
+        for k in ("report", "revision", "sample"):
+            entry.pop(k, None)
+        outcome = _classify_reason(sanitize_reason(raw, cap=None))
+        reason = sanitize_reason(raw)
+        entry["reason"], entry["status"] = reason, outcome
+        revision = pin.get("revision")
+    attempt = {"scheme": ATTEMPT_SCHEME, "started_at": started, "finished_at": finished,
+               "outcome": outcome, "engine": engine,
+               "revision": revision or None,
+               "revision_status": "pinned" if revision else "unknown",
+               "config": dict(config)}
+    if reason is not None:
+        attempt["reason"] = reason
+    entry["latest_attempt"] = attempt
+    if outcome == "success":
+        entry["audit_started_at"], entry["audited_at"] = started, finished
+        entry["audit_config"] = dict(config)
+    return entry
 
 
 # failure taxonomy: permanent states stay on the board as-is, transient
@@ -1265,7 +1424,9 @@ def robustness_gate(ctx, rep, prior: dict | None, gate: TransitionGate | None,
 
 def audit_one(repo_id: str, max_episodes: int, cap_bytes: int,
               prior: dict | None = None, gate: "TransitionGate | None" = None,
-              probe: bool = True) -> DatasetReport:
+              probe: bool = True, pin: dict | None = None) -> DatasetReport:
+    """pin (an attempt record) gets the revision once it is resolved, right
+    before the audit reads at it; an unresolved revision leaves it unset."""
     import shutil
     import tempfile
 
@@ -1278,6 +1439,8 @@ def audit_one(repo_id: str, max_episodes: int, cap_bytes: int,
         # videos all come from the same commit, so the audit describes exactly
         # it even if the dataset is pushed to mid-run
         revision = resolve_revision(base)
+        if pin is not None and revision:
+            pin["revision"] = revision
         dest, sizes = download_sample(repo_id, cap_bytes, dest, unservable, revision=revision)
         targets_all = _target_video_files(dest, max_episodes) or []
         subset = _video_subsample(targets_all, sizes, VIDEO_SAMPLE_FILES, VIDEO_CAP_BYTES)
@@ -1335,7 +1498,8 @@ def audit_one(repo_id: str, max_episodes: int, cap_bytes: int,
             try:
                 rep.results.append(check.run(ctx, cfg))
             except Exception as e:  # noqa: BLE001
-                rep.results.append(check.skip(f"check crashed: {type(e).__name__}: {e}"))
+                rep.results.append(check.skip(
+                    f"check crashed: {sanitize_reason(f'{type(e).__name__}: {e}')}"))
         robustness_gate(ctx, rep, prior, gate, repo_id=repo_id, probe=probe)
         rep.audit_meta = {"revision": revision,
                           "sample": sample_signature(ctx.episode_ids(), fetched_videos)}
@@ -1397,8 +1561,30 @@ def reconcile_discovery(entries: list[dict], datasets: list[dict],
 
 
 def preserve_failed_retry(old: dict, new: dict) -> dict:
-    if old.get("report") and not new.get("report") and new.get("status") == "error":
-        return {**old, "last_audit_error": new.get("reason", "unknown audit failure")}
+    """Merge one attempt's entry (new) into the stored row (old).
+
+    - Success (recovery included): the new entry is the row. It carries its
+      own latest_attempt and no failure marker - last_audit_error, status
+      and reason are dropped, so no stale error banner survives.
+    - Failure on a row with a stored success: the stored row is kept as is -
+      report, audited_at, revision, engine, sample, coverage, score, verdicts
+      and findings - plus the active failure marker last_audit_error and the
+      failed latest_attempt. Every failure class counts (error, gated,
+      unsupported): a dataset that turns gated keeps its last real audit,
+      marked as failing to re-audit, rather than losing it.
+    - Failure with no stored success: the new failure row (gated, error or
+      unsupported, no score) replaces the old one."""
+    if new.get("report"):
+        return {k: v for k, v in new.items()
+                if k not in ("last_audit_error", "status", "reason")}
+    if old.get("report"):
+        kept = {k: v for k, v in old.items() if k not in ("status", "reason")}
+        kept["last_audit_error"] = sanitize_reason(new.get("reason") or "unknown audit failure")
+        if isinstance(new.get("latest_attempt"), dict):
+            kept["latest_attempt"] = new["latest_attempt"]
+        else:  # an attempt without a record: never leave the old success as "latest"
+            kept.pop("latest_attempt", None)
+        return kept
     return new
 
 
@@ -1509,7 +1695,11 @@ def render_index(entries: list[dict], generated: str, harm_table: bool = False, 
             if e.get("discovery_current") is False:
                 link += ' <span class=dim>(not rediscovered this run)</span>'
             if e.get("last_audit_error"):
-                link += f' <span class=dim title="{esc(e["last_audit_error"])}">(retry failed)</span>'
+                # the result shown is the last successful audit: say how old it is
+                day = _stamp_day(e.get("audited_at"))
+                link += (f' <span class=dim title="{_t(_retry_failed_title(e))}">(retry failed; '
+                         + (f"result from {day}" if day else "result date not recorded")
+                         + ")</span>")
             score = f"<span class=score>{r['score']}</span>"
             model = r.get("score_model", "legacy-v0")
             if model != SCORE_MODEL:
@@ -1520,7 +1710,9 @@ def render_index(entries: list[dict], generated: str, harm_table: bool = False, 
                 badge(c["verdict"]) for c in r["checks"] if c["verdict"] in ("WARN", "FAIL")
             ) or '<span class=dim>all clear</span>'
             if stale:
-                why = ("audited by older check logic" if e.get("engine") != engine
+                why = ("the latest re-audit attempt failed; this is the last successful audit"
+                       if e.get("last_audit_error")
+                       else "audited by older check logic" if e.get("engine") != engine
                        else f"audited at {r.get('episodes')} episodes - deepening to {max_episodes} queued")
                 checks += f' <span class=dim title="{why}">(stale - re-audit needed)</span>'
         else:
@@ -1528,7 +1720,7 @@ def render_index(entries: list[dict], generated: str, harm_table: bool = False, 
             score = '<span class=dim>-</span>'
             verdict = badge("NA")
             label = _STATUS_LABELS.get(e.get("status") or "error", _STATUS_LABELS["error"])
-            detail = esc(e.get("reason", ""))
+            detail = _t(sanitize_reason(e.get("reason", "")))
             checks = f'<span class=dim title="{detail}">{label}</span>'
         downloads_cell = "-" if e.get("rlds") else f"{e['downloads']:,}"
         rows.append(
@@ -1617,13 +1809,19 @@ td, li, p, summary { overflow-wrap: break-word; }
 .kv th { position: static; width: 12rem; vertical-align: top; }
 .kv td, .checks td { vertical-align: top; }
 .scroll { overflow-x: auto; }
-.findings h3 { font-size: 1rem; margin: 1.2rem 0 .3rem; }
+.findings h4 { font-size: 1rem; margin: 1.2rem 0 .3rem; }
+section.attempt, section.success { border: 1px solid #8884; border-radius: .4rem;
+                                   padding: .1rem .9rem .7rem; margin: 1.2rem 0; }
+section.a-failed { border-left: 4px solid #cf222e; }
+section h2 { font-size: 1.2rem; margin: .7rem 0 .4rem; }
+section h3 { font-size: 1.05rem; margin: 1.4rem 0 .4rem; }
 .findings ul, .limits { padding-left: 1.2rem; }
 .findings li { margin: .15rem 0; }
 summary { cursor: pointer; color: #0969da; margin: .3rem 0; }
 footer { margin: 2.5rem 0 1rem; font-size: .9rem; }
 @media (max-width: 640px) {
   body { margin: 1rem auto; }
+  section.attempt, section.success { padding: .1rem .6rem .5rem; }
   .kv tr, .checks tr { display: block; border-bottom: 1px solid #8884; padding: .35rem 0; }
   .kv th, .kv td, .checks td { display: block; width: auto; border: 0; padding: .1rem 0; }
   .checks thead { display: none; }
@@ -1782,13 +1980,122 @@ def _audited_at_html(value) -> str:
     return f"{_t(value)} <span class=dim>(as recorded; not a recognized timestamp)</span>"
 
 
+def _stamp_day(value) -> str | None:
+    """YYYY-MM-DD of a recorded UTC stamp, or None if it is not one."""
+    m = _AUDITED_AT_RE.fullmatch(value) if isinstance(value, str) else None
+    return m.group(1) if m else None
+
+
+def _stamp_text(value) -> str | None:
+    m = _AUDITED_AT_RE.fullmatch(value) if isinstance(value, str) else None
+    return f"{m.group(1)} {m.group(2)} UTC" if m else None
+
+
+def failed_attempt(e: dict) -> dict | None:
+    """The row's latest attempt record when it is the failure that set the
+    active failure marker; None for a legacy failure (no record kept)."""
+    att = e.get("latest_attempt")
+    if not isinstance(att, dict) or att.get("outcome") == "success":
+        return None
+    return att
+
+
+def _retry_failed_title(e: dict) -> str:
+    """Plain-text tooltip for the board's retry-failed flag (escaped by the caller)."""
+    att = failed_attempt(e)
+    ended = _stamp_text(att.get("finished_at")) if att else None
+    return (f"latest re-audit attempt failed ({'ended ' + ended if ended else 'time not recorded'}): "
+            f"{sanitize_reason(e.get('last_audit_error'))}")
+
+
+_CONFIG_KINDS = {"hub-sample": "Hub sample", "rlds-metadata": "RLDS metadata/listing only"}
+
+
+def _config_html(cfg, max_episodes_fallback=None) -> str:
+    """An attempt's recorded run configuration. A legacy row recorded only its
+    episode cap (audit_max_episodes): that is shown, the rest is not invented."""
+    if not isinstance(cfg, dict):
+        n = _int(max_episodes_fallback)
+        if n is None:
+            return _NR
+        return (f"max {n} episodes <span class=dim>(the run's other settings were not "
+                "recorded)</span>")
+
+    def num(key, fmt):
+        n = _int(cfg.get(key))
+        return fmt.format(n) if n is not None else f"{key.replace('_', ' ')} not recorded"
+
+    def flag(key, on, off):
+        v = cfg.get(key)
+        return on if v is True else off if v is False else f"{key} not recorded"
+
+    kind = cfg.get("kind")
+    parts = [_CONFIG_KINDS.get(kind) if kind in _CONFIG_KINDS
+             else (f"{_t(kind)} (as recorded)" if kind else "kind not recorded"),
+             num("max_episodes", "max {} episodes"),
+             num("size_cap_mb", "full-download cap {} MB"),
+             flag("sampled", "payload sampled (over the cap)", "payload within the cap"),
+             flag("probes", "robustness probes on", "robustness probes off"),
+             "transition cap off" if cfg.get("transition_cap") == 0
+             else num("transition_cap", "transition cap {} per check")]
+    return " &middot; ".join(parts)
+
+
+def _attempt_revision_html(rid: str, att: dict, is_rlds: bool) -> str:
+    if "revision_status" not in att:
+        return _NR
+    rev = att.get("revision")
+    if att.get("revision_status") == "pinned" and rev:
+        return _rev_html(rid, rev, is_rlds, "pinned and read by this attempt")
+    return ("unknown <span class=dim>(not pinned: the revision was not resolved, or the "
+            "attempt failed before it read at one)</span>")
+
+
+_OUTCOME_NOTES = {
+    "error": "the audit raised an error; a retry is queued",
+    "gated": "the repository could not be read (gated)",
+    "unsupported": "the dataset is not in a format kinema audits",
+}
+
+
+def _attempt_rows(e: dict, att: dict | None, is_rlds: bool, reason) -> list[tuple[str, str]]:
+    """kv rows for one failed attempt. att=None is a legacy failure: only the
+    reason (and, for a never-audited row, the engine) was recorded."""
+    legacy = " <span class=dim>(this failure predates attempt records)</span>"
+    if att is None:
+        return [("outcome", "failed" + (f": <b>{_t(e['status'])}</b>" if e.get("status") else "")),
+                ("attempt started", _NR + legacy), ("attempt ended", _NR + legacy),
+                ("check engine", (f"<code>{_t(e['engine'])}</code>" if not e.get("report")
+                                  and e.get("engine") else _NR)),
+                ("dataset revision", _NR),
+                ("run configuration", _config_html(None, None if e.get("report")
+                                                   else e.get("audit_max_episodes"))),
+                ("reason", f"<code>{_t(sanitize_reason(reason))}</code>" if reason else _NR)]
+    outcome = att.get("outcome")
+    out_html = (f"failed: <b>{_t(outcome)}</b>"
+                + (f" <span class=dim>({_OUTCOME_NOTES[outcome]})</span>" if outcome in _OUTCOME_NOTES else "")
+                if outcome else _NR)
+    reason = att.get("reason") or reason
+    return [("outcome", out_html),
+            ("attempt started", _audited_at_html(att.get("started_at"))),
+            ("attempt ended", _audited_at_html(att.get("finished_at"))),
+            ("check engine", f"<code>{_t(att['engine'])}</code>" if att.get("engine") else _NR),
+            ("dataset revision", _attempt_revision_html(e["id"], att, is_rlds)),
+            ("run configuration", _config_html(att.get("config"))),
+            ("reason", f"<code>{_t(sanitize_reason(reason))}</code>" if reason else _NR)]
+
+
 def _revision_html(e: dict, is_rlds: bool) -> str:
     rev = e.get("revision")
     if not rev:
         return _NR
+    return _rev_html(e["id"], rev, is_rlds, "Hub commit at audit time")
+
+
+def _rev_html(rid: str, rev, is_rlds: bool, commit_note: str) -> str:
     if isinstance(rev, str) and _GIT_SHA_RE.fullmatch(rev) and not is_rlds:
-        return (_ext(_hub_dataset_url(e["id"], rev), f"<code title='{rev}'>{rev[:12]}</code>")
-                + " <span class=dim>(Hub commit at audit time)</span>")
+        return (_ext(_hub_dataset_url(rid, rev), f"<code title='{rev}'>{rev[:12]}</code>")
+                + f" <span class=dim>({commit_note})</span>")
     if isinstance(rev, str) and _GCS_DIGEST_RE.fullmatch(rev):
         return (f"shard-inventory digest <code>{rev[4:]}</code> "
                 "<span class=dim>(RLDS buckets have no commits)</span>")
@@ -1799,9 +2106,6 @@ def _stale_reasons(e: dict, rep: dict, engine: str, max_episodes: int) -> list[s
     """Why the board queues this stored result for re-audit, in the terms of
     audit_stale (which decides); HTML-safe fragments."""
     why = []
-    if e.get("last_audit_error"):
-        why.append(f"the latest re-audit attempt failed ({_t(e['last_audit_error'])}); "
-                   "the result below is from the audit before it")
     row_engine = e.get("engine")
     if not row_engine:
         why.append("the engine that produced it was not recorded")
@@ -1814,6 +2118,14 @@ def _stale_reasons(e: dict, rep: dict, engine: str, max_episodes: int) -> list[s
     eps, cap = _int(rep.get("episodes")) or 0, _int(e.get("audit_max_episodes")) or 0
     if rep.get("truncated") and max(eps, cap) < max_episodes:
         why.append(f"it read {eps} episodes and a deeper audit ({max_episodes}) is queued")
+    if e.get("last_audit_error"):
+        # last, so the "it" clauses above stay about the stored result
+        att = failed_attempt(e)
+        ended = _audited_at_html(att.get("finished_at")) if att else _NR
+        why.append("the latest re-audit attempt"
+                   + (f", which ended {ended}," if ended != _NR else " (its time was not recorded)")
+                   + " failed; that attempt is described under <i>Latest attempt</i> and "
+                   "changed nothing below")
     return why
 
 
@@ -1934,7 +2246,7 @@ def _findings_html(checks: list) -> str:
         n_odd = len(serious) + len(other) - sum(n.values())
         if n_odd:
             counts += f" &middot; {n_odd} unrecognized severity"
-        part = f"<h3><code>{_t(c.get('id'))}</code> <span class=dim>{counts}</span></h3>"
+        part = f"<h4><code>{_t(c.get('id'))}</code> <span class=dim>{counts}</span></h4>"
         if serious:
             part += "<ul>" + "".join(_finding_li(f) for f in serious[:_SERIOUS_SHOWN]) + "</ul>"
             if len(serious) > _SERIOUS_SHOWN:
@@ -2017,16 +2329,17 @@ def render_audit_page(e: dict, engine: str, max_episodes: int = 0) -> str:
         }.get(status, ("s-error", "Not audited: no result is stored for this row and its status "
                                   f"is {'not recorded' if not status else '<b>' + _t(status) + '</b>'}."
                                   " There is no score."))
+        att = failed_attempt(e)
         body = head + (
             f"<div class='state {state[0]}'><p>{state[1]}</p></div>"
-            + _kv([
-                ("recorded reason", f"<code>{_t(e['reason'])}</code>" if e.get("reason") else _NR),
-                ("engine at last attempt", f"<code>{_t(e['engine'])}</code>" if e.get("engine") else _NR),
-                ("attempt time", _NR + " <span class=dim>(the board stores no time for failed attempts)</span>"),
-                ("dataset revision", _NR),
-                ("downloads at discovery", dl_html),
-            ])
-            + notes_html)
+            + "<section class='attempt a-failed'><h2>Latest attempt</h2>"
+            + _kv(_attempt_rows(e, att, is_rlds, e.get("reason"))
+                  + [("downloads at discovery", dl_html)])
+            + "</section>"
+            + notes_html
+            + "<section class=success><h2>Last successful audit</h2>"
+            "<p>None recorded: the board holds no successful audit of this dataset, so "
+            "there is no score, verdict or finding to show.</p></section>")
     else:
         try:
             stale = audit_stale(e, engine, max_episodes)
@@ -2034,15 +2347,27 @@ def render_audit_page(e: dict, engine: str, max_episodes: int = 0) -> str:
             stale = True
         why = _stale_reasons(e, rep, engine, max_episodes) if stale else []
         when = _audited_at_html(e.get("audited_at"))
+        retry_failed = bool(e.get("last_audit_error"))
         if stale:
-            state = ("s-error" if e.get("last_audit_error") else "s-stale",
-                     "<b>Stale result.</b> The board has queued this dataset for re-audit because "
+            state = ("s-error" if retry_failed else "s-stale",
+                     ("<b>Latest re-audit failed; stale result.</b> " if retry_failed
+                      else "<b>Stale result.</b> ")
+                     + "The board has queued this dataset for re-audit because "
                      + ("; ".join(why) if why else "its stored result no longer counts as current")
-                     + f". The score below is the stored result of the audit at {when}, not a current one.")
+                     + ". The score below is the stored result of the last successful audit, "
+                     f"completed {when}, not a current one.")
         else:
-            state = ("s-current", f"Latest stored result: the audit at {when}, produced by the "
+            state = ("s-current", f"Latest stored result: the audit completed {when}, produced by the "
                                   "check engine the board currently runs. It covers only what that "
                                   "audit read (see coverage limits).")
+        attempt_html = ""
+        if retry_failed:
+            attempt_html = (
+                "<section class='attempt a-failed'><h2>Latest attempt: failed</h2>"
+                "<p>This re-audit attempt produced no result. It did not replace or change "
+                "the last successful audit below.</p>"
+                + _kv(_attempt_rows(e, failed_attempt(e), is_rlds, e.get("last_audit_error")))
+                + "</section>")
         score = _int(rep.get("score"))
         model = rep.get("score_model")
         score_html = (f"<span class=score>{score}</span>/100" if score is not None else _NR)
@@ -2076,22 +2401,27 @@ def render_audit_page(e: dict, engine: str, max_episodes: int = 0) -> str:
         limits = _coverage_limits(e, rep, checks, is_rlds)
         body = head + (
             f"<div class='state {state[0]}'><p>{state[1]}</p></div>"
+            + attempt_html
+            + "<section class=success><h2>Last successful audit</h2>"
             + _kv([
                 ("health score", score_html),
                 ("verdict", _vbadge(rep.get("verdict"))),
                 ("score model", model_html),
-                ("audited at", when),
+                ("audit started", _audited_at_html(e.get("audit_started_at"))),
+                ("audit completed", when),
                 ("dataset revision", _revision_html(e, is_rlds)),
                 ("check engine", engine_html),
+                ("run configuration", _config_html(e.get("audit_config"), e.get("audit_max_episodes"))),
                 ("audit type", kind),
                 ("what was read", shape),
                 ("downloads at discovery", dl_html),
             ])
             + notes_html
-            + "<h2>Coverage limits</h2><ul class=limits>"
+            + "<h3>Coverage limits</h3><ul class=limits>"
             + "".join(f"<li>{x}</li>" for x in limits) + "</ul>"
-            + "<h2>Check verdicts</h2>" + _checks_table(checks)
-            + "<h2>Findings</h2>" + _findings_html(checks))
+            + "<h3>Check verdicts</h3>" + _checks_table(checks)
+            + "<h3>Findings</h3>" + _findings_html(checks)
+            + "</section>")
     footer = (
         "<footer class=dim>Rendered from the board's stored results (<a href='../data.json'>data.json</a>) "
         "by kinema's leaderboard script. Nothing on this page is fetched live, and it carries no "
@@ -2364,7 +2694,20 @@ def _cap_detail_lists(entries: list) -> list:
                     if isinstance(v, list) and len(v) > _DETAIL_LIST_CAP:
                         det[k] = v[:_DETAIL_LIST_CAP]
                         det.setdefault(f"{k}_total", len(v))
+    for e in capped:
+        _scrub_reasons(e)
     return capped
+
+
+def _scrub_reasons(e: dict) -> None:
+    """Sanitize a row's stored failure reasons in place (legacy rows written
+    before sanitize_reason included); idempotent, so current rows are unchanged."""
+    for k in ("reason", "last_audit_error"):
+        if isinstance(e.get(k), str):
+            e[k] = sanitize_reason(e[k])
+    att = e.get("latest_attempt")
+    if isinstance(att, dict) and isinstance(att.get("reason"), str):
+        att["reason"] = sanitize_reason(att["reason"])
 
 
 def _write(out: Path, entries: list, generated: str, max_episodes: int = 0) -> None:
@@ -2578,32 +2921,29 @@ def main() -> int:
     gate = TransitionGate(args.transition_cap)
 
     def process(d):
-        slug = d["id"].replace("/", "--")
-        entry = {**d, "slug": slug, "engine": engine,
-                 "audit_max_episodes": args.max_episodes}
-        if d["data_bytes"] > args.size_cap_mb * 1024 * 1024:
-            entry["sampled"] = True
-        try:
-            if d.get("rlds"):
-                entry["sampled"] = True  # metadata-only audit, never downloads
-                rep = audit_rlds(d)
-            else:
-                rep = audit_one(d["id"], args.max_episodes, args.size_cap_mb * 1024 * 1024,
-                                prior=prior_verdicts.get(d["id"]), gate=gate,
-                                probe=not args.no_probes and not is_heavy(d))
-            entry["report"] = report_to_dict(rep)
-            meta = getattr(rep, "audit_meta", None) or {}
-            entry["revision"] = meta.get("revision")  # None: unknown, never guessed
-            entry["sample"] = meta.get("sample")
-            entry["audited_at"] = f"{dt.datetime.now(dt.timezone.utc):%Y-%m-%dT%H:%M:%SZ}"
-            (out / "dataset" / f"{slug}.json").write_text(json.dumps(entry["report"], indent=2, default=str))
-            print(f"    {d['id']}: score {rep.score}/100 ({rep.verdict.name})", flush=True)
-        except DatasetError as e:
-            entry["reason"] = _clean_reason(str(e))
-            entry["status"] = _classify_reason(entry["reason"])
-        except Exception as e:  # noqa: BLE001
-            entry["reason"] = _clean_reason(f"audit error: {type(e).__name__}: {e}")
-            entry["status"] = _classify_reason(entry["reason"])
+        # one actual attempt (see run_attempt); queue items the budget never
+        # starts get no record
+        probes = not args.no_probes and not is_heavy(d)
+        config = attempt_config(d, args.max_episodes, args.size_cap_mb, probes,
+                                args.transition_cap)
+
+        def audit(row, pin):
+            if row.get("rlds"):
+                return audit_rlds(row, pin=pin)  # metadata-only audit, never downloads
+            return audit_one(row["id"], args.max_episodes, args.size_cap_mb * 1024 * 1024,
+                             prior=prior_verdicts.get(row["id"]), gate=gate,
+                             probe=probes, pin=pin)
+
+        def save_report(entry):
+            (out / "dataset" / f"{entry['slug']}.json").write_text(
+                json.dumps(entry["report"], indent=2, default=str))
+
+        entry = run_attempt(d, engine, config, audit, on_success=save_report)
+        if entry.get("report"):
+            r = entry["report"]
+            print(f"    {d['id']}: score {r.get('score')}/100 ({r.get('verdict')})", flush=True)
+        else:  # the outcome only: reasons are published data, not log lines
+            print(f"    {d['id']}: attempt failed ({entry['status']})", flush=True)
         return entry
 
     todo = [d for d in datasets if d["id"] not in done_ids]
