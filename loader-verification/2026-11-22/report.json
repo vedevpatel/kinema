@@ -1,9 +1,9 @@
 {
   "adversarial_review": {
-    "incomplete_access": "Frame probes use first/middle/last and claim-specific positions, not every frame. BitRobot and VLABench pointer cases inspect the selected loader table but do not run training. FineART and droid cannot complete dataset construction for independent schema reasons.",
+    "incomplete_access": "Frame probes use first/middle/last and claim-specific positions, not every frame. BitRobot and VLABench pointer cases inspect the selected loader table but do not run training. FineART and droid cannot complete dataset construction for independent schema reasons. FineART shifted queries were not tested.",
     "revision_drift": "Every recovered path was fetched at a 40-character commit and SHA-256 hashed. Frozen info/stats and available LFS hashes were checked. No latest-branch data were substituted.",
     "selection_bias": "All eleven unresolved findings in the four named checks were included; no case removed because of unavailable per-dataset pages or difficult loaders. The previously confirmed r413:c2:f2 is excluded by the frozen unresolved filter.",
-    "shared_assumptions": "The verifier imports no kinema detector code. It uses upstream LeRobot releases, raw parquet/MP4 and the frozen audit only to identify assertions and pins. A direct decoder probe cannot replace full dataset iteration.",
+    "shared_assumptions": "The verifier imports no kinema detector code. It uses upstream LeRobot releases, raw parquet/MP4 and the frozen audit only to identify assertions and pins. A direct decoder probe cannot replace full dataset iteration; raw timestamp probes do not settle shifted training queries.",
     "weak_labels": "No policy checkpoint is specified for four inference-normalization claims. Those remain unresolved despite successful raw frame loading in three cases. No training or real-world miss-rate claim is made."
   },
   "cases": [
@@ -1399,7 +1399,7 @@
       ],
       "case_id": "r1:c1:f0",
       "check": "timestamp-grid",
-      "classification": "refuted",
+      "classification": "unresolved",
       "dataset": "lerobot/FineART",
       "evidence_files": [
         "evidence/r1_c1_f0.json",
@@ -1408,13 +1408,13 @@
         "evidence/r1_c1_f0_decoder.json"
       ],
       "metadata_anomaly_at_freeze": {},
-      "observed_values": "Pinned episode has 26946 rows, about 1/90-s spacing, and maximum 30-fps grid deviation 0.022225 s. Direct decoder returned frames within default 1e-4-s tolerance for first/middle/worst-grid/last positions across all four cameras (16/16). LeRobotDataset construction in 0.4.0 and 0.5.1 fails earlier on source dtype language.",
+      "observed_values": "Pinned episode has 26946 rows, about 1/90-s spacing, and maximum 30-fps grid deviation 0.022225 s. Direct decoder returned frames at first/middle/worst-grid/last raw frame timestamps across all four cameras (16/16). No shifted training query (raw timestamp + k/30) was tested. LeRobotDataset construction in 0.4.0 and 0.5.1 fails earlier on source dtype language.",
       "original_assertion": "1 episode(s) off the 30 fps grid (episodes 40455): frame spacing deviates up to 67% of a period; LeRobot's default tolerance_s (1e-4 s) rejects these - needs tolerance_s >= 0.0222",
       "original_audit_classification": "unresolved",
       "preregistered_confirm_if": "Timestamp validation or actual access rejects affected episode at default tolerance for the claimed grid deviation",
       "preregistered_operation": "LeRobotDataset v3 episode 40455 indexing and item access at default tolerance_s=1e-4",
       "preregistered_refute_if": "Affected episode is indexable and accessible at default tolerance without timestamp error",
-      "reason": "Off-30-fps spacing did not make video lookup reject the tested frames; the loader does not reach timestamp access because of an independent schema incompatibility.",
+      "reason": "Successful raw-timestamp lookups do not establish that shifted training queries pass the default tolerance. The schema failure prevents exercising the full loader query path, so the original tolerance consequence is not settled.",
       "recovery_commands": [
         "python loader-verification/2026-11-22/prepare.py r1:c1:f0 --metadata",
         "python loader-verification/2026-11-22/prepare.py r1:c1:f0 --path data/chunk-000/file-210.parquet",
@@ -1423,11 +1423,11 @@
         "python loader-verification/2026-11-22/prepare.py r1:c1:f0 --path videos/observation.images.cam_low/chunk-040/file-455.mp4",
         "python loader-verification/2026-11-22/prepare.py r1:c1:f0 --path videos/observation.images.cam_right_wrist/chunk-040/file-455.mp4"
       ],
-      "remaining_gap": "Full dataset iteration with this custom language schema remains unsupported by the tested releases; no inference about other loaders.",
+      "remaining_gap": "Probe pinned shifted queries (raw timestamp + k/30) on the relevant video path or use a compatible unmodified loader; do not change the source schema just to reach the probe.",
       "repo": "lerobot/FineART",
       "revision": "15746b76ddc21ffd38d73888fefe2e7a1496385b",
       "subdir": "",
-      "tested_scope": "LeRobot 0.4.0 v3.0 direct pyav video lookup at episode-40455 timestamps"
+      "tested_scope": "LeRobot 0.4.0 v3.0 direct pyav video lookup at raw episode-40455 frame timestamps only"
     },
     {
       "artifact_hashes": [
@@ -2153,14 +2153,14 @@
     },
     "timestamp-grid": {
       "confirmed": 1,
-      "refuted": 2,
-      "unresolved": 0
+      "refuted": 1,
+      "unresolved": 1
     }
   },
   "result_counts": {
     "confirmed": 4,
-    "refuted": 3,
-    "unresolved": 4
+    "refuted": 2,
+    "unresolved": 5
   },
   "schema": 1,
   "scope": "Loader consequences in the eleven unresolved frozen phase-1 cases; no product certification or aggregate accuracy",

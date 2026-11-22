@@ -4,7 +4,7 @@ This report measures eleven unresolved assertions from the [frozen audit](../../
 
 Frozen audit SHA-256: `d1b13333442049e09b942d7aca0ad7b9824ca24dd9dff71c6732160593b66f40`. Preregistered expectations SHA-256: `ee6d4f27e12e184d310fee484bcb7c162247e36a9f83424645f7ce9ce51a1b91`.
 
-Scoped case results: **4 confirmed, 3 refuted, 4 unresolved**. These are neither product accuracy nor a training outcome measure.
+Scoped case results: **4 confirmed, 2 refuted, 5 unresolved**. These are neither product accuracy nor a training outcome measure.
 
 LeRobot 0.3.3 tested v2.0/v2.1; 0.4.0 tested v3.0. FineART also received a 0.5.1 schema-compatibility probe. These versions follow their declared dataset-format support; full package versions and source hashes are in `evidence/environments.json`.
 
@@ -16,7 +16,7 @@ LeRobot 0.3.3 tested v2.0/v2.1; 0.4.0 tested v3.0. FineART also received a 0.5.1
 | `r75:c12:f4` | episode-file-pointers | LeRobot 0.4.0 v3.0 episode-2035 selection from metadata-named file | **confirmed** |
 | `r36:c12:f1` | episode-file-pointers | LeRobot 0.4.0 v3.0 episode-129 selection from metadata-named file | **confirmed** |
 | `r94:c1:f1` | timestamp-grid | LeRobot 0.3.3 v2.0 episode-0 construction and direct pyav video lookup | **confirmed** |
-| `r1:c1:f0` | timestamp-grid | LeRobot 0.4.0 v3.0 direct pyav video lookup at episode-40455 timestamps | **refuted** |
+| `r1:c1:f0` | timestamp-grid | LeRobot 0.4.0 v3.0 direct pyav video lookup at raw episode-40455 frame timestamps only | **unresolved** |
 | `r261:c2:f4` | dropped-frames | LeRobot 0.4.0 v3.0 episode-59 item and hand_right lookup | **confirmed** |
 | `r51:c17:f1` | deployment-readiness | LeRobot 0.3.3 v2.0 episode-0 iteration | **unresolved** |
 | `r71:c1:f1` | timestamp-grid | LeRobot 0.3.3 v2.1 direct pyav video lookup on episode 0 | **refuted** |
@@ -96,15 +96,15 @@ Remaining gap: The other 39 named episodes were not probed; the first load failu
 
 Evidence: `evidence/r94_c1_f1.json`, `evidence/r94_c1_f1_loader.json`, `evidence/r94_c1_f1_decoder.json`
 
-### `r1:c1:f0` — refuted
+### `r1:c1:f0` — unresolved
 
 Source: `lerobot/FineART@15746b76ddc21ffd38d73888fefe2e7a1496385b`. Original assertion: 1 episode(s) off the 30 fps grid (episodes 40455): frame spacing deviates up to 67% of a period; LeRobot's default tolerance_s (1e-4 s) rejects these - needs tolerance_s >= 0.0222
 
-Observed: Pinned episode has 26946 rows, about 1/90-s spacing, and maximum 30-fps grid deviation 0.022225 s. Direct decoder returned frames within default 1e-4-s tolerance for first/middle/worst-grid/last positions across all four cameras (16/16). LeRobotDataset construction in 0.4.0 and 0.5.1 fails earlier on source dtype language.
+Observed: Pinned episode has 26946 rows, about 1/90-s spacing, and maximum 30-fps grid deviation 0.022225 s. Direct decoder returned frames at first/middle/worst-grid/last raw frame timestamps across all four cameras (16/16). No shifted training query (raw timestamp + k/30) was tested. LeRobotDataset construction in 0.4.0 and 0.5.1 fails earlier on source dtype language.
 
-Reason: Off-30-fps spacing did not make video lookup reject the tested frames; the loader does not reach timestamp access because of an independent schema incompatibility.
+Reason: Successful raw-timestamp lookups do not establish that shifted training queries pass the default tolerance. The schema failure prevents exercising the full loader query path, so the original tolerance consequence is not settled.
 
-Remaining gap: Full dataset iteration with this custom language schema remains unsupported by the tested releases; no inference about other loaders.
+Remaining gap: Probe pinned shifted queries (raw timestamp + k/30) on the relevant video path or use a compatible unmodified loader; do not change the source schema just to reach the probe.
 
 Evidence: `evidence/r1_c1_f0.json`, `evidence/r1_c1_f0_loader_0.4.0.json`, `evidence/r1_c1_f0_loader_0.5.1.json`, `evidence/r1_c1_f0_decoder.json`
 
@@ -160,14 +160,14 @@ Evidence: `evidence/r15_c17_f0.json`, `evidence/r15_c17_f0_loader.json`
 
 The four deployment-readiness claims remain unresolved at the asserted inference-policy consequence. Three sources load raw episode items but use different feature names; one source fails earlier because `features` is absent. A loader opening data cannot establish whether a particular pretrained policy can normalize at inference. No policy checkpoint or inference configuration was specified.
 
-The two file-pointer probes confirm that the affected episode has zero rows in the selected loader table. They do not observe a trainer, so the words ‘silently drops out of training’ remain untested. Cybernetic-Labs video lookup fails at the raw epoch-scale timestamps, but ordinary dataset construction rejects timestamp spacing first. The droid and FineART video lookup claims are contradicted by direct decoder probes, while their full dataset construction has separate schema blockers.
+The two file-pointer probes confirm that the affected episode has zero rows in the selected loader table. They do not observe a trainer, so the words ‘silently drops out of training’ remain untested. Cybernetic-Labs video lookup fails at the raw epoch-scale timestamps, but ordinary dataset construction rejects timestamp spacing first. The droid episode-0 video lookup claim is contradicted by direct decoder probes, though full dataset construction has a separate episode-stats blocker. FineART raw-timestamp probes succeeded, but shifted training queries were not tested and its full loader is blocked by a custom language dtype; its claimed tolerance consequence remains unresolved.
 
 ## Adversarial review
 
 - **Selection bias:** All eleven unresolved findings in the four named checks were included; no case removed because of unavailable per-dataset pages or difficult loaders. The previously confirmed r413:c2:f2 is excluded by the frozen unresolved filter.
-- **Shared assumptions:** The verifier imports no kinema detector code. It uses upstream LeRobot releases, raw parquet/MP4 and the frozen audit only to identify assertions and pins. A direct decoder probe cannot replace full dataset iteration.
+- **Shared assumptions:** The verifier imports no kinema detector code. It uses upstream LeRobot releases, raw parquet/MP4 and the frozen audit only to identify assertions and pins. A direct decoder probe cannot replace full dataset iteration; raw timestamp probes do not settle shifted training queries.
 - **Revision drift:** Every recovered path was fetched at a 40-character commit and SHA-256 hashed. Frozen info/stats and available LFS hashes were checked. No latest-branch data were substituted.
-- **Incomplete access:** Frame probes use first/middle/last and claim-specific positions, not every frame. BitRobot and VLABench pointer cases inspect the selected loader table but do not run training. FineART and droid cannot complete dataset construction for independent schema reasons.
+- **Incomplete access:** Frame probes use first/middle/last and claim-specific positions, not every frame. BitRobot and VLABench pointer cases inspect the selected loader table but do not run training. FineART and droid cannot complete dataset construction for independent schema reasons. FineART shifted queries were not tested.
 - **Weak labels:** No policy checkpoint is specified for four inference-normalization claims. Those remain unresolved despite successful raw frame loading in three cases. No training or real-world miss-rate claim is made.
 
 ## Reproduce

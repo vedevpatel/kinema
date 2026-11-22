@@ -38,8 +38,8 @@ class HarnessTests(unittest.TestCase):
         self.assertEqual({case["case_id"] for case in report["cases"]}, original)
         self.assertEqual({case["original_audit_classification"] for case in report["cases"]}, {"unresolved"})
         self.assertEqual(sum(case["classification"] == "confirmed" for case in report["cases"]), 4)
-        self.assertEqual(sum(case["classification"] == "refuted" for case in report["cases"]), 3)
-        self.assertEqual(sum(case["classification"] == "unresolved" for case in report["cases"]), 4)
+        self.assertEqual(sum(case["classification"] == "refuted" for case in report["cases"]), 2)
+        self.assertEqual(sum(case["classification"] == "unresolved" for case in report["cases"]), 5)
         self.assertNotIn("r413:c2:f2", original)
         for case in report["cases"]:
             self.assertEqual(len(case["revision"]), 40)

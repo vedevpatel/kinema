@@ -47,3 +47,13 @@ the named episode parquet/video paths at the frozen revision. Input files live
 under `/tmp/kinema-phase2-inputs/` and are never committed; `evidence/` stores
 their paths and SHA-256 hashes. The frozen audit's LFS hashes, where present,
 are checked during acquisition and report generation.
+
+## FineART verdict correction
+
+The original `fineart_decoder_expectations.json` treated successful lookups at
+raw frame timestamps as a refutation of the tolerance claim. That criterion
+was too weak: shifted training queries (`raw timestamp + k/30`) were not
+probed, and the full loader stopped earlier on the source's custom `language`
+dtype. The preregistered file and its 16 successful raw-timestamp probes are
+preserved as historical evidence. The consequence is **unresolved** in the
+current report. No schema repair or substitute dataset was used.
