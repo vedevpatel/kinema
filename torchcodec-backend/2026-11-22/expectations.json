@@ -1,0 +1,121 @@
+{
+  "schema": "kinema.torchcodec_backend.expectations/1",
+  "date_utc": "2026-11-22",
+  "frozen_before_execution": true,
+  "purpose": "Replay the exact phase-3 shifted-query plans through LeRobot's torchcodec decoder path and compare each batch with pyav. Backend-comparison evidence only: no detector, threshold, severity, score, README, causes.json, board or history change, and no dataset patch, dtype shim or loader monkey-patch.",
+  "experiment": "direct decoder: upstream decode_video_frames(path, frozen phase-3 plan queries, tolerance_s=1e-4, backend='torchcodec'), with a same-process pyav control; LeRobotDataset not constructed",
+  "frozen_sources": {
+    "audit_json": {"path": "audits/2026-11-22/audit.json", "sha256": "d1b13333442049e09b942d7aca0ad7b9824ca24dd9dff71c6732160593b66f40"},
+    "phase2_expectations": {"path": "loader-verification/2026-11-22/expectations.json", "sha256": "ee6d4f27e12e184d310fee484bcb7c162247e36a9f83424645f7ce9ce51a1b91"},
+    "phase3_preregistration": {"path": "shifted-queries/2026-11-22/preregistration.json", "sha256": "63778776ba2b4c02f64cfa5fe91c2e3af23b2f6344b2916e826e0aca454ab4bc"},
+    "phase3_expectations": {"path": "shifted-queries/2026-11-22/expectations.json", "sha256": "b3ab27a5521d74bac54d71e420ed0090a51607b9cf179e52d6ded9e56b41f9a5"},
+    "phase3_plans": {
+      "r1:c1:f0": {"path": "shifted-queries/2026-11-22/plan/r1_c1_f0.json", "sha256": "a26971187967e6d21a90a363531aa91a31c10aa0cc354f23210f6d243e3f6c39"},
+      "r71:c1:f1": {"path": "shifted-queries/2026-11-22/plan/r71_c1_f1.json", "sha256": "ebbe926a3cadbb7ad5f51d243246f14aec72a340c871e8b16df8653c2a2f798e"},
+      "r94:c1:f1": {"path": "shifted-queries/2026-11-22/plan/r94_c1_f1.json", "sha256": "276a3e47181188bb92a9af461e21833c6833ebe5f6ad3f7b5c2b3c35ab0c877a"}
+    },
+    "phase3_pyav_evidence": {
+      "r1:c1:f0": {"path": "shifted-queries/2026-11-22/evidence/r1_c1_f0_probe.json", "sha256": "028ad84aba1ee2a6c31c1cbe35f1a50dfdea808c1c3946019373cc7a565bd4c4"},
+      "r71:c1:f1": {"path": "shifted-queries/2026-11-22/evidence/r71_c1_f1_probe.json", "sha256": "9ce472a5e96b8e9309ee9f09a1f5247217c5a629c1197f7c0f5a093ebb720575"},
+      "r94:c1:f1": {"path": "shifted-queries/2026-11-22/evidence/r94_c1_f1_probe.json", "sha256": "cf0008a292f701dbc649878e963c573a140a8771f110114ff8f1b68ffc029b1c"}
+    },
+    "frozen_directories_untouched": ["audits/2026-11-22/", "loader-verification/2026-11-22/", "shifted-queries/2026-11-22/"]
+  },
+  "query_plan_reuse": "Every batch of each phase-3 plan file is replayed in file order, with its exact video_query_s values, cameras, anchors, configs, clamped rows and is_pad flags. No query is regenerated, added, dropped or re-selected. common.load_phase3_plan refuses a plan whose sha256 differs from the phase-3 preregistration.",
+  "cases": [
+    {
+      "case_id": "r1:c1:f0",
+      "role": "primary",
+      "dataset": "lerobot/FineART",
+      "revision": "15746b76ddc21ffd38d73888fefe2e7a1496385b",
+      "episode": 40455,
+      "environment": "tc-v3",
+      "lerobot": "0.4.0",
+      "cameras": ["observation.images.cam_high", "observation.images.cam_low", "observation.images.cam_left_wrist", "observation.images.cam_right_wrist"],
+      "anchors": {"first": 0, "middle": 13473, "worst_grid": 1458, "last": 26945},
+      "batches": {"loader_derived/in_range": 68, "loader_derived/padded": 12, "nominal_grid/in_range": 108, "nominal_grid/outside_episode": 36},
+      "queries": {"loader_derived/in_range": 188, "loader_derived/padded": 52, "nominal_grid/in_range": 108, "nominal_grid/outside_episode": 36},
+      "phase3_pyav_result": "shifted loader-derived lookup refuted (80/80 loader-derived batches ok); nominal_grid/outside_episode 36/36 tolerance_error",
+      "original_assertion": "1 episode(s) off the 30 fps grid (episodes 40455): frame spacing deviates up to 67% of a period; LeRobot's default tolerance_s (1e-4 s) rejects these - needs tolerance_s >= 0.0222",
+      "full_loader": "unresolved: LeRobotDataset construction fails in 0.4.0 and 0.5.1 on source dtype 'language' (phase 2); not bypassed",
+      "prediction_from_source_reading": "Written before execution; not a decision criterion. Headers give r_frame_rate 90 and nb_frames 26946-26948. Loader-derived queries are stored 90 Hz row timestamps, so round(ts*90) should land on the frame whose pts equals the query; predicted 80/80 ok. Nominal queries before 0 s give negative indices, which VideoDecoder.get_frames_at wraps to the end of the video, so they should fail tolerance by about 299 s; nominal queries past the last frame should raise torchcodec's index validation error. predictions/r1_c1_f0.json: loader_derived ok 80; nominal_grid ok 108, tolerance_error 16, index_error 20."
+    },
+    {
+      "case_id": "r71:c1:f1",
+      "role": "primary",
+      "dataset": "azsdsadasdsadasd/droid_filter_lerobot",
+      "revision": "7415f67330af40953ea52aa61a74788c75e1a8d6",
+      "episode": 0,
+      "environment": "tc-v2",
+      "lerobot": "0.3.3",
+      "cameras": ["observation.images.primary", "observation.images.secondary", "observation.images.wrist"],
+      "anchors": {"first": 0, "middle": 96, "worst_grid": 116, "last": 191},
+      "batches": {"loader_derived/in_range": 51, "loader_derived/padded": 9, "nominal_grid/in_range": 81, "nominal_grid/outside_episode": 27},
+      "queries": {"loader_derived/in_range": 141, "loader_derived/padded": 39, "nominal_grid/in_range": 81, "nominal_grid/outside_episode": 27},
+      "phase3_pyav_result": "shifted loader-derived lookup refuted (60/60 loader-derived batches ok); every nominal batch ok",
+      "original_assertion": "23 episode(s) whose timestamps do not start at 0: 0 (0.7333s), 2335 (1s), 11676 (1.067s), 14011 (0.5333s), 16346 (1.733s) - video frames are looked up by timestamp, so decoding will miss",
+      "full_loader": "unresolved: LeRobotDataset construction raises KeyError('stats') (phase 2); not bypassed",
+      "prediction_from_source_reading": "Written before execution; not a decision criterion. r_frame_rate 15, nb_frames 213, video pts 0 to 14.13 s on the 1/15 s grid; rows start at 0.7333 s. Every query, loader-derived or nominal, maps to an in-range index whose frame pts equals the query within float32. predictions/r71_c1_f1.json: all 168 batches ok."
+    },
+    {
+      "case_id": "r94:c1:f1",
+      "role": "comparator",
+      "dataset": "Cybernetic-Labs/openarm-packingbench-v2-groot-lerobot",
+      "revision": "41194807df07267235098a020ae4204f02262a93",
+      "episode": 0,
+      "environment": "tc-v2",
+      "lerobot": "0.3.3",
+      "cameras": ["observation.images.front", "observation.images.high_opposite", "observation.images.wrist_left", "observation.images.wrist_right"],
+      "anchors": {"first": 0, "middle": 218, "worst_grid": 13, "last": 436},
+      "batches": {"loader_derived/in_range": 68, "loader_derived/padded": 12, "nominal_grid/outside_episode": 144},
+      "queries": {"loader_derived/in_range": 188, "loader_derived/padded": 52, "nominal_grid/outside_episode": 144},
+      "phase3_pyav_result": "shifted loader-derived lookup confirmed (80/80 loader-derived batches tolerance_error); 144/144 nominal tolerance_error",
+      "original_assertion": "40 episode(s) whose timestamps do not start at 0: 0 (1.784e+09s), 10 (1.784e+09s), 20 (1.784e+09s), 30 (1.784e+09s), 40 (1.784e+09s) - video frames are looked up by timestamp, so decoding will miss",
+      "full_loader": "unresolved: in 0.3.3 LeRobotDataset construction raises check_timestamps_sync ValueError (phase 2), so __getitem__ is never reached",
+      "prediction_from_source_reading": "Written before execution; not a decision criterion. Queries are about 1.784e9 s, so round(ts*30) is about 5.35e10, far above nb_frames 437. torchcodec's validateFrameIndex should raise 'Invalid frame index' before LeRobot's tolerance assertion runs. The lookup is still rejected, by a different mechanism than pyav's. predictions/r94_c1_f1.json: all 224 batches index_error."
+    }
+  ],
+  "backends": {
+    "torchcodec": "lerobot.datasets.video_utils.decode_video_frames(path, queries, 1e-4, 'torchcodec'), the release's own decode_video_frames_torchcodec. 0.3.3 builds VideoDecoder(path, device='cpu', seek_mode='approximate') per call; 0.4.0 reuses a module-level VideoDecoderCache keyed by path, opened through fsspec. Both are left as shipped.",
+    "pyav_control": "decode_video_frames(path, queries, 1e-4, 'pyav') in the same process and environment, interleaved per batch. It is recorded separately and never replaces the frozen phase-3 pyav evidence.",
+    "default_backend": "decode_video_frames(path, [first query], 1e-4, None) is attempted once per case after all batches. get_safe_default_codec() is recorded before batches. The result is recorded, never substituted."
+  },
+  "tolerance_s": 0.0001,
+  "boundary_treatment": "Unchanged from the phase-3 plans. Loader-derived padded batches repeat the clamped boundary row's timestamp with is_pad=true. nominal_grid queries are unclamped single calls flagged outside_episode by the phase-3 rule.",
+  "outcome_classes": {
+    "ok": "decode_video_frames returned frames.",
+    "tolerance_error": "AssertionError containing 'violate the tolerance' (LeRobot's check, the same assertion in both backends).",
+    "index_error": "torchcodec RuntimeError containing 'Invalid frame index' (validateFrameIndex). Query-caused: the lookup is rejected before the tolerance check.",
+    "end_of_stream_error": "torchcodec error containing 'no more frames left to decode'. Query-caused.",
+    "dependency_error": "'Could not load libtorchcodec'. Infrastructure, not evidence.",
+    "other_error": "Any other exception. Not evidence.",
+    "harness_discrepancy": "The independent replay did not reproduce the upstream outcome or output tensor. Not evidence."
+  },
+  "decision_rules": {
+    "buckets": "loader_derived/in_range, loader_derived/padded, nominal_grid/in_range and nominal_grid/outside_episode are evaluated separately per backend and never pooled across buckets, backends, cases or releases.",
+    "bucket_verdict": "tcmodel.bucket_verdict: supports_claim if any batch has a query-caused rejection (tolerance_error, index_error or end_of_stream_error), with 'via' naming the mechanisms; contradicts_claim if every batch ran and returned frames; unresolved if no rejection and any batch hit dependency_error, other_error, harness_discrepancy or did not run; not_applicable if empty.",
+    "case_classification": "As in phase 3: the torchcodec 'shifted loader-derived lookup' verdict merges loader_derived/in_range and loader_derived/padded, mapped supports_claim->confirmed, contradicts_claim->refuted, unresolved->unresolved. The in_range and padded verdicts are also reported separately. nominal_grid buckets are a labeled comparator and never count as evidence for or against a claim.",
+    "mechanism_disclosure": "When a confirmation rests on index_error or end_of_stream_error and not on tolerance_error, the report says so. The FineART assertion names tolerance_s, so a FineART confirmation via index validation would not be reported as a tolerance confirmation.",
+    "identity": "Any preregistered-file, phase-3 plan, input, upstream-source, package-set or torchcodec-environment mismatch stops the case: no batch runs and it stays unresolved.",
+    "infrastructure": "If torchcodec cannot load in an environment, every case there is unresolved (dependency), not passed or failed."
+  },
+  "comparison_rules": {
+    "per_batch": "Same outcome class for torchcodec vs the pyav control, and torchcodec vs the frozen phase-3 pyav outcome.",
+    "returned_timestamps": "Per query, the pts of the frame each backend returns (torchcodec: frame at the argmin position over the batch's loaded pts, as upstream; pyav: the window frame at the argmin). Converted to integer ticks of the stream time base and compared exactly. When a torchcodec batch is rejected, the per-query own-index frame pts from the replay is compared and labeled as replay-only.",
+    "tensors": "Pixel equality is claimed only from the same-process pyav control, because phase 3 kept no tensors or hashes. Per query when both backends return frames: exact uint8 equality, else max/mean absolute difference and the fraction of differing values.",
+    "pixel_difference_investigation": "Differing pixels with equal pts are not called wrong-frame selection. For each such query, the torchcodec frame is also compared with pyav frames at window offsets -2..+2 and the closest offset is reported. Wrong-frame selection is reported only where returned pts differ. Colour-conversion paths differ by source: torchcodec 0.5 CpuDeviceInterface uses swscale SWS_BILINEAR to RGB24 when width % 32 == 0, else a filtergraph 'scale=W:H:sws_flags=bilinear'; torchvision 0.22.1 VideoReader pyav uses PyAV frame.to_rgb().",
+    "control_vs_phase3": "The pyav control's per-batch outcome and per-query returned pts are compared with the frozen phase-3 evidence. Any difference is reported as control drift, and the phase-3 evidence is left unchanged."
+  },
+  "predictions": {
+    "files": ["predictions/r1_c1_f0.json", "predictions/r71_c1_f1.json", "predictions/r94_c1_f1.json"],
+    "rule": "tcmodel.predict_batch on demuxed packet pts with r_frame_rate, nb_frames and time base from the container header. Written before execution and hashed in preregistration.json.",
+    "use": "Tests the reading of the torchcodec source against the installed binary. Disagreements are reported. They never change a verdict."
+  },
+  "limits": [
+    "Direct-decoder results only. They never establish LeRobotDataset, DataLoader or training behaviour.",
+    "Decoding is not semantic frame-to-row alignment. FineART's declared 30 fps vs observed 90 Hz and droid's row/video alignment question stay separate and untested here.",
+    "One episode per case, four anchors, default policy configs from phase 3. Untested episodes are not validated.",
+    "Releases 0.3.3 (droid, r94) and 0.4.0 (FineART) only; 0.5.1 and other torchcodec/FFmpeg builds are untested. The FFmpeg used is PyAV 15.1.0's bundled 7.1.x build; a system or conda FFmpeg 7 may decode pixels differently.",
+    "No severity cutoff, product certification or aggregate accuracy figure is derived."
+  ]
+}

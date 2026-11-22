@@ -1,0 +1,82 @@
+{
+  "schema": "kinema.torchcodec_backend.environment_spec/1",
+  "date_utc": "2026-11-22",
+  "frozen_before_execution": true,
+  "summary": "Two environments, tc-v2 and tc-v3. Each is the unchanged phase-2 interpreter and package set plus FFmpeg 7 shared libraries supplied on LD_LIBRARY_PATH. No Python package is added, removed or upgraded. Because the dynamic-library environment differs, these are distinct environments, not replays of the phase-2/phase-3 environments.",
+  "blocker_diagnosis": {
+    "observed_in_phase3": "shifted-queries/2026-11-22/evidence/*_probe.json default_backend_attempt: RuntimeError 'Could not load libtorchcodec' with 'FFmpeg version 7: libavutil.so.59: cannot open shared object file' (and the same for 6/5/4).",
+    "reproduced_2026_11_22": "ldd site-packages/torchcodec/libtorchcodec_core7.so in both phase-2 venvs lists libavutil.so.59, libavcodec.so.61, libavformat.so.61, libavdevice.so.61, libavfilter.so.10, libswscale.so.8 and libswresample.so.5 as 'not found'. ldconfig -p lists no libav*/libsw* library. No system ffmpeg binary or library is installed.",
+    "not_the_cause": "torch/torchcodec/Python versions. The official torchcodec README table pairs torchcodec 0.5 with torch 2.7 and Python >=3.9,<=3.13; installed: torchcodec 0.5, torch 2.7.1+cpu, Python 3.11.17. The v0.5.0 README states FFmpeg major versions 4 to 7 are supported, and the wheel ships libtorchcodec_core{4,5,6,7}.so only.",
+    "why_pyav_worked": "PyAV 15.1.0 bundles its own FFmpeg (libavutil 59.39.100, libavcodec 61.19.101, i.e. FFmpeg 7.1.x) under auditwheel-renamed sonames in site-packages/av.libs/, so pyav never needs system FFmpeg. torchcodec resolves the unrenamed sonames and cannot see them."
+  },
+  "compatibility_sources": {
+    "torchcodec_readme_tag_v0.5.0": {"url": "https://github.com/pytorch/torchcodec/blob/v0.5.0/README.md", "commit": "93cc0ade58be5e424fc17489f1ba50b7b530d00b", "sha256": "cb03b2678ce185b58b523e67c9fe6a3a642774b16b48eeda8b9e9ec19037bc90", "says": "TorchCodec supports all major FFmpeg versions in [4, 7]; easy install: conda install ffmpeg (-c conda-forge). Its own table stops at 0.4 (torch 2.7)."},
+    "torchcodec_readme_main": {"url": "https://raw.githubusercontent.com/pytorch/torchcodec/main/README.md", "last_commit_touching_readme": "5472bef1e065974296bf33aa208295ce9fc65e77", "fetched_utc": "2026-11-22", "sha256": "a9edcc01481572a5a3f32b2d80c6ae3024e91e5036dd0300040bc831e6ef6863", "row": "| `0.5` | `2.7` | `>=3.9`, `<=3.13` |"},
+    "lerobot_requirement": "lerobot-0.3.3 and lerobot-0.4.0 METADATA: Requires-Dist torchcodec<0.6.0,>=0.2.1 (linux x86_64); torch<2.8.0,>=2.2.1. torchcodec 0.5 is inside both ranges."
+  },
+  "ffmpeg_provisioning": {
+    "chosen": "Soname aliases pointing at PyAV 15.1.0's bundled FFmpeg 7.1.x libraries inside each phase-2 venv. setup_ffmpeg_aliases.py creates /tmp/kinema-tc-ffmpeg-<env>/ holding seven symlinks named with the sonames libtorchcodec_core7.so requests, after verifying each target's sha256 below. LD_LIBRARY_PATH=<alias dir>:<venv>/site-packages/av.libs (the second entry resolves the targets' own auditwheel-renamed dependencies, which their $ORIGIN rpath looks for next to the alias). Remove with rm -rf /tmp/kinema-tc-ffmpeg-<env>; nothing inside either venv is written.",
+    "consequence": "Both backends execute the same FFmpeg binaries in the same process. Decoder-library build differences are therefore not a source of pyav/torchcodec differences here; differences come from the backends' own code (frame selection, seeking, colour conversion). A user's system or conda FFmpeg 7 build could still produce different pixels from these.",
+    "abi_note": "libtorchcodec_core7.so was built against FFmpeg 7.0.1 headers (fetch_and_expose_non_gpl_ffmpeg_libs.cmake at v0.5.0). FFmpeg keeps ABI within a library major version (libavcodec 61, libavutil 59), which is the basis on which torchcodec accepts any FFmpeg 7.x.",
+    "alternatives_not_used": {
+      "conda-forge ffmpeg via micromamba (README guidance)": "Downloading and executing a standalone micromamba binary was refused by this session's permission policy; not retried by other means.",
+      "Ubuntu 26.04 archive packages (apt-get download, extract without installing)": "The archive ships FFmpeg 8.0.1 (libavcodec62/libavutil60), outside torchcodec 0.5's supported 4-7 range.",
+      "torchcodec's pinned S3 FFmpeg builds (fetch_and_expose_non_gpl_ffmpeg_libs.cmake)": "Built with --disable-everything --disable-decoders (packaging/build_ffmpeg.sh at v0.5.0, sha256 fafd6b38...): link-time stubs with no H.264 decoder.",
+      "system-wide install": "Excluded by the task constraints."
+    },
+    "target_sha256": {
+      "libavutil.so.59": {"target": "libavutil-a63ffd27.so.59.39.100", "sha256": "58199bb31a37f51b4fc50ba28275a3a3bf2eefe11d515d6a903ff939682b304d"},
+      "libavcodec.so.61": {"target": "libavcodec-7ee0753d.so.61.19.101", "sha256": "ea371be1b2711cf7f1b38a6f97beab079cbf932b691f0a2d480fcf73d53b842a"},
+      "libavformat.so.61": {"target": "libavformat-f6caa08d.so.61.7.100", "sha256": "ff4c0c69c5a2ecfb60cee596dc79a5501edb6dc3056ec40e7662944eaf9c4382"},
+      "libavdevice.so.61": {"target": "libavdevice-0a717e7d.so.61.3.100", "sha256": "431b66d130a55e3c9ed6ad19ddc7b3d57f705173b5562a5f10ea38a8e41deffb"},
+      "libavfilter.so.10": {"target": "libavfilter-7ceaa51a.so.10.4.100", "sha256": "4bbf737a05eb9ecccc080861b6204d4b115569b2d37000495311d1e213b212f0"},
+      "libswscale.so.8": {"target": "libswscale-5efb2ca5.so.8.3.100", "sha256": "bce7ad4ae62bd14fedf353b5616dc4004c2fe4668d092a32f72414cd91bda79d"},
+      "libswresample.so.5": {"target": "libswresample-f1bdf0d4.so.5.3.100", "sha256": "69ed02c6961b52aab847fe87ea0879c866fb5f0977d1ac27b485c43972971470"}
+    },
+    "av_libs_listing_sha256": "aea36a94d110b46ccefab8ebfa040b86078b9a6e54fb58306e26344e2616c708",
+    "av_libs_listing_rule": "sha256 over lines '<sha256>  <name>\\n' for every file in av.libs (42 files), names sorted in byte order (setup_ffmpeg_aliases.py::listing_digest); identical in both venvs."
+  },
+  "environments": {
+    "tc-v2": {
+      "base": "phase-2 v2 (loader-verification/2026-11-22/evidence/environments.json: v2)",
+      "python": "/tmp/kinema-phase2-v2/bin/python",
+      "python_version": "3.11.17",
+      "lerobot": "0.3.3",
+      "packages_file": "loader-verification/2026-11-22/evidence/v2_packages.txt",
+      "av_libs": "/tmp/kinema-phase2-v2/lib/python3.11/site-packages/av.libs",
+      "alias_dir": "/tmp/kinema-tc-ffmpeg-v2",
+      "cases": ["r71:c1:f1", "r94:c1:f1"]
+    },
+    "tc-v3": {
+      "base": "phase-2 v3 (loader-verification/2026-11-22/evidence/environments.json: v3)",
+      "python": "/tmp/kinema-phase2-v3/bin/python",
+      "python_version": "3.11.17",
+      "lerobot": "0.4.0",
+      "packages_file": "loader-verification/2026-11-22/evidence/v3_packages.txt",
+      "av_libs": "/tmp/kinema-phase2-v3/lib/python3.11/site-packages/av.libs",
+      "alias_dir": "/tmp/kinema-tc-ffmpeg-v3",
+      "cases": ["r1:c1:f0"]
+    }
+  },
+  "torchcodec": {
+    "version": "0.5",
+    "upstream_tag": "v0.5.0",
+    "upstream_commit": "93cc0ade58be5e424fc17489f1ba50b7b530d00b",
+    "installed_sha256": {
+      "libtorchcodec_core7.so": "a3e09d3007a9070515cd203deaf95ccca48847bac80a6e5180f25da19180bc5b",
+      "libtorchcodec_custom_ops7.so": "87de459224a157381e5f224cede70e07ad090f4e4e009df93549a6d996a3ea7d",
+      "libtorchcodec_pybind_ops7.so": "c2a2f3871a4d20422d8109074301474874686fadbfae14f9141a815b2b9477ed",
+      "decoders/_video_decoder.py": "afa81a7aea25b3b5c4f1ee1a24105afcd9b88cfe18f5e460622ae26315ad5c88",
+      "_core/_metadata.py": "a1eb802c040e6614e7d54321293c911bd50c3688a85ba20c29b20c850da02df9",
+      "_core/ops.py": "c39acea73bd1cef8cadc16ee387c43655fbbf96e917fbdccd2366cf3b2d524da"
+    },
+    "python_files_equal_tag": "decoders/_video_decoder.py, decoders/_decoder_utils.py, _core/_metadata.py, _core/ops.py and _core/__init__.py are byte-identical to src/torchcodec/ at the tag, in both venvs.",
+    "compiled_code_caveat": "The .so files cannot be compared with the tag's C++ source. The cited C++ behaviour (SingleStreamDecoder.cpp sha256 254ac7e5..., CpuDeviceInterface.cpp sha256 cf340bc1...) is checked behaviourally: predict.py derives per-query outcomes from that source before execution, and the report compares them with what the binary did."
+  },
+  "lerobot_sources": "Re-verified by reusing shifted-queries/2026-11-22/plan.py::verify_sources against shifted-queries/2026-11-22/expectations.json upstream_sources (video_utils.py v2 14a159f6..., v3 c13ecb84...).",
+  "unchanged_invariants": [
+    "Installed distributions equal the phase-2 freeze file for the environment (checked by reusing shifted-queries/2026-11-22/probe.py::environment_record).",
+    "No file under either venv is created, modified or deleted; setup writes only /tmp/kinema-tc-ffmpeg-<env>/.",
+    "Inputs are the phase-2 files under /tmp/kinema-phase2-inputs, re-hashed against the phase-3 plan records."
+  ]
+}
