@@ -61,6 +61,52 @@ CASES = {
     "svla_so101_clean": dict(repo="lerobot/svla_so101_pickplace",
                              revision="f641879e22172be7e8161d5e6c1503c2d2feb657",
                              episodes=None, shards="pointed"),
+    # v2.1, one dataset per repo folder. heat_food_in_microwave catalogues 3156
+    # episodes and holds all 3156 data parquets, but only 560 of the 3156
+    # metadata-named MP4s: chunk-001 and chunk-002 have no videos/ folder at
+    # all, and chunk-000 lacks 596 (irregular gaps from 189 - an interrupted
+    # upload). The kept ranges straddle every kind of edge: isolated misses
+    # (189, 289) between present episodes, runs, both chunk boundaries
+    # (999|1000 missing|missing, 2999|3000 missing|present)
+    "fastumi_video_files_missing": dict(
+        repo="IPEC-COMMUNITY/FastUMI_100k_lerobot", subdir="single_arm/heat_food_in_microwave",
+        revision="4cf7cca8fdc15d6f71ee0055553ce8a5e78aa9a0",
+        episodes=("ranges", ((186, 243), (287, 293), (998, 1002), (2998, 3002))),
+        license_grant="fastumi"),
+    # the v2.1 clean control from the same release: every one of iron_clothes'
+    # 2541 metadata-named MP4s is in the listing (1000 + 1000 + 541)
+    "fastumi_v21_clean": dict(
+        repo="IPEC-COMMUNITY/FastUMI_100k_lerobot", subdir="single_arm/iron_clothes",
+        revision="4cf7cca8fdc15d6f71ee0055553ce8a5e78aa9a0",
+        episodes=("ranges", ((0, 20), (998, 1002), (1998, 2002), (2535, 2541))),
+        license_grant="fastumi"),
+}
+
+# Redistribution grants for sources whose card YAML carries no license field.
+# A grant is accepted only with the publisher's own statement at the pinned
+# revision (checked verbatim at build time) and the license text it names.
+LICENSE_GRANTS = {
+    "fastumi": dict(
+        license="apache-2.0",
+        readme_line="This dataset is released under the **Apache-2.0 License**.",
+        # the paper names this GitHub repo as the release link; its README
+        # names the Hub repo as the dataset and carries the same grant
+        license_file=("MrKeee/FastUMI-100K", "4d2bb3f23b5209bf34d1db457118969b6d3d4179", "LICENSE"),
+        evidence=[
+            "Hub README.md at the pinned revision, section 'License': "
+            "'This dataset is released under the **Apache-2.0 License**.' (card YAML has no license field)",
+            "arXiv:2510.08022 (FastUMI-100K, Liu et al., Shanghai AI Laboratory et al.) abstract: "
+            "'The source code and dataset will be released in this link' -> https://github.com/MrKeee/FastUMI-100K",
+            "github.com/MrKeee/FastUMI-100K@4d2bb3f23b52: README links "
+            "https://huggingface.co/datasets/IPEC-COMMUNITY/FastUMI_100k_lerobot as [dataset] and states the "
+            "same grant; LICENSE is the unmodified Apache-2.0 text; no NOTICE file in either repo",
+        ],
+        attribution="FastUMI-100K: Advancing Data-driven Robotic Manipulation with a Large-scale UMI-style "
+                    "Dataset - Kehui Liu, Zhongjie Jia, Yang Li, Zhaxizhuoma, Pengan Chen, Song Liu, Xin Liu, "
+                    "Pingrui Zhang, Haoming Song, Xinyi Ye, Nieqing Cao, Zhigang Wang, Jia Zeng, Dong Wang, "
+                    "Yan Ding, Bin Zhao, Xuelong Li. arXiv:2510.08022, 2025. "
+                    "https://huggingface.co/datasets/IPEC-COMMUNITY/FastUMI_100k_lerobot",
+    ),
 }
 
 
@@ -158,9 +204,147 @@ def _anywhere(repo: str, rev: str, eps: list[int], all_shards: list[str], cap: i
             "found_elsewhere": {str(k): v for k, v in sorted(found.items())}}
 
 
+def _verified_grant(name: str, repo: str, rev: str, key: str) -> tuple[dict, bytes]:
+    """The grant's README statement must be in the README at rev, verbatim,
+    and the license file must be the license it names; else no packing."""
+    import urllib.request
+    g = LICENSE_GRANTS[key]
+    _, fs = B._api()
+    readme = fs.cat_file(f"datasets/{repo}@{rev}/README.md").decode()
+    if g["readme_line"] not in readme:
+        raise SystemExit(f"{name}: the README at {rev[:12]} no longer states {g['readme_line']!r} - not packed")
+    gh, sha, path = g["license_file"]
+    with urllib.request.urlopen(f"https://raw.githubusercontent.com/{gh}/{sha}/{path}", timeout=30) as r:
+        text = r.read()
+    if g["license"] == "apache-2.0" and not text.lstrip().startswith(b"Apache License\n                           Version 2.0"):
+        raise SystemExit(f"{name}: {gh}@{sha[:12]}/{path} is not the Apache-2.0 text - not packed")
+    return g, text
+
+
+def _runs(eps) -> list[list[int]]:
+    out: list[list[int]] = []
+    for e in sorted(eps):
+        if out and e == out[-1][1] + 1:
+            out[-1][1] = e
+        else:
+            out.append([e, e])
+    return out
+
+
+def truth_v21(info: dict, episodes: list[int], listing: set[str]) -> dict:
+    """v2.1 ground truth: render video_path for every (episode, camera) and
+    look the path up in the listing. No declared shard and no segment
+    columns exist in v2.1, so those two checks have nothing to compare."""
+    cs = int(info.get("chunks_size") or 1000)
+    cams = [k for k, f in (info.get("features") or {}).items() if isinstance(f, dict) and f.get("dtype") == "video"]
+    files = {}
+    for cam in cams:
+        gone = {e: info["video_path"].format(episode_chunk=e // cs, video_key=cam, episode_index=e)
+                for e in episodes}
+        gone = {e: p for e, p in gone.items() if p not in listing}
+        if gone:
+            files[cam] = {"missing_files": sorted(gone.values()), "episodes": sorted(gone)}
+    from collections import Counter
+    return {"pointers": [], "segments": {}, "video_files": files,
+            "duplicate_catalogue": sorted(e for e, n in Counter(episodes).items() if n > 1),
+            "conflicting_duplicates": []}
+
+
+def build_v21(name: str, spec: dict, repo: str, rev: str) -> dict:
+    api, fs = B._api()
+    sub = spec.get("subdir", "")
+    at = f"datasets/{repo}@{rev}" + (f"/{sub}" if sub else "")
+    lic, grant, license_text = B.license_of(repo), None, None
+    if (lic or "").lower() not in B.REDISTRIBUTABLE:
+        if "license_grant" not in spec:
+            raise SystemExit(f"{name}: {repo} declares license {lic!r} - not packed (no redistribution permission)")
+        grant, license_text = _verified_grant(name, repo, rev, spec["license_grant"])
+        lic = grant["license"]
+    info = json.loads(fs.cat_file(f"{at}/meta/info.json"))
+    assert str(info.get("codebase_version")).startswith("v2."), info.get("codebase_version")
+    all_eps = [json.loads(ln)["episode_index"] for ln in fs.cat_file(f"{at}/meta/episodes.jsonl").splitlines()
+               if ln.strip()]
+    listing = B.sub_listing(repo, rev, sub)
+    paths = {p for p, _ in listing}
+    keep = {e for lo, hi in spec["episodes"][1] for e in all_eps if lo <= e < hi}
+    root = B.extract_v21(repo, rev, name, keep, sub, listing, license_text,
+                         all_videos=not name.endswith("_clean"))
+    truth = truth_v21(info, [e for e in all_eps if e in keep], paths)
+    # evidence over the WHOLE dataset folder, not the extract
+    whole = truth_v21(info, all_eps, paths)
+    cs = int(info.get("chunks_size") or 1000)
+    data_named = {info["data_path"].format(episode_chunk=e // cs, episode_index=e) for e in all_eps}
+    lower = {p.lower() for p in paths}
+    import hashlib
+    full_text = "".join(f"{p}\t{s}\n" for p, s in listing)
+    evidence: dict = {
+        "listing": {"method": "HfApi.list_repo_tree(recursive=True, path_in_repo=subdir) - paginated; "
+                              "dataset_info siblings stop at 100000 entries for this repo",
+                    "files": len(listing), "videos": sum(p.startswith("videos/") for p in paths),
+                    "data": sum(p.startswith("data/") for p in paths),
+                    "meta": sorted(p for p in paths if p.startswith("meta/")),
+                    "other": sorted(p for p in paths if not p.startswith(("meta/", "data/", "videos/"))),
+                    "sha256_of_full_listing": hashlib.sha256(full_text.encode()).hexdigest(),
+                    "listing_txt": ("every meta/ entry and the kept episodes' data and video entries"
+                                    if name.endswith("_clean") else
+                                    "every meta/ and videos/ entry; data/ entries for the kept episodes only")},
+        "whole_dataset": {
+            "catalogued_episodes": len(all_eps), "info_total_episodes": info.get("total_episodes"),
+            "info_total_videos": info.get("total_videos"),
+            "data_files_named_and_present": len(data_named & paths), "data_files_named": len(data_named),
+            "video_files_missing": {c: len(v["missing_files"]) for c, v in whole["video_files"].items()},
+            "missing_episode_runs": {c: _runs(v["episodes"]) for c, v in whole["video_files"].items()},
+            "missing_with_case_insensitive_match": sum(
+                p.lower() in lower for v in whole["video_files"].values() for p in v["missing_files"]),
+        },
+    }
+    miss_all = [p for v in whole["video_files"].values() for p in v["missing_files"]]
+    if miss_all:
+        # a second API, per path, on a spread of missing paths plus present controls
+        pre = f"{sub}/" if sub else ""
+        sample = sorted(set(miss_all[:: max(1, len(miss_all) // 12)] + miss_all[-1:]))
+        controls = sorted(p for p in paths if p.startswith("videos/"))[:1] + sorted(
+            p for p in paths if p.startswith("videos/"))[-1:]
+        hit = {x.path[len(pre):] for x in api.get_paths_info(repo, [pre + p for p in sample + controls],
+                                                               repo_type="dataset", revision=rev)}
+        assert not (hit & set(sample)) and set(controls) <= hit, (hit & set(sample), controls)
+        refs = api.list_repo_refs(repo, repo_type="dataset")
+        evidence["second_api"] = {"method": "HfApi.get_paths_info at the revision",
+                                  "missing_paths_checked": sample, "found": [], "present_controls_found": controls}
+        evidence["refs"] = {"branches": {b.name: b.target_commit for b in refs.branches},
+                            "tags": [t.name for t in refs.tags]}
+    doc = {
+        "source": repo, "subdir": sub, "revision": rev, "license": lic,
+        **({"license_source": "publisher grant (card YAML has no license field)",
+            "license_evidence": grant["evidence"], "attribution": grant["attribution"],
+            "license_file": "LICENSE (verbatim from github.com/{}@{}/{})".format(*grant["license_file"])}
+           if grant else {"license_source": "dataset card"}),
+        "built": f"{dt.datetime.now(dt.timezone.utc):%Y-%m-%d}",
+        "kept": {"episodes": len(keep), "of": len(all_eps), "ranges": [list(r) for r in spec["episodes"][1]],
+                 "note": "v2.1: meta/info.json, meta/tasks.jsonl verbatim; meta/episodes.jsonl reduced to the "
+                         "kept episodes' lines (byte-for-byte); each kept episode's data parquet reduced to "
+                         "episode_index and frame_index; episodes_stats.jsonl and every video omitted; "
+                         "listing.txt holds every meta/ and videos/ file of the folder at the revision, kept "
+                         "episodes or not, and the kept episodes' data files"},
+        "not_applicable": {
+            "episode-file-pointers": "v2.1 names one parquet per episode: no declared shard to compare",
+            "camera-coverage": "v2.1 records no video segments and the videos are not fetched",
+        },
+        "truth": truth, "evidence": evidence,
+    }
+    (root / "CASE.json").write_text(json.dumps(doc, indent=1))
+    size = sum(p.stat().st_size for p in root.rglob("*") if p.is_file())
+    print(f"{name}: {repo}/{sub}@{rev[:12]} ({lic}) | {len(keep)}/{len(all_eps)} episodes, {size // 1024} KB | "
+          f"missing video files {sum(len(v['missing_files']) for v in truth['video_files'].values())} kept, "
+          f"{len(miss_all)} in the whole folder")
+    return doc
+
+
 def build(name: str) -> dict:
     spec = CASES[name]
     repo, rev = spec["repo"], _full_revision(spec["repo"], spec["revision"])
+    if spec.get("subdir") or spec["episodes"] and spec["episodes"][0] == "ranges":
+        return build_v21(name, spec, repo, rev)
     lic = B.license_of(repo)
     if (lic or "").lower() not in B.REDISTRIBUTABLE:
         raise SystemExit(f"{name}: {repo} declares license {lic!r} - not packed (no redistribution permission)")
