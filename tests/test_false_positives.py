@@ -496,29 +496,73 @@ def test_constant_offset_without_video_is_not_jitter(base):
     assert gated(res) == []
 
 
-def test_wallclock_timestamps_on_video_dataset_fail(base):
-    # openarm-packingbench: Unix-time timestamps; video lookup by timestamp misses
+def _add_video_feature(root):
+    p = root / "meta" / "info.json"
+    info = json.loads(p.read_text())
+    info["features"]["observation.images.top"] = {"dtype": "video", "shape": [8, 8, 3]}
+    p.write_text(json.dumps(info))
+
+
+def _float32_lost_pairs(t, ep):
+    """Strictly increasing stored pairs that stop increasing in float32, per episode."""
+    return sum(int((np.diff(t[ep == e].astype(np.float32)) <= 0).sum()) for e in np.unique(ep))
+
+
+def test_wallclock_timestamps_fail_on_demonstrated_float32_collapse(base):
+    # openarm-packingbench: Unix-time timestamps. The FAIL comes from the rows
+    # that lose their own time in float32, not from the offset itself.
     _set_timestamps(base, lambda t, ep: t + 1.78e9)
-    p = base / "meta" / "info.json"
-    info = json.loads(p.read_text())
-    info["features"]["observation.images.top"] = {"dtype": "video", "shape": [8, 8, 3]}
-    p.write_text(json.dumps(info))
-    res = run("timestamp-grid", load_dataset(str(base)))
-    assert any(f.severity == Severity.FAIL and "start at 0" in f.message for f in res.findings)
+    _add_video_feature(base)
+    ctx = load_dataset(str(base))
+    res = run("timestamp-grid", ctx)
+    offsets = [f for f in res.findings if "start at 0" in f.message]
+    assert len(offsets) == 1 and offsets[0].severity == Severity.WARN
+    assert "resolves only 128 s" in offsets[0].message
+    collapse = [f for f in res.findings if "collapse in float32" in f.message]
+    assert len(collapse) == 1 and collapse[0].severity == Severity.FAIL
+    t, ep = ctx.timestamp, ctx.episode_index
+    assert collapse[0].details["pairs_lost"] == _float32_lost_pairs(t, ep) > 0
 
 
-def test_nonzero_video_start_does_not_claim_decode_failure(base):
-    # A nonzero frame timestamp is a signal; decoder impact needs the MP4 timeline.
+def test_coarse_float32_resolution_without_collapse_is_only_a_risk(base):
+    # 2e4 s: float32 resolves ~2 ms, coarser than tolerance_s but far finer
+    # than the 0.1 s spacing, so no pair is lost. A risk signal, not a FAIL.
+    _set_timestamps(base, lambda t, ep: t + 2e4)
+    _add_video_feature(base)
+    ctx = load_dataset(str(base))
+    assert _float32_lost_pairs(ctx.timestamp, ctx.episode_index) == 0
+    res = run("timestamp-grid", ctx)
+    assert res.verdict == Severity.WARN
+    assert not any("collapse in float32" in f.message for f in res.findings)
+    offsets = [f for f in res.findings if "start at 0" in f.message]
+    assert len(offsets) == 1 and "resolves only" in offsets[0].message
+
+
+def test_partial_float32_collapse_counts_only_the_lost_pairs(base):
+    # 2**21 s: float32 steps of 0.25 s against 0.1 s spacing lose some pairs, not all
+    _set_timestamps(base, lambda t, ep: t + 2.0 ** 21)
+    ctx = load_dataset(str(base))
+    lost = _float32_lost_pairs(ctx.timestamp, ctx.episode_index)
+    total = sum(len(ctx.rows_for(e)) - 1 for e in ctx.episode_ids())
+    assert 0 < lost < total
+    res = run("timestamp-grid", ctx)  # no video feature: the loss still FAILs
+    collapse = [f for f in res.findings if "collapse in float32" in f.message]
+    assert len(collapse) == 1 and collapse[0].severity == Severity.FAIL
+    assert collapse[0].details["pairs_lost"] == lost
+
+
+def test_nonzero_video_start_is_a_warning_with_alignment_uncertainty(base):
+    # droid: rows start at 0.733 s, the video at 0 s; lookups decoded under
+    # pyav and torchcodec, so the offset alone is not a failure
     _set_timestamps(base, lambda t, ep: t + 0.733333)
-    p = base / "meta" / "info.json"
-    info = json.loads(p.read_text())
-    info["features"]["observation.images.top"] = {"dtype": "video", "shape": [8, 8, 3]}
-    p.write_text(json.dumps(info))
+    _add_video_feature(base)
     res = run("timestamp-grid", load_dataset(str(base)))
     offsets = [f for f in res.findings if "start at 0" in f.message]
-    assert len(offsets) == 1 and offsets[0].severity == Severity.FAIL
-    assert "nonzero start alone does not prove" in offsets[0].message
+    assert len(offsets) == 1 and offsets[0].severity == Severity.WARN
     assert "video timeline" in offsets[0].message
+    assert "aligned in time" in offsets[0].message
+    assert "resolves only" not in offsets[0].message
+    assert res.verdict == Severity.WARN
 
 
 def test_dropped_frame_gap_is_reported(base):
@@ -531,6 +575,11 @@ def test_dropped_frame_gap_is_reported(base):
     res = run("timestamp-grid", load_dataset(str(base)))
     grid = [f for f in res.findings if "frame spacing deviates" in f.message]
     assert len(grid) == 1 and grid[0].details["episodes"] == [4] and grid[0].details["gaps"] == 1
+    assert grid[0].severity == Severity.WARN
+    # the anomaly stays; the blanket lookup-rejection claim does not
+    assert "rejects these" not in grid[0].message
+    assert "0.4.0 and 0.5.1 do not check spacing" in grid[0].message
+    assert "video's own frame timestamps" in grid[0].message
 
 
 def test_grid_jitter_aggregates_into_one_finding(base):
