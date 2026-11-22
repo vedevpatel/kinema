@@ -1344,67 +1344,6 @@ def audit_one(repo_id: str, max_episodes: int, cap_bytes: int,
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
-def _waiver_note(charge: dict) -> str:
-    up = charge.get("waived_by")
-    if not up:
-        return ""
-    return f" <span class=dim>(charge waived - same episodes as {esc(up)})</span>"
-
-
-def _revision_note(source: str, revision: str | None) -> str:
-    if not revision:
-        return "dataset revision: unknown (audited before revisions were recorded)"
-    if revision.startswith("gcs:"):
-        return f"dataset revision: shard-inventory digest <code>{esc(revision[4:])}</code>"
-    base = source.split("//", 1)[0]
-    return (f"dataset revision: <a href='https://huggingface.co/datasets/{esc(base)}/tree/{esc(revision)}'>"
-            f"<code>{esc(revision[:12])}</code></a>")
-
-
-def render_dataset_page(rep: DatasetReport, audited: str | None = None,
-                        rlds_ref: tuple[str, str] | None = None,
-                        revision: str | None = None) -> str:
-    charges = rep.charges()  # the same waiver the stored charge/waived_by fields record
-    rows = "".join(
-        f"<tr><td><code>{esc(r.check_id)}</code></td>"
-        f"<td>{badge('SKIP' if r.skipped else r.verdict.name)}</td>"
-        f"<td>{esc(r.skip_reason if r.skipped else r.summary)}"
-        f"{_waiver_note(charges.get(r.check_id, {}))}</td></tr>"
-        for r in rep.results
-    )
-    findings = []
-    for r in rep.results:
-        for f in r.findings:
-            if f.severity >= Severity.WARN:
-                findings.append(
-                    f"<li>{badge(f.severity.name)} <code>{esc(r.check_id)}</code> {esc(f.message)}</li>"
-                )
-    if rep.source.startswith("rlds/"):
-        bucket, prefix = rlds_ref or (RLDS_BUCKETS[0][0], rep.source.removeprefix("rlds/") + "/")
-        hub_url = ("https://console.cloud.google.com/storage/browser/"
-                   f"{bucket}/{prefix.rstrip('/')}")
-    else:
-        hub_base, hub_sub = _split_subpath(rep.source)
-        hub_url = (f"https://huggingface.co/datasets/{hub_base}/tree/main/{hub_sub}"
-                   if hub_sub else f"https://huggingface.co/datasets/{hub_base}")
-    body = (
-        f"<p><a href='../index.html'>&larr; leaderboard</a></p>"
-        f"<h1>{esc(rep.source)}</h1>"
-        f"<p class=dim>format {esc(rep.format_version)} | {rep.episodes} episodes | "
-        f"{rep.frames} frames | fps {esc(rep.fps or '?')}"
-        f"{' | sampled subset' if rep.truncated else ''}"
-        f" | <a href='{esc(hub_url)}'>hub</a></p>"
-        f"<p class=dim>{_revision_note(rep.source, revision)}</p>"
-        f"<h2>Health score: {rep.score}/100</h2>"
-        f"<table><tr><th>check</th><th>verdict</th><th>summary</th></tr>{rows}</table>"
-        f"<h2>Warnings &amp; failures</h2><ul>{''.join(findings) or '<li>none</li>'}</ul>"
-        f"<p class=dim>audited {esc(audited or f'{dt.datetime.now(dt.timezone.utc):%Y-%m-%d %H:%M UTC}')} by "
-        "<a href='https://github.com/vedevpatel/kinema'>kinema</a>"
-        f" | score model <code>{esc(SCORE_MODEL)}</code></p>"
-    )
-    return page(f"{rep.source} - kinema audit", body)
-
-
 PRUNE_AFTER_MISSES = 3  # fresh discoveries in a row without the dataset
 
 
@@ -2221,6 +2160,77 @@ def write_audit_pages(out: Path, entries: list, max_episodes: int = 0,
     return {"pages": len(keep), "written": written, "pruned": prune_audit_pages(d_dir, keep)}
 
 
+# --- retired legacy pages (docs/dataset/<slug>.html) --------------------------
+# The old per-dataset pages stamped "audited" with their render time. They are
+# no longer rendered; every existing one becomes a stub with no score and no
+# date: a redirect to the row's audit page, or, when no single board row owns
+# the slug any more, a "retired" note that links the leaderboard. The report
+# JSON files beside them are left as they are.
+
+LEGACY_PAGE_DIR = "dataset"
+LEGACY_STUB_SCHEME = "kinema-legacy-redirect/1"
+_LEGACY_MARKER = f'<meta name="generator" content="{LEGACY_STUB_SCHEME}">'
+_LEGACY_TITLE_TAIL = " - kinema audit</title>"  # every page render_dataset_page wrote
+_LEGACY_WHY = ("The old page was retired: the audit date it showed could be the time the "
+               "page was rendered, not when the audit ran.")
+
+
+def _legacy_stub(target: str | None, row_id: str | None) -> str:
+    if target is not None:
+        if not re.fullmatch(rf"\.\./{AUDIT_PAGE_DIR}/{_PAGE_ID_RE.pattern}\.html", target):
+            raise ValueError(f"unsafe legacy redirect target {target!r}")
+        head = (f'<meta http-equiv=refresh content="0; url={target}">'
+                f'<link rel=canonical href="{target}">')
+        title = "Moved"
+        body = (f"<p>This page moved to the <a href=\"{target}\">audit page for "
+                f"{_t(row_id)}</a>.</p><p class=dim>{_LEGACY_WHY}</p>")
+    else:
+        head, title = "", "Retired"
+        body = ("<p>This dataset is not on the <a href=\"../index.html\">leaderboard</a> any "
+                f"more, so it has no audit page.</p><p class=dim>{_LEGACY_WHY}</p>")
+    return (
+        "<!doctype html><html lang=en><head><meta charset=utf-8>" + _LEGACY_MARKER
+        + "<meta name=viewport content='width=device-width,initial-scale=1'>"
+        "<meta http-equiv=Content-Security-Policy content=\"default-src 'none'; "
+        "style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'\">"
+        "<meta name=robots content=noindex>" + head
+        + f"<title>{title}{_LEGACY_TITLE_TAIL}<style>{CSS}</style></head><body>{body}</body></html>\n"
+    )
+
+
+def retire_legacy_pages(out: Path, entries: list, page_ids: dict[str, str]) -> dict:
+    """Rewrite every existing docs/dataset/*.html legacy page (or earlier stub)
+    as a stub. A slug owned by exactly one board row redirects to that row's
+    audit page; any other is retired. Slugs from data.json are only compared
+    with existing file names, never used to build a path; symlinks and files
+    that are not legacy pages are left alone, and no file is created or deleted."""
+    d_dir = out / LEGACY_PAGE_DIR
+    stats = {"redirected": 0, "retired": 0, "written": 0}
+    if not d_dir.is_dir() or d_dir.is_symlink():
+        return stats
+    owners: dict[str, list[str]] = {}
+    for e in entries:
+        if isinstance(e.get("slug"), str):
+            owners.setdefault(e["slug"], []).append(e["id"])
+    for p in sorted(d_dir.iterdir()):
+        if p.suffix != ".html" or p.is_symlink() or not p.is_file():
+            continue
+        text = p.read_text(encoding="utf-8", errors="replace")
+        if _LEGACY_TITLE_TAIL not in text and _LEGACY_MARKER not in text:
+            continue  # not a page this script wrote
+        rows = owners.get(p.stem, [])
+        if len(rows) == 1:
+            stub = _legacy_stub(f"../{AUDIT_PAGE_DIR}/{page_ids[rows[0]]}.html", rows[0])
+            stats["redirected"] += 1
+        else:  # gone from the board, or two rows share the slug: no honest target
+            stub = _legacy_stub(None, None)
+            stats["retired"] += 1
+        if text != stub:
+            _atomic_text(p, stub)
+            stats["written"] += 1
+    return stats
+
+
 def render_site(out: Path, max_episodes: int = 0) -> int:
     """--render-pages: re-render index.html and docs/d/ from data.json as
     stored. No audits, no rescoring, data.json untouched; the board's
@@ -2229,11 +2239,13 @@ def render_site(out: Path, max_episodes: int = 0) -> int:
     entries = board.get("datasets", [])
     ids = audit_page_ids(entries)
     stats = write_audit_pages(out, entries, max_episodes=max_episodes, page_ids=ids)
+    legacy = retire_legacy_pages(out, entries, ids)
     _atomic_text(out / "index.html", render_index(
         entries, board.get("generated", "unknown"), harm_table=write_harm_table(out),
         max_episodes=max_episodes, page_ids=ids))
     print(f"audit pages: {stats['pages']} rows, {stats['written']} written, "
-          f"{len(stats['pruned'])} pruned")
+          f"{len(stats['pruned'])} pruned; legacy pages: {legacy['redirected']} redirected, "
+          f"{legacy['retired']} retired, {legacy['written']} rewritten")
     return 0
 
 
@@ -2373,6 +2385,7 @@ def _write(out: Path, entries: list, generated: str, max_episodes: int = 0) -> N
     board = json.loads(data)["datasets"]
     ids = audit_page_ids(board)
     write_audit_pages(out, board, max_episodes=max_episodes, page_ids=ids)
+    retire_legacy_pages(out, board, ids)
     idx = render_index(entries, generated, harm_table=write_harm_table(out), max_episodes=max_episodes,
                        page_ids=ids)
     _atomic_text(out / "index.html", idx)
@@ -2390,45 +2403,34 @@ def rescore_entries(entries: list[dict]) -> int:
     return moved
 
 
-_AUDITED_RE = re.compile(r"audited (\d{4}-\d\d-\d\d \d\d:\d\d UTC)")
-
-
-def rewrite_dataset_pages(out: Path, entries: list[dict]) -> None:
-    """Re-render each audited entry's dataset page + report JSON from its
-    stored report, keeping the page's original audit stamp."""
+def rewrite_dataset_reports(out: Path, entries: list[dict]) -> None:
+    """Re-write each audited entry's report JSON (docs/dataset/<slug>.json)
+    from its stored report. The old HTML pages there are no longer rendered:
+    retire_legacy_pages turns them into redirects to docs/d/."""
     for e in entries:
         if not e.get("report"):
             continue
-        page_path = out / "dataset" / f"{e['slug']}.html"
-        m = _AUDITED_RE.search(page_path.read_text()) if page_path.exists() else None
+        # the JSON must agree with the stored verdicts the board score was
+        # computed from
         rep = report_from_dict(e["report"])
-        # the page renders from the round-tripped report; it must agree with
-        # the stored verdicts the board score was computed from
         if rep.score != e["report"]["score"]:
             raise RuntimeError(f"{e['id']}: round-tripped score {rep.score} != stored "
                                f"{e['report']['score']}")
-        for name, text in (
-            (f"{e['slug']}.json", json.dumps(e["report"], separators=(",", ":"), default=str)),
-            (f"{e['slug']}.html", render_dataset_page(rep, audited=m.group(1) if m else "unknown",
-                                                       revision=e.get("revision"),
-                                                       rlds_ref=(e.get("rlds_bucket", RLDS_BUCKETS[0][0]),
-                                                                 e.get("rlds_prefix", ""))
-                                                       if e["id"].startswith("rlds/") else None)),
-        ):
-            tmp = out / "dataset" / f".{name}.tmp"
-            tmp.write_text(text)
-            tmp.replace(out / "dataset" / name)
+        name = f"{e['slug']}.json"
+        tmp = out / "dataset" / f".{name}.tmp"
+        tmp.write_text(json.dumps(e["report"], separators=(",", ":"), default=str))
+        tmp.replace(out / "dataset" / name)
 
 
 def rescore_site(out: Path) -> int:
-    """--rescore: recompute data.json, index.html and every dataset page from
-    the stored verdicts. Keeps the board's generated stamp and each page's
-    audit stamp - nothing was re-audited."""
+    """--rescore: recompute data.json, index.html, the audit pages and every
+    report JSON from the stored verdicts. Keeps the board's generated stamp
+    and each row's audited_at - nothing was re-audited."""
     data_json = out / "data.json"
     board = json.loads(data_json.read_text())
     entries = board.get("datasets", [])
     moved = rescore_entries(entries)
-    rewrite_dataset_pages(out, entries)
+    rewrite_dataset_reports(out, entries)
     _write(out, entries, board.get("generated", "unknown"))
     n = sum(1 for e in entries if e.get("report"))
     print(f"rescored {n} datasets under {SCORE_MODEL}: {moved} score(s) changed")
@@ -2557,7 +2559,7 @@ def main() -> int:
             entries, done_ids, n_moved = [], set(), 0
         if n_moved:
             # outside the try: a page-render error must not wipe the board
-            rewrite_dataset_pages(out, entries)
+            rewrite_dataset_reports(out, entries)
             print(f"rescored stored results under {SCORE_MODEL}: {n_moved} score(s) changed")
     stale_ids = {e["id"] for e in entries if e["id"] not in done_ids}
     if args.discover_only:
@@ -2594,9 +2596,6 @@ def main() -> int:
             entry["revision"] = meta.get("revision")  # None: unknown, never guessed
             entry["sample"] = meta.get("sample")
             entry["audited_at"] = f"{dt.datetime.now(dt.timezone.utc):%Y-%m-%dT%H:%M:%SZ}"
-            (out / "dataset" / f"{slug}.html").write_text(render_dataset_page(
-                rep, rlds_ref=(d.get("rlds_bucket", RLDS_BUCKETS[0][0]), d.get("rlds_prefix", ""))
-                if d.get("rlds") else None, revision=entry["revision"]))
             (out / "dataset" / f"{slug}.json").write_text(json.dumps(entry["report"], indent=2, default=str))
             print(f"    {d['id']}: score {rep.score}/100 ({rep.verdict.name})", flush=True)
         except DatasetError as e:

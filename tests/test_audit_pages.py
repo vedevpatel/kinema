@@ -506,3 +506,106 @@ def test_writes_never_follow_symlinks(tmp_path):
     with pytest.raises(RuntimeError, match="symlink"):
         lb.write_audit_pages(out, [_hub_row()], engine=ENGINE)
     assert list(other.iterdir()) == []
+
+
+# --- retired legacy pages (docs/dataset/) -------------------------------------
+
+# a legacy file name can hold no NUL or '/': hostile, but a legal file name
+HOSTILE = "org/\"><img src=x onerror=alert(2)>&amp;\u202e"
+
+
+def _legacy_page(rid: str) -> str:
+    """What the removed render_dataset_page wrote: a render-time audit stamp."""
+    return (f"<!doctype html><title>{rid} - kinema audit</title><h2>Health score: 77/100</h2>"
+            "<p class=dim>audited 2026-11-13 22:10 UTC by kinema</p>")
+
+
+def _redirect_target(stub: str) -> str | None:
+    m = re.search(r'http-equiv=refresh content="0; url=([^"]+)"', stub)
+    return m.group(1) if m else None
+
+
+def test_legacy_pages_redirect_or_retire(tmp_path):
+    out = tmp_path / "docs"
+    legacy = out / "dataset"
+    legacy.mkdir(parents=True)
+    rows = [_hub_row("org/ds"), _status_row("org/gated", "gated"),
+            _hub_row("a/b--c", slug="a--b--c"), _hub_row("a--b/c", slug="a--b--c"),  # shared slug
+            _hub_row(HOSTILE), _hub_row("org/esc", slug="../../escape")]
+    for rid, slug in (("org/ds", "org--ds"), ("org/gated", "org--gated"), ("org/gone", "org--gone"),
+                      ("a/b--c", "a--b--c")):
+        (legacy / f"{slug}.html").write_text(_legacy_page(rid))
+    evil_slug = rows[4]["slug"]
+    (legacy / f"{evil_slug}.html").write_text(_legacy_page(HOSTILE))
+    (legacy / "org--ds.json").write_text('{"score": 77}')
+    (legacy / "notes.html").write_text("<p>hand written</p>")
+    outside = tmp_path / "outside.html"
+    outside.write_text(_legacy_page("org/linked"))
+    (legacy / "org--linked.html").symlink_to(outside)
+    before = sorted(p.name for p in legacy.iterdir())
+
+    lb._write(out, rows, "2026-11-22 00:00 UTC", max_episodes=50)
+
+    assert sorted(p.name for p in legacy.iterdir()) == before  # nothing created or deleted
+    assert not (tmp_path / "escape.html").exists() and not (out / "escape.html").exists()
+    for slug, rid in (("org--ds", "org/ds"), ("org--gated", "org/gated"), (evil_slug, HOSTILE)):
+        stub = (legacy / f"{slug}.html").read_text()
+        target = _redirect_target(stub)
+        assert target == f"../d/{lb.audit_page_id(rid)}.html"
+        assert f'<link rel=canonical href="{target}">' in stub and (legacy / target).resolve().is_file()
+        assert lb._LEGACY_MARKER in stub[:512] and "noindex" in stub
+        assert "Health score" not in stub and "2026" not in stub and "<img" not in stub
+    for slug in ("org--gone", "a--b--c"):  # no single owner row: retired, no redirect
+        stub = (legacy / f"{slug}.html").read_text()
+        assert _redirect_target(stub) is None and "not on the <a href=\"../index.html\">" in stub
+        assert "Health score" not in stub and "2026" not in stub
+    assert (legacy / "org--ds.json").read_text() == '{"score": 77}'
+    assert (legacy / "notes.html").read_text() == "<p>hand written</p>"
+    assert outside.read_text() == _legacy_page("org/linked")
+
+    board = json.loads((out / "data.json").read_text())["datasets"]
+    again = lb.retire_legacy_pages(out, board, lb.audit_page_ids(board))
+    assert again == {"redirected": 3, "retired": 2, "written": 0}  # idempotent
+
+
+def test_legacy_redirect_follows_a_row_leaving_the_board(tmp_path):
+    out = tmp_path / "docs"
+    (out / "dataset").mkdir(parents=True)
+    (out / "dataset" / "org--ds.html").write_text(_legacy_page("org/ds"))
+    lb._write(out, [_hub_row("org/ds")], "now")
+    assert _redirect_target((out / "dataset" / "org--ds.html").read_text())
+    lb._write(out, [_hub_row("org/other")], "now")  # org/ds left: its audit page is pruned
+    stub = (out / "dataset" / "org--ds.html").read_text()
+    assert _redirect_target(stub) is None and "Retired" in stub
+
+
+def test_legacy_renderer_is_gone():
+    assert not hasattr(lb, "render_dataset_page")
+    src = (SCRIPTS / "leaderboard.py").read_text()
+    assert '.html").write_text' not in src  # no per-audit legacy page write
+
+
+def test_real_board_legacy_pages(tmp_path):
+    """Every committed docs/dataset page becomes a redirect to a page that
+    exists, or a retired stub when no single board row owns its slug."""
+    out = tmp_path / "docs"
+    (out / "dataset").mkdir(parents=True)
+    shutil.copy(ROOT / "docs" / "data.json", out / "data.json")
+    pages = sorted((ROOT / "docs" / "dataset").glob("*.html"))
+    for p in pages:
+        shutil.copy(p, out / "dataset" / p.name)
+    assert lb.render_site(out, max_episodes=250) == 0
+    rows = json.loads((out / "data.json").read_text())["datasets"]
+    owners: dict = {}
+    for e in rows:
+        owners.setdefault(e.get("slug"), []).append(e["id"])
+    for p in pages:
+        stub = (out / "dataset" / p.name).read_text()
+        assert lb._LEGACY_MARKER in stub and "audited " not in stub and "Health score" not in stub
+        target = _redirect_target(stub)
+        if len(owners.get(p.stem, [])) == 1:
+            assert target == f"../d/{lb.audit_page_id(owners[p.stem][0])}.html"
+            url = urllib.parse.urlsplit(urllib.parse.urljoin(PAGES_BASE + f"dataset/{p.name}", target))
+            assert url.path.startswith("/kinema/d/") and (out / url.path.removeprefix("/kinema/")).is_file()
+        else:
+            assert target is None
