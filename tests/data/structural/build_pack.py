@@ -36,9 +36,11 @@ def _api():
     return HfApi(), HfFileSystem()
 
 
-def license_of(repo: str) -> str | None:
+def license_of(repo: str, revision: str | None = None) -> str | None:
+    """The card's license at revision (the pinned one: a card edited later
+    says nothing about the files packed)."""
     api, _ = _api()
-    cd = api.dataset_info(repo).card_data
+    cd = api.dataset_info(repo, revision=revision).card_data
     return (cd.to_dict() if cd else {}).get("license")
 
 

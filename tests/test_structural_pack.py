@@ -77,11 +77,20 @@ def test_provenance_and_license_are_recorded(name):
     assert doc["source"] and len(doc["revision"]) == 40
     assert (doc["license"] or "").lower() in REDISTRIBUTABLE, doc["license"]
     assert name in (PACK / "README.md").read_text()
-    if doc.get("license_source", "dataset card") != "dataset card":
-        # a grant outside the card: the evidence, the attribution and the
-        # license text itself travel with the extract
-        assert doc["license_evidence"] and doc["attribution"]
-        assert (PACK / name / "LICENSE").read_text().lstrip().startswith("Apache License")
+    # every extract carries its license text and attribution (Apache-2.0
+    # section 4(a); MIT: the copyright and permission notice travel with copies)
+    assert doc["attribution"] and doc["license_file"]
+    text = (PACK / name / "LICENSE").read_text()
+    lic = doc["license"].lower()
+    assert text.lstrip().startswith({"apache-2.0": "Apache License", "mit": "MIT License"}[lic]), (name, lic)
+    if lic == "mit":
+        assert "Permission is hereby granted, free of charge" in text
+        assert any(ln.startswith("Copyright (c) ") and "<" not in ln for ln in text.splitlines()), name
+    else:
+        assert "TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION" in text
+    if doc.get("license_source") != "dataset card":
+        # a grant outside the card: the evidence behind it travels too
+        assert doc["license_evidence"]
 
 
 @pytest.mark.parametrize("name", CASES)
