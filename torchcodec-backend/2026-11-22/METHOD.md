@@ -108,7 +108,11 @@ Recorded so the preregistration can be judged on what was known:
   frame was decoded.
 - One environment smoke test decoded indices 11 and 12 of
   `r71_c1_f1/.../observation.images.primary/episode_000000.mp4` with torchcodec
-  (pts 0.7333 s and 0.8000 s) while checking that the aliases load.
+  (pts 0.7333 s and 0.8000 s) while checking that the aliases load. It ran with
+  `-I` but not `-B`, so it wrote 8 bytecode caches for torchcodec modules that
+  had never imported before into the v2 venv. They are listed in
+  [`evidence/venv_writes.json`](evidence/venv_writes.json). No source or package
+  file changed, and every later command used `-B`.
 - `tcprobe.py --identity-only` for each case: hashing and environment checks, no
   decode.
 - Synthetic-video tests ([`test_tcprobe_env.py`](test_tcprobe_env.py)) on videos
@@ -136,6 +140,8 @@ for e in v2 v3; do
   env LD_LIBRARY_PATH=/tmp/kinema-tc-ffmpeg-$e:/tmp/kinema-phase2-$e/lib/python3.11/site-packages/av.libs \
     /tmp/kinema-phase2-$e/bin/python -I -B $D/selection_check.py tc-$e ffmpeg_aliases
 done
+# Post-hoc, descriptive only (not preregistered): profile, B-frame reordering, width
+/tmp/kinema-phase2-v2/bin/python -I -B $D/stream_facts_posthoc.py
 python $D/make_report.py   # needs numpy only
 python -m pytest tests/test_torchcodec_backend.py -q
 env $V2 /tmp/kinema-phase2-v2/bin/python -I -B -m unittest discover -s $D -p 'test_tcprobe_env.py'

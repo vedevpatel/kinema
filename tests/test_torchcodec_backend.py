@@ -191,3 +191,45 @@ def test_preregistration_hashes_match_when_present():
         pytest.skip("not yet preregistered")
     for relative, digest in json.loads(path.read_text())["sha256"].items():
         assert sha(HERE / relative) == digest, relative
+
+
+# --- executed evidence (skipped until present) -------------------------------------
+
+def evidence(case_id: str) -> dict:
+    path = HERE / "evidence" / f"{common.case_key(case_id)}_torchcodec.json"
+    if not path.exists():
+        pytest.skip("not yet executed")
+    return json.loads(path.read_text())
+
+
+@pytest.mark.parametrize("case_id", CASES)
+def test_evidence_replays_exactly_the_frozen_plan(case_id):
+    ev = evidence(case_id)
+    plan = json.loads((PHASE3 / "plan" / f"{common.case_key(case_id)}.json").read_text())["plan"]
+    assert ev["status"] == "executed" and all(ev["identity"]["checks"].values())
+    assert ev["phase3_plan_sha256"] == EXPECTATIONS["frozen_sources"]["phase3_plans"][case_id]["sha256"]
+    assert len(ev["batches"]) == len(plan["batches"])
+    for b, p in zip(ev["batches"], plan["batches"], strict=True):
+        for field in ("query_class", "camera", "anchor", "anchor_row", "config", "padded", "video_path", "queries"):
+            assert b[field] == p[field], field
+
+
+@pytest.mark.parametrize("case_id", CASES)
+def test_every_batch_has_a_classified_outcome_for_both_backends(case_id):
+    for b in evidence(case_id)["batches"]:
+        for backend in ("torchcodec", "pyav_control"):
+            assert b[backend]["outcome"] in tm.OUTCOMES
+            assert b[backend]["outcome"] == "harness_discrepancy" or b[backend]["replay_consistent"]
+
+
+def test_report_is_regenerated_from_evidence():
+    path = HERE / "report.json"
+    if not path.exists():
+        pytest.skip("report not yet built")
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("torchcodec_backend_make_report", HERE / "make_report.py")
+    make_report = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(make_report)
+    assert make_report.build_report() == json.loads(path.read_text())
+    assert (HERE / "report.md").read_text() == make_report.render(make_report.build_report())
