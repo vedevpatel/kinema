@@ -1,9 +1,9 @@
 """Checks 2 & 3 - timestamp grid and dropped frames.
 
 Hand-rolled dataset conversions routinely produce timestamps that sit
-off the 1/fps grid, non-monotonic runs, and frame_index gaps. Any
-loader that samples with delta_timestamps then returns misaligned
-windows, and some crash outright.
+off the 1/fps grid, non-monotonic runs, and frame_index gaps. Their
+effect on temporal windows and video access depends on the loader and
+the source video timeline.
 """
 
 from __future__ import annotations
@@ -23,9 +23,9 @@ class TimestampGridCheck(Check):
     # Measured on frame-to-frame spacing, not distance from an absolute
     # grid: a constant offset leaves spacing intact, while any jitter makes
     # the absolute distance saturate at half a period and say nothing.
-    # LeRobot compares spacing against 1/fps within tolerance_s (default
-    # 1e-4 s), and looks video frames up BY timestamp - so timestamps that
-    # do not start at 0 (e.g. wall-clock seconds) break video decoding.
+    # LeRobot looks video frames up by timestamp. A nonzero start can still
+    # decode if the video timeline covers those timestamps; this check does
+    # not inspect the video timeline.
 
     def run(self, ctx, cfg: CheckConfig) -> CheckResult:
         res = CheckResult(self.id, self.title)
@@ -124,7 +124,8 @@ class TimestampGridCheck(Check):
                     self.id,
                     Severity.FAIL if has_video else Severity.INFO,
                     f"{len(offset_eps)} episode(s) whose timestamps do not start at 0: {ex}"
-                    + (" - video frames are looked up by timestamp, so decoding will miss"
+                    + (" - video lookup uses timestamps; a nonzero start alone does not prove "
+                       "decoding will miss (compare the video timeline)"
                        if has_video else " - harmless without videos (spacing is what matters)"),
                     details={"episodes": [e for e, _ in offset_eps]},
                 )
@@ -154,7 +155,7 @@ class DroppedFramesCheck(Check):
             res.findings.append(Finding(
                 self.id, Severity.WARN,
                 "frame_index column missing from the frame data - a default LeRobot "
-                "feature that loaders and tools expect; gap/duplicate-index checks not "
+                "feature; gap/duplicate-index checks not "
                 "evaluated (metadata length and video evidence are still checked)"))
         for col in ("frame_index", "timestamp", "episode_index"):
             k = (ctx.null_counts or {}).get(col)

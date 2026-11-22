@@ -584,7 +584,7 @@
     {
       "id": "timestamp-grid-broken",
       "cluster": "conditioning",
-      "title": "Timestamps off the sampling grid or non-monotonic",
+      "title": "Timestamp spacing, order, or start anomaly",
       "indicates": {
         "check_id": "timestamp-grid",
         "min_severity": "WARN"
@@ -593,9 +593,9 @@
         "FAIL": "high",
         "WARN": "medium"
       },
-      "explanation": "Frames are not evenly spaced at the declared fps, or time runs backwards. delta_timestamps windows and video-frame lookup then sample the wrong frames: {policy} trains on misaligned observation/action windows.",
+      "explanation": "This check covers frame spacing, timestamp order, and nonzero starts. A spacing or order error can misalign {policy} temporal windows. A nonzero start affects video lookup only if the video timeline does not cover those timestamps; verify frame access before inferring training harm.",
       "docs_section": "timestamp-grid",
-      "next_step": "Fix the timestamps (or the declared fps) in the conversion, or drop the episodes the finding names, and retrain."
+      "next_step": "Inspect the named episodes and video timestamps with the relevant loader. Correct or drop episodes only when a timing mismatch is verified."
     },
     {
       "id": "duplicate-episodes",
