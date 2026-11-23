@@ -270,13 +270,43 @@ Knobs: `stats_mean_warn_sigma` (0.10), `stats_mean_fail_sigma` (0.50),
 
 ## timestamp-grid
 
-Timestamps off the 1/fps sampling grid, and non-monotonic runs. A frame table
-with no `timestamp` column at all is one dataset-level FAIL (LeRobot reads it
-for `delta_timestamps` windows and video lookup); a missing `frame_index`
-column is one dropped-frames WARN - never invented per-episode defects.
-`delta_timestamps` sampling returns misaligned windows when the grid slips.
-Off-grid episodes are one aggregated finding listing them all; non-monotonic
-runs stay per-episode FAILs.
+Frame spacing against the 1/fps grid, timestamp order, nonzero starts, and
+timestamps that collapse in float32.
+
+FAILs need demonstrated loss of time information:
+
+- a frame table with no `timestamp` column at all (one dataset-level FAIL;
+  LeRobot reads it for video lookup);
+- equal or decreasing timestamps within an episode (per-episode FAILs);
+- distinct, increasing timestamps that become equal or decreasing after
+  conversion to float32, the dtype LeRobot 0.3.3, 0.4.0 and 0.5.1 load them as
+  (`hf_transform_to_torch`). The finding counts the pairs actually lost.
+  Unix-time timestamps (about 1.78e9 s, float32 steps of 128 s) lose every pair
+  at 30 fps. Coarse float32 resolution with no lost pair is only a risk note on
+  the start-offset finding, never a FAIL by itself.
+
+Anomalies reported as WARN, with the consequence scoped to what was tested:
+
+- **Off-grid spacing** (deviation over `grid_warn_frac`): one aggregated
+  finding listing the episodes. LeRobot takes temporal windows in rows, so a
+  window across a deviation spans a different time than the config intends.
+  LeRobot 0.3.3 rejects spacing beyond `tolerance_s` when the dataset is built
+  (`check_timestamps_sync`); 0.4.0 and 0.5.1 do not check spacing. Video lookup
+  compares each query with the video's own frame timestamps, which this check
+  does not read. In the 2026-11-22 assurance runs, an episode 67% off its grid
+  decoded at every tested query with both pyav and torchcodec
+  ([`shifted-queries/`](../shifted-queries/2026-11-22/report.md),
+  [`torchcodec-backend/`](../torchcodec-backend/2026-11-22/report.md)).
+- **Nonzero start on a video dataset**: the offset stays visible, but it is
+  not a failure. Lookup succeeds when the video timeline covers those
+  timestamps (a droid episode starting at 0.733 s decoded under both
+  backends), and timestamps alone cannot show whether frames and rows show
+  the same instant. Without videos a nonzero start is INFO.
+
+Jitter under the WARN line but over LeRobot's default `tolerance_s` is INFO,
+naming the `tolerance_s` that 0.3.3's construction check would need. A missing
+`frame_index` column is one dropped-frames WARN, never invented per-episode
+defects.
 
 Knobs: `grid_warn_frac` (0.10, as a fraction of the frame period).
 

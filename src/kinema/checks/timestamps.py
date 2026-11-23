@@ -15,6 +15,19 @@ from kinema.checks.base import Check, CheckConfig, CheckResult, Finding, Severit
 
 _LEROBOT_TOLERANCE_S = 1e-4  # LeRobotDataset's default tolerance_s
 
+# What row spacing does and does not decide, per the assurance runs
+# (loader-verification/, shifted-queries/, torchcodec-backend/ 2026-11-22):
+# LeRobot 0.3.3 validates spacing against tolerance_s at construction
+# (check_timestamps_sync); 0.4.0 and 0.5.1 do not call it. Video lookup
+# compares each query with the video's own frame timestamps, so spacing in
+# the frame table alone does not decide it: an episode 67% off its grid
+# decoded at every tested query with both pyav and torchcodec.
+_SPACING_SCOPE = (
+    "LeRobot 0.3.3 rejects spacing beyond tolerance_s (1e-4 s) when the dataset is "
+    "built (check_timestamps_sync); 0.4.0 and 0.5.1 do not check spacing, and video "
+    "lookup depends on the video's own frame timestamps, which this check does not read"
+)
+
 
 class TimestampGridCheck(Check):
     id = "timestamp-grid"
@@ -23,9 +36,15 @@ class TimestampGridCheck(Check):
     # Measured on frame-to-frame spacing, not distance from an absolute
     # grid: a constant offset leaves spacing intact, while any jitter makes
     # the absolute distance saturate at half a period and say nothing.
-    # LeRobot looks video frames up by timestamp. A nonzero start can still
-    # decode if the video timeline covers those timestamps; this check does
-    # not inspect the video timeline.
+    # LeRobot looks video frames up by timestamp. A nonzero start decoded in
+    # the assurance runs whenever the video timeline covered those timestamps
+    # (droid: rows from 0.733 s, video from 0 s), so the offset alone is a
+    # WARN: it says nothing about whether frames and rows show the same
+    # instant. A FAIL needs demonstrated loss: missing timestamps, an order
+    # violation, or distinct timestamps that become equal or decreasing in the
+    # float32 that LeRobot 0.3.3, 0.4.0 and 0.5.1 convert them to when loading
+    # (hf_transform_to_torch).
+    # Coarse float32 resolution alone is reported as a risk, not a FAIL.
 
     def run(self, ctx, cfg: CheckConfig) -> CheckResult:
         res = CheckResult(self.id, self.title)
@@ -50,9 +69,10 @@ class TimestampGridCheck(Check):
         )
         worst_jit, worst_ep = 0.0, None
         loose_eps: list[tuple[int, float]] = []
-        flagged = 0
-        offset_eps: list[tuple[int, float]] = []
+        flagged: set[int] = set()
+        offset_eps: list[tuple[int, float, float]] = []  # (episode, start, max |t|)
         jitter_eps: list[tuple[int, float, int]] = []  # (episode, jitter, gaps)
+        collapse_eps: list[tuple[int, int, int]] = []  # (episode, lost pairs, rows)
         for ep in ctx.episode_ids():
             rows = ctx.rows_for(ep)
             if len(rows) < 3:
@@ -61,7 +81,7 @@ class TimestampGridCheck(Check):
             d = np.diff(t)
             nonmono = int((d <= 0).sum())
             if nonmono:
-                flagged += 1
+                flagged.add(ep)
                 res.findings.append(
                     Finding(
                         self.id,
@@ -72,14 +92,22 @@ class TimestampGridCheck(Check):
                     )
                 )
                 continue
+            # LeRobot holds timestamps as float32 (hf_transform_to_torch).
+            # Count consecutive pairs, strictly increasing as stored, that
+            # stop increasing after that conversion: demonstrated loss, not
+            # a magnitude cutoff.
+            lost = int((np.diff(t.astype(np.float32)) <= 0).sum())
+            if lost:
+                flagged.add(ep)
+                collapse_eps.append((ep, lost, len(t)))
             if abs(t[0]) > 0.5 * period:
-                offset_eps.append((ep, float(t[0])))
+                offset_eps.append((ep, float(t[0]), float(np.abs(t).max())))
             jit = float(np.abs(d - period).max()) * fps  # fraction of a period
             gaps = int((d > 1.5 * period).sum())
             if jit > worst_jit:
                 worst_jit, worst_ep = jit, ep
             if jit > cfg.grid_warn_frac:
-                flagged += 1
+                flagged.add(ep)
                 jitter_eps.append((ep, jit, gaps))
             elif jit * period > _LEROBOT_TOLERANCE_S:
                 # below the WARN line (small, routine jitter) but above what
@@ -91,9 +119,10 @@ class TimestampGridCheck(Check):
                 self.id, Severity.INFO,
                 f"{len(loose_eps)} episode(s) with frame-spacing jitter up to "
                 f"{worst_l * period * 1000:.2f} ms ({worst_l:.1%} of a period): under the "
-                f"{cfg.grid_warn_frac:.0%} WARN line, but over LeRobot's default "
-                f"tolerance_s ({_LEROBOT_TOLERANCE_S:g} s) - load with tolerance_s >= "
-                f"{worst_l * period:.4f}",
+                f"{cfg.grid_warn_frac:.0%} WARN line. LeRobot 0.3.3's construction check "
+                f"(check_timestamps_sync) needs tolerance_s >= {worst_l * period:.4f} "
+                f"for this spacing (default {_LEROBOT_TOLERANCE_S:g} s); 0.4.0 and 0.5.1 do "
+                "not check spacing",
                 details={"episodes": [e for e, _ in loose_eps]},
             ))
         if jitter_eps:
@@ -111,23 +140,47 @@ class TimestampGridCheck(Check):
                     f"(episodes {ex}{', ...' if len(jitter_eps) > 8 else ''}): "
                     f"frame spacing deviates up to {worst_j:.0%} of a period"
                     + (f", {gaps_total} dropped-frame gap(s) in total" if gaps_total else "")
-                    + "; LeRobot's default tolerance_s (1e-4 s) rejects these - "
-                    f"needs tolerance_s >= {worst_j * period:.4f}",
+                    + f" ({worst_j * period:.4f} s). LeRobot takes temporal windows in rows, "
+                    "so windows across these deviations can span a different time than the "
+                    "policy config intends. " + _SPACING_SCOPE,
                     details={"episodes": [e for e, _, _ in jitter_eps],
                              "jitter_fraction": worst_j, "gaps": gaps_total},
                 )
             )
+        if collapse_eps:
+            lost_total = sum(n for _, n, _ in collapse_eps)
+            ex = ", ".join(f"{e} ({n}/{r - 1})" for e, n, r in collapse_eps[:5])
+            res.findings.append(Finding(
+                self.id, Severity.FAIL,
+                f"{len(collapse_eps)} episode(s) whose distinct timestamps collapse in float32 "
+                f"(LeRobot 0.3.3-0.5.1 load timestamps as float32): {lost_total} consecutive "
+                f"pair(s) become equal or decreasing (episode (pairs/total): {ex}"
+                f"{', ...' if len(collapse_eps) > 5 else ''}) - those rows lose their own time"
+                + ("; video lookups query one value for several rows" if has_video else "")
+                + "; LeRobot 0.3.3's construction check (check_timestamps_sync) rejects the "
+                "resulting spacing",
+                details={"episodes": [e for e, _, _ in collapse_eps], "pairs_lost": lost_total},
+            ))
         if offset_eps:
-            ex = ", ".join(f"{e} ({t0:.4g}s)" for e, t0 in offset_eps[:5])
+            ex = ", ".join(f"{e} ({t0:.4g}s)" for e, t0, _ in offset_eps[:5])
+            resolution = float(np.spacing(np.float32(max(m for _, _, m in offset_eps))))
+            risk = (
+                f"; risk: at this magnitude float32 (LeRobot's timestamp dtype) resolves "
+                f"only {resolution:.3g} s, coarser than tolerance_s (1e-4 s)"
+                if resolution > _LEROBOT_TOLERANCE_S else ""
+            )
             res.findings.append(
                 Finding(
                     self.id,
-                    Severity.FAIL if has_video else Severity.INFO,
+                    Severity.WARN if has_video else Severity.INFO,
                     f"{len(offset_eps)} episode(s) whose timestamps do not start at 0: {ex}"
-                    + (" - video lookup uses timestamps; a nonzero start alone does not prove "
-                       "decoding will miss (compare the video timeline)"
-                       if has_video else " - harmless without videos (spacing is what matters)"),
-                    details={"episodes": [e for e, _ in offset_eps]},
+                    + (" - LeRobot looks video frames up by these timestamps; lookup succeeds "
+                       "when the video timeline covers them (not read by this check), and "
+                       "timestamps alone cannot show whether frames and rows are aligned in time"
+                       if has_video else " - harmless without videos (spacing is what matters)")
+                    + risk,
+                    details={"episodes": [e for e, _, _ in offset_eps],
+                             "float32_resolution_s": resolution},
                 )
             )
         if not any(f.severity >= Severity.WARN for f in res.findings):
@@ -136,9 +189,10 @@ class TimestampGridCheck(Check):
                            f"LeRobot's default tolerance_s in {len(loose_eps)} episode(s)")
         else:
             res.summary = (
-                f"{flagged}/{ctx.total_episodes} episodes flagged; worst spacing deviation "
+                f"{len(flagged)}/{ctx.total_episodes} episodes flagged; worst spacing deviation "
                 f"{worst_jit:.0%} of a period (episode {worst_ep})"
                 + (f"; {len(offset_eps)} not starting at 0" if offset_eps else "")
+                + (f"; {len(collapse_eps)} collapsing in float32" if collapse_eps else "")
             )
         return res
 
