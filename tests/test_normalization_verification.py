@@ -9,6 +9,7 @@ the report and adjudications follow from the committed evidence.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import sys
 from pathlib import Path
@@ -17,9 +18,28 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 HERE = ROOT / "normalization-verification" / "2026-11-23"
-sys.path.insert(0, str(HERE))
 
-import common  # noqa: E402
+
+def _load(name: str, unique: str):
+    """Load a module from HERE under a unique name. Other evidence suites also
+    ship a module called `common`, so the bare name is bound only while this
+    directory's modules execute and restored afterwards."""
+    saved = sys.modules.get("common")
+    spec = importlib.util.spec_from_file_location(unique, HERE / f"{name}.py")
+    mod = importlib.util.module_from_spec(spec)
+    try:
+        if name != "common":
+            sys.modules["common"] = common
+        spec.loader.exec_module(mod)
+    finally:
+        if saved is None:
+            sys.modules.pop("common", None)
+        else:
+            sys.modules["common"] = saved
+    return mod
+
+
+common = _load("common", "normverify_common")
 
 EXP = json.loads((HERE / "expectations.json").read_text())
 CASES = {c["case_id"]: c for c in EXP["cases"]}
@@ -139,10 +159,104 @@ def test_upstream_openpi_quantile_rule_is_recorded_not_assumed():
     assert CASES["r67:c17:f0"]["configurations"]["openpi_upstream"]["config_names"] == ["pi0_libero", "pi05_libero", "pi0_fast_libero"]
 
 
-# --- preregistration --------------------------------------------------------------
+# --- preregistration and deviations -------------------------------------------------
 
-def test_preregistered_files_unchanged():
-    prereg = json.loads((HERE / "preregistration.json").read_text())
-    assert set(prereg["sha256"]) == set(EXP["frozen_files"])
-    for name, digest in prereg["sha256"].items():
-        assert sha(HERE / name) == digest, name
+PREREG = json.loads((HERE / "preregistration.json").read_text())
+DEVIATIONS = json.loads((HERE / "deviations.json").read_text())["deviations"] if (HERE / "deviations.json").exists() else []
+
+
+def test_preregistered_files_unchanged_or_recorded_deviation():
+    assert set(PREREG["sha256"]) == set(EXP["frozen_files"])
+    for name, digest in PREREG["sha256"].items():
+        actual = sha(HERE / name)
+        if actual == digest:
+            continue
+        chain = [d for d in DEVIATIONS if d.get("file") == name]
+        assert chain, f"{name} changed without a recorded deviation"
+        assert chain[0]["sha256_before"] == digest, name
+        for a, b in zip(chain, chain[1:]):
+            assert a["sha256_after"] == b["sha256_before"], name
+        assert chain[-1]["sha256_after"] == actual, name
+
+
+def test_new_scripts_match_their_deviation_records():
+    for d in DEVIATIONS:
+        if d.get("file") and d["sha256_before"] is None:
+            assert sha(HERE / d["file"]) == d["sha256_after"], d["id"]
+
+
+# --- results follow from the committed evidence ----------------------------------------
+
+def _results():
+    if not (HERE / "report.json").exists():
+        pytest.skip("results not generated yet")
+    return _load("make_report", "normverify_make_report").build()  # reads only committed evidence
+
+
+def test_report_and_adjudications_regenerate_exactly():
+    report, adj = _results()
+    clean = lambda o: json.loads(json.dumps(common._clean(o), sort_keys=True))  # noqa: E731
+    assert clean(report) == json.loads((HERE / "report.json").read_text())
+    assert clean(adj) == json.loads((HERE / "adjudications.json").read_text())
+
+
+def test_adjudications_point_to_original_cases():
+    _, adj = _results()
+    p1 = json.loads((ROOT / "audits/2026-11-22/adjudications.json").read_text())
+    assert sorted(adj) == sorted(TARGETS)
+    for cid, a in adj.items():
+        assert a["original_case"]["phase1_label"] == p1[cid]["label"]
+        assert a["original_case"]["revision"] == SAMPLE[cid]["revision"]
+        assert a["label"] in ("confirmed", "refuted", "partially_resolved", "unresolved")
+
+
+def test_failures_before_normalization_never_confirm():
+    report, _ = _results()
+    for cid, c in report["cases"].items():
+        cons = c.get("A4_inference_normalization") or c["B2_amplification"]
+        outcomes = [x.get("outcome") for x in cons["configurations"]]
+        outcomes += [m["outcome"] for x in cons["configurations"] for m in x.get("modes", [])]
+        if cons["label"] == "confirmed":
+            assert any(o in ("fails_missing_stats", "amplified", "nonfinite") for o in outcomes), cid
+        if all(o == "not_reached" for o in outcomes):
+            assert cons["label"] == "unresolved", cid
+
+
+def test_near_zero_thresholds_recomputed_from_raw_channel_evidence():
+    ch = {c["case_id"]: c for c in json.loads((HERE / "evidence/channels.json").read_text())["cases"]}
+    for cid in ("r390:c7:f8", "r393:c7:f14"):
+        c = ch[cid]
+        assert c["dim"] == CASES[cid]["finding"]["details"]["dim"]
+        assert c["stored_stats"]["flagged"]["std"] < 1e-9
+        assert all(f["flagged"]["std"] < 1e-9 for f in c["files"])
+        assert len(c["files"]) == EXP["sampling_rule"]["count"]
+
+
+def test_amplification_outcomes_follow_frozen_thresholds():
+    report, _ = _results()
+    for m in report["cases"]["r393:c7:f14"]["B2_amplification"]["configurations"][0]["modes"]:
+        if m["mode"] == "IDENTITY":
+            assert m["outcome"] == "not_consumed"
+        elif m["flagged_std_out"] >= 0.1:
+            assert m["outcome"] == "amplified"
+        elif m["flagged_std_out"] <= 0.01:
+            assert m["outcome"] == "not_amplified"
+
+
+def test_synthetic_and_posthoc_evidence_never_decide():
+    report, _ = _results()
+    text = json.dumps({cid: {k: v for k, v in c.items() if k in ("A4_inference_normalization", "B2_amplification")}
+                       for cid, c in report["cases"].items()})
+    assert "posthoc_feature_scan" not in text
+    for m in report["cases"]["r393:c7:f14"]["B2_amplification"]["configurations"][0]["modes"]:
+        # outcomes depend on in-sample fields only
+        assert "synthetic_shift" in m and m["outcome"] in ("amplified", "not_amplified", "intermediate", "not_consumed", "nonfinite")
+
+
+def test_readable_report_states_every_label():
+    report, _ = _results()
+    md = (HERE / "report.md").read_text()
+    words = {"refuted": "**refuted**", "unresolved": "**unresolved**", "partially_resolved": "**partially resolved**", "confirmed": "**confirmed**"}
+    for cid, c in report["cases"].items():
+        row = next(line for line in md.splitlines() if line.startswith(f"| `{cid}`"))
+        assert words[c["case_label"]] in row, cid

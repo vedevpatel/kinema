@@ -19,6 +19,7 @@ REPO = HERE.parents[1]
 EVIDENCE = HERE / "evidence"
 EXPECTATIONS = HERE / "expectations.json"
 PREREGISTRATION = HERE / "preregistration.json"
+DEVIATIONS = HERE / "deviations.json"  # post-freeze edits, each with before/after hashes and reason
 
 # Large inputs never enter the repository. Paths are recorded with hashes.
 WORK = Path("/tmp/kinema-normverify")
@@ -105,12 +106,18 @@ def environment_record(packages: list[str]) -> dict:
 def check_preregistration(files: list[str]) -> dict:
     """Refuse to run when a frozen file changed after preregistration."""
     prereg = load_json(PREREGISTRATION)["sha256"]
+    allowed = {}
+    if DEVIATIONS.exists():
+        for d in load_json(DEVIATIONS)["deviations"]:
+            if d.get("file") in prereg:
+                allowed.setdefault(d["file"], set()).add(d["sha256_after"])
     observed = {}
     for name in files:
         actual = sha256_file(HERE / name)
         observed[name] = actual
-        if prereg.get(name) != actual:
-            raise SystemExit(f"{name} changed after preregistration ({actual} != {prereg.get(name)})")
+        if prereg.get(name) != actual and actual not in allowed.get(name, set()):
+            raise SystemExit(f"{name} changed after preregistration ({actual} != {prereg.get(name)}) "
+                             "and no recorded deviation has that hash")
     return observed
 
 

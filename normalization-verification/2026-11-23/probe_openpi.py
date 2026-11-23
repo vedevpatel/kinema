@@ -37,8 +37,9 @@ if SCRATCH.exists():
     shutil.rmtree(SCRATCH)
 SCRATCH.mkdir(parents=True)
 os.environ.update(HF_HUB_OFFLINE="1", HF_DATASETS_OFFLINE="1", HF_HOME=str(SCRATCH / "hf"),
-                  HF_LEROBOT_HOME=str(SCRATCH / "lerobot_home"), LEROBOT_HOME=str(SCRATCH / "lerobot_home"),
                   OPENPI_DATA_HOME=str(SCRATCH / "openpi_data"), JAX_PLATFORMS="cpu")
+# the upstream-pinned lerobot rejects the deprecated LEROBOT_HOME; the fork's older lerobot only reads it
+os.environ["LEROBOT_HOME" if STACK == "fork" else "HF_LEROBOT_HOME"] = str(SCRATCH / "lerobot_home")
 
 import numpy as np  # noqa: E402
 import openpi.shared.normalize as _normalize  # noqa: E402
@@ -60,12 +61,23 @@ def repack_structure(dc) -> dict | None:
 
 def config_record(name: str, assets: Path) -> tuple[dict, object, object]:
     cfg = _config.get_config(name)
-    dc = cfg.data.create(assets, cfg.model)
-    return {
+    scope = "DataConfigFactory.create (full)"
+    create_error = None
+    try:
+        dc = cfg.data.create(assets, cfg.model)
+    except OSError as e:
+        # FAST configs build the FAST tokenizer from the Hub inside create(); offline isolation
+        # blocks it. create_base_config is the function that sets use_quantile_norm (source pins).
+        create_error = common.error_record(e)
+        if STACK == "fork" and type(cfg.data).__name__ == "SimpleDataConfig":
+            raise  # the fork's SimpleDataConfig sets use_quantile_norm outside create_base_config
+        dc = cfg.data.create_base_config(assets, cfg.model) if STACK == "upstream" else cfg.data.create_base_config(assets)
+        scope = "DataConfigFactory.create_base_config only (model and data transforms not built)"
+    return {"selection_scope": scope, "create_error": create_error,
         "config": name, "model_class": type(cfg.model).__name__, "model_type": str(cfg.model.model_type),
         "action_horizon": int(cfg.model.action_horizon), "repo_id": dc.repo_id, "asset_id": dc.asset_id,
         "use_quantile_norm": bool(dc.use_quantile_norm), "norm_stats_found_in_empty_assets": dc.norm_stats is not None,
-        "repack": repack_structure(dc), "action_sequence_keys": list(dc.action_sequence_keys),
+        "repack": repack_structure(dc) if dc.repack_transforms.inputs else None, "action_sequence_keys": list(dc.action_sequence_keys),
         "prompt_from_task": bool(dc.prompt_from_task),
     }, cfg, dc
 
@@ -150,7 +162,9 @@ def run_case(case: dict, inp: dict, released: list[dict]) -> dict:
     try:
         rs = {k: _normalize.RunningStats() for k in ("state", "actions")}
         for k in rs:
-            rs[k].update(np.stack([it[k] for it in items]))
+            values = np.stack([it[k] for it in items])
+            # both compute_norm_stats scripts feed 2-D batches (upstream reshapes inside update)
+            rs[k].update(values.reshape(-1, values.shape[-1]))
         ns = {k: v.get_statistics() for k, v in rs.items()}
         rec["stages"]["S5_training_stats"] = {"outcome": "ok", "scope": "episode 0 only", "stats": stats_record(ns)}
     except Exception as e:  # noqa: BLE001
@@ -159,6 +173,8 @@ def run_case(case: dict, inp: dict, released: list[dict]) -> dict:
     # S6: training-stage Normalize with S5 stats, per pinned config's selection
     rec["stages"]["S6_training_normalize"] = {
         name: normalize_record(ns, dcs[name][1].use_quantile_norm, items) for name in dcs}
+    rec["stages"]["S6_note"] = (f"every config's use_quantile_norm is applied to the arrays produced by {primary}'s "
+                                "transforms and S5 stats; configs with another action_dim pad differently in their own pipeline")
     # S7: save as compute_norm_stats does; load with the inference loader
     try:
         asset_dir = SCRATCH / "assets" / cid.replace(":", "_")
@@ -172,7 +188,8 @@ def run_case(case: dict, inp: dict, released: list[dict]) -> dict:
     # S8: released checkpoint stats selected by the frozen rule
     s8 = []
     for r in released:
-        entry = {"source": r["source"], "asset_id": r["asset_id"], "mapped_config": r["mapped_config"]}
+        entry = {"source": r["source"], "asset_id": r["asset_id"], "mapped_config": r["mapped_config"],
+                 "candidates": r.get("candidates"), "added_by_deviation": r.get("added_by_deviation"), "sha256": r["sha256"]}
         try:
             rel = _normalize.load(Path(r["local"]).parent)
             entry["stats"] = stats_record(rel)
@@ -194,7 +211,21 @@ def run_case(case: dict, inp: dict, released: list[dict]) -> dict:
 
 def released_for(case: dict, inputs: dict) -> list[dict]:
     """Released norm_stats files the frozen rule maps to this case and stack."""
-    mapping = case["configurations"][f"openpi_{STACK}"]["released"]
+    mapping = list(case["configurations"][f"openpi_{STACK}"]["released"])
+    if STACK == "fork":
+        # D5: the frozen org-scan rule selected checkpoints the frozen list omitted; map them by the
+        # frozen mechanical rule (model type, asset id, aligned flag; unanimous use_quantile_norm)
+        asset = case["configurations"]["openpi_fork"]["fork_repo_id"]
+        listed = {m["source"] for m in mapping}
+        inv = EXP["fork_config_inventory"]["rows"]
+        quant = {r[0]: r[3] for r in inv}
+        for ck in inputs["checkpoints"]:
+            if ck.get("rule") == "vlabench_org_scan" and ck["selected"] and ck["repo"] not in listed \
+                    and any(a == f"assets/{asset}/norm_stats.json" for a in ck["norm_stats_assets"]):
+                cands = common.vlabench_candidates(ck["repo"], asset, inv)
+                cfg = cands[0] if cands and len({quant[c] for c in cands}) == 1 else None
+                mapping.append({"source": ck["repo"], "asset_id": asset, "config": cfg, "candidates": cands,
+                                "added_by_deviation": "D5"})
     found = []
     for ck in inputs["checkpoints"]:
         for f in ck.get("files", []):
@@ -205,6 +236,7 @@ def released_for(case: dict, inputs: dict) -> list[dict]:
             for m in mapping:
                 if m["source"] == source and name.endswith(m["asset_id"] + "/norm_stats.json"):
                     found.append({"source": source, "asset_id": m["asset_id"], "mapped_config": m["config"],
+                                  "candidates": m.get("candidates"), "added_by_deviation": m.get("added_by_deviation"),
                                   "local": f["local"], "sha256": f["sha256"]})
     return found
 

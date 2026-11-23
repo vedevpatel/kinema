@@ -1,0 +1,94 @@
+{
+ "schema": "kinema.normverify.deviations/1",
+ "note": "Every edit to a preregistered file after the preregistration commit (9f29d711). The hash guard accepts a changed file only if its new hash is listed here.",
+ "deviations": [
+  {
+   "id": "D1",
+   "file": "probe_openpi.py",
+   "sha256_before": "0e157fa4ecae3d34bd370aa62c691b2bdf43a2f4f142d6c3e43b9e2fbb3c729f",
+   "sha256_after": "e3887ce9a8ce761afa9527d2cdb596dd75b19abaf8b2855505643328576c7af6",
+   "when": "first run of probe_openpi.py upstream, before any stage executed (import-time ValueError)",
+   "reason": "harness bug: the upstream-pinned lerobot raises ValueError when the deprecated LEROBOT_HOME variable is set; the probe now sets HF_LEROBOT_HOME for upstream and LEROBOT_HOME for the fork. No stage, input or rule changed.",
+   "observed_error": "ValueError: You have a 'LEROBOT_HOME' environment variable set ... 'LEROBOT_HOME' is deprecated, please use 'HF_LEROBOT_HOME' instead."
+  },
+  {
+   "id": "D2",
+   "file": "common.py",
+   "sha256_before": "77bc94930819006aeba1a430bf9afc2f293c87bbd5ac99b2b835620cdd307bdf",
+   "sha256_after": "072033175303db697ae1c90bc0d4d2fe5c06fee9cbb0a31aaac4c99f64535300",
+   "when": "with D1",
+   "reason": "check_preregistration accepts a changed preregistered file only when this file records its exact new hash; nothing else in common.py changed."
+  },
+  {
+   "id": "D3-D5",
+   "file": "probe_openpi.py",
+   "sha256_before": "e3887ce9a8ce761afa9527d2cdb596dd75b19abaf8b2855505643328576c7af6",
+   "sha256_after": "e4fd4f52df9f695214c01b7083480c92a549e978277ad259ebb4bdd5a5b2b6d7",
+   "when": "after the first fork run (S5 ValueError) and the first upstream run (pi0_fast_libero S1 OSError); outputs of both first runs were replaced by re-runs of this version",
+   "reason": {
+    "D3": "harness bug: the fork's RunningStats.update accepts only 2-D batches; both compute_norm_stats scripts pass values.reshape(-1, values.shape[-1]); the probe now does the same (upstream's update reshapes internally, so its numbers are unaffected)",
+    "D4": "FAST configs build the FAST tokenizer from the Hub inside DataConfigFactory.create; offline isolation blocks it (OSError). The probe now falls back to create_base_config, the function that sets use_quantile_norm (source pins openpi.quantile_selection, fork.base_config_no_quantile), and labels the record selection_scope. It refuses the fallback for the fork's SimpleDataConfig, whose flag is set outside create_base_config. Normalization for those configs applies their flag to the stats_config's arrays (S6_note).",
+    "D5": "the frozen VLABench org-scan rule selected VLABench/pi0-fast-ft-primitive-10task-deltachunk (ft asset) and VLABench/pi0-fast-primitive-deltachunk-w-two-bridge (pretrain asset), which the frozen per-case list omitted. The rule is authoritative: the probe adds scan-selected checkpoints missing from the list, mapped by the frozen mechanical rule (common.vlabench_candidates + unanimous use_quantile_norm), tagged added_by_deviation."
+   },
+   "observed_errors": {
+    "fork_S5": "ValueError: too many values to unpack (expected 2) in openpi/shared/normalize.py RunningStats.update",
+    "upstream_pi0_fast_libero_S1": "OSError: We couldn't connect to 'https://huggingface.co' ... (transformers config for the FAST tokenizer)"
+   }
+  },
+  {
+   "id": "D6",
+   "file": "probe_openpi_fast_supplement.py",
+   "sha256_before": null,
+   "sha256_after": "2598b1a4fcda87cc3e38f28e82144746e8065c7a1f9c94028bfacb51d5c0919f",
+   "when": "after the fork re-run showed S8 broadcast errors for 7-dim FAST checkpoint stats against 32-dim PI0-pipeline arrays",
+   "reason": "new script, not preregistered: reruns S8 for FAST-mapped VLABench checkpoints on the first 7 dims of the PI0-pipeline arrays, which equal the FAST pipeline's arrays (fork VLABenchInputs pad_to_dim is a no-op at action_dim 7; DeltaActions acts on the first dims). The S8 errors in openpi_fork.json are kept and labelled harness shape artifacts."
+  },
+  {
+   "id": "D7",
+   "file": null,
+   "sha256_before": null,
+   "sha256_after": null,
+   "when": "first run of probe_lerobot.py 0.3.3 (import-time ModuleNotFoundError: safetensors from lerobot/optim/optimizers.py)",
+   "reason": "the phase-2 0.3.3 environment was installed --no-deps for dataset loading and lacks LeRobot's policy-import dependencies. It is left untouched; probe_lerobot.py 0.3.3 runs in env-lerobot033 instead, a clone with the identical phase-2 package set plus import-only additions within lerobot 0.3.3's declared bounds (evidence/env_lerobot033.txt; additions listed here).",
+   "environment": "/home/vx/.cache/kinema-normverify/env-lerobot033/bin/python",
+   "additions": [
+    "cloudpickle==3.1.1",
+    "deepdiff==8.6.1",
+    "diffusers==0.35.1",
+    "farama-notifications==0.0.4",
+    "gymnasium==0.29.1",
+    "importlib-metadata==10.2.0",
+    "orderly-set==5.5.0",
+    "pyserial==3.5",
+    "regex==2026.11.19",
+    "safetensors==0.8.0",
+    "termcolor==3.3.0",
+    "zipp==4.1.2"
+   ],
+   "phase2_packages_unchanged": true
+  },
+  {
+   "id": "D8",
+   "file": null,
+   "sha256_before": null,
+   "sha256_after": null,
+   "when": "first run of probe_lerobot.py 0.4.0 (import-time ModuleNotFoundError: serial)",
+   "reason": "as D7 for the phase-2 0.4.0 environment: left untouched; probe_lerobot.py 0.4.0 runs in env-lerobot040, a clone with the identical phase-2 package set plus import-only additions within lerobot 0.4.0's declared bounds (evidence/env_lerobot040.txt).",
+   "environment": "/home/vx/.cache/kinema-normverify/env-lerobot040/bin/python",
+   "additions": [
+    "deepdiff==8.6.1",
+    "orderly-set==5.5.0",
+    "pyserial==3.5"
+   ],
+   "phase2_packages_unchanged": true
+  },
+  {
+   "id": "D9",
+   "file": "posthoc_feature_scan.py",
+   "sha256_before": null,
+   "sha256_after": "a2c2e2f1983bd4761edf111ff8c563ebf7f805834e080583ac0a263e264389d9",
+   "when": "after probe_lerobot.py 0.4.0 reported full-row outputs up to ~2e9 under QUANTILES",
+   "reason": "new post hoc script, labelled exploratory: names the dims behind that number. Never an input to B1/B2 or any adjudication."
+  }
+ ]
+}
