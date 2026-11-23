@@ -1,0 +1,1028 @@
+{
+ "schema": "kinema.normverify.expectations/1",
+ "date_utc": "2026-11-23",
+ "frozen_before_probes": true,
+ "frozen_files": [
+  "expectations.json",
+  "common.py",
+  "prepare.py",
+  "probe_channels.py",
+  "probe_openpi.py",
+  "probe_lerobot.py",
+  "probe_gr00t.py",
+  "source_pins.py",
+  "evidence/env_openpi.txt",
+  "evidence/env_openpi-vlabench.txt",
+  "evidence/env_gr00t.txt"
+ ],
+ "repository_base": {
+  "main": "7e18468a7efd2c98bdd909358b0a531dbe81296b",
+  "pr22": "merged 2026-11-23T04:01:21Z as 7e18468a"
+ },
+ "frozen_sources": {
+  "audits/2026-11-22/sample.json": "5a640e411062c5392f1c8f45b7bf23b9b1c569ae51cdc82e3196adde55dd69ed",
+  "audits/2026-11-22/adjudications.json": "d9a172d16b57df5ac32393227e93fa4142fbed7405c40d7d682a75a0f80c6fd7",
+  "audits/2026-11-22/observations.json": "61ca0edcf199b539d8280be93256518b596d99987cfded5b57d9f74c1e0b4a20",
+  "loader-verification/2026-11-22/adjudications.json": "d79a471650575523a13657d5d76ade43ad2dd655f8ea42389ed2212c628ed629",
+  "loader-verification/2026-11-22/report.json": "fdd2be66d27af68bc6640aaf34c33082f44d19d82c55b8da4c2b0f70b9c52545"
+ },
+ "engine": {
+  "board_engine": "f9a1edd38b66",
+  "matching_commits_python_3_11": [
+   "0e4040c21dfa1d2fdac12d00628b77700fe5ec77",
+   "080c8b1a3b89535dff0d759c26078f5af3523eaa",
+   "9013694b77f062f21863387a8ca1347e2daf8e4e",
+   "3e00a0d61326c58542a705e458001a85e2e05c1d",
+   "02fbc570034fec2b508ee2682e1f78b5b416bdaf"
+  ],
+  "check_sources_identical_to_main": {
+   "src/kinema/checks/deployment.py": "e58c3ee2facff52c4613c67fc5b19b8dbfe11428",
+   "src/kinema/checks/actions.py": "8313b05abe1e7dee40c1367c465f9fbfd4c2fc2e",
+   "src/kinema/dataset.py": "ea86a723b8eadafe44831dc9d2999eeef682b52f",
+   "src/kinema/policies.json": "1e7882e810bf8fc2bb3c73136bc2e27244f64eee"
+  },
+  "note": "causes.json changed after the board engine only in timestamp-grid entries"
+ },
+ "labels": {
+  "confirmed": "independent execution or inspection at the pinned revision supports the assertion for the named stage, configuration and operation",
+  "refuted": "the named configuration's own path contradicts it for the tested inputs",
+  "partially_resolved": "decisive for some stages or configurations, mixed or not reached for others",
+  "unresolved": "no tested configuration reached the stage the assertion is about",
+  "overall_rule": "the overall label follows the primary configuration when its outcome is decisive; if a secondary configuration reaches a different decisive outcome the overall label is partially_resolved with every per-configuration outcome listed; not_consumed under the primary configuration is reported as 'refuted for that configuration (feature selection)'; not_reached never confirms"
+ },
+ "evidence_kinds": {
+  "source_inspection": "pinned file + line (evidence/source_pins.json); nothing executed",
+  "implementation_execution": "the pinned stack's own functions executed on pinned inputs",
+  "mechanism_control": "a deliberately constructed input (e.g. no stats) through the real function; never a dataset result",
+  "synthetic_shift": "labelled synthetic deployment values through the real function; descriptive only",
+  "provenance": "released small files (stats/config/README/license) with hashes; no weights"
+ },
+ "environments": {
+  "openpi_upstream": {
+   "python": "/home/vx/.cache/kinema-normverify/env-openpi/bin/python",
+   "python_version": "3.11.17",
+   "source": {
+    "repo": "https://github.com/Physical-Intelligence/openpi",
+    "commit": "215abfb217dbac7d5f1273282331b9b1866c0479"
+   },
+   "packages": "evidence/env_openpi.txt",
+   "recipe": "uv venv --python 3.11.17; torch==2.7.1+cpu torchvision==0.22.1+cpu (CPU index); `uv export --frozen --no-hashes --no-dev --no-emit-project` minus nvidia-*/jax-cuda12-*/triton/torch/torchvision; editable openpi + packages/openpi-client --no-deps",
+   "deviation": "CPU jaxlib instead of jax[cuda12]"
+  },
+  "openpi_fork": {
+   "python": "/home/vx/.cache/kinema-normverify/env-openpi-vlabench/bin/python",
+   "python_version": "3.11.17",
+   "source": {
+    "repo": "https://github.com/Shiduo-zh/openpi",
+    "commit": "4483d1da6332da44115fe530e4e6fdd89bd57b13"
+   },
+   "packages": "evidence/env_openpi-vlabench.txt",
+   "recipe": "as upstream with torch==2.6.0+cpu torchvision==0.21.0+cpu, lock export installed --no-deps (the lock names draccus twice with different URLs)",
+   "deviation": "pyav==14.0.1 is no longer on PyPI and is omitted; the VLABench datasets declare total_videos 0 (images embedded)"
+  },
+  "gr00t": {
+   "python": "/home/vx/.cache/kinema-normverify/env-gr00t/bin/python",
+   "python_version": "3.11.17",
+   "source": {
+    "repo": "https://github.com/NVIDIA/Isaac-GR00T",
+    "tag": "n1.6.1-release",
+    "commit": "5dc80c4afd726b34faad1d8f7e007a13b34e4c88"
+   },
+   "packages": "evidence/env_gr00t.txt",
+   "recipe": "torch 2.7.1+cpu / torchvision 0.22.1+cpu plus the lock's pins for numpy pandas scipy tqdm pyarrow av opencv-python-headless; gr00t source on sys.path (not installed)",
+   "deviation": "only gr00t.data modules are imported; model code, flash-attn and CUDA wheels are not installed"
+  },
+  "lerobot_0.3.3": {
+   "python": "/tmp/kinema-phase2-v2/bin/python",
+   "packages": "loader-verification/2026-11-22/evidence/v2_packages.txt",
+   "reused_from": "phase 2"
+  },
+  "lerobot_0.4.0": {
+   "python": "/tmp/kinema-phase2-v3/bin/python",
+   "packages": "loader-verification/2026-11-22/evidence/v3_packages.txt",
+   "reused_from": "phase 2"
+  },
+  "isolation": "every probe runs with python -I, HF_HUB_OFFLINE=1 and a private HF_HOME / LeRobot home under /tmp/kinema-normverify/scratch; inputs are private copies, never the Hub cache"
+ },
+ "checkpoint_selection": {
+  "rule": "Released policies are used only for provenance and inference-loader inputs, selected without looking at their statistics: (1) every VLABench-organisation model whose norm-stats asset id equals the case's fork repo id; (2) the openpi public LIBERO checkpoints for the three upstream LIBERO configs; (3) nvidia/GR00T-N1.6-BEHAVIOR1k, the publisher's BEHAVIOR policy; (4) LeRobot first-party comparators showing LeRobot's inference stats source: lerobot/smolvla_vlabench, lerobot/pi0_libero_finetuned_v044, lerobot/pi05_libero_finetuned_v044. Third-party checkpoints are not used. No weights are downloaded (small files only, <= max_file_bytes).",
+  "mapping_rule_vlabench": "a checkpoint maps to the pinned fork configs with the same model type (name prefix pi0-, pi0-fast-/pifast-, pi05-), the same repo_id (asset id) and the same '-aligned' flag; if there is none, or the candidates disagree on use_quantile_norm, no normalization is run with it (provenance only)",
+  "max_file_bytes": 1000000,
+  "vlabench_org_rule": {
+   "author": "VLABench",
+   "asset_ids": [
+    "vlabench/vlabench_pretrain_primitive",
+    "vlabench/vlabench_ft_primitive"
+   ],
+   "extra_files": [
+    "README.md",
+    "_CHECKPOINT_METADATA"
+   ]
+  },
+  "hub_explicit": [
+   {
+    "repo": "nvidia/GR00T-N1.6-BEHAVIOR1k",
+    "revision": "300db814db8ab5dd010026d5631f280048d06b91",
+    "role": "gr00t_released",
+    "files": [
+     "README.md",
+     "LICENSE",
+     "config.json",
+     "embodiment_id.json",
+     "processor_config.json",
+     "statistics.json"
+    ]
+   },
+   {
+    "repo": "lerobot/smolvla_vlabench",
+    "revision": "7ef370813eb35823caa94088b50f5389a51e4c47",
+    "role": "lerobot_comparator",
+    "files": [
+     "README.md",
+     "config.json",
+     "train_config.json",
+     "policy_preprocessor.json",
+     "policy_preprocessor_step_5_normalizer_processor.safetensors"
+    ]
+   },
+   {
+    "repo": "lerobot/pi0_libero_finetuned_v044",
+    "revision": "45dcc8fc0e02601c8ccf0554fbd1d26a55070c1f",
+    "role": "lerobot_comparator",
+    "files": [
+     "README.md",
+     "config.json",
+     "train_config.json",
+     "policy_preprocessor.json",
+     "policy_preprocessor_step_5_normalizer_processor.safetensors"
+    ]
+   },
+   {
+    "repo": "lerobot/pi05_libero_finetuned_v044",
+    "revision": "7152f13e34c6c115d808aea0e5d08aca74eac14b",
+    "role": "lerobot_comparator",
+    "files": [
+     "README.md",
+     "config.json",
+     "train_config.json",
+     "policy_preprocessor.json",
+     "policy_preprocessor_step_2_normalizer_processor.safetensors"
+    ]
+   }
+  ],
+  "gcs_explicit": [
+   {
+    "prefix": "checkpoints/pi0_libero/assets/",
+    "role": "openpi_released"
+   },
+   {
+    "prefix": "checkpoints/pi05_libero/assets/",
+    "role": "openpi_released"
+   },
+   {
+    "prefix": "checkpoints/pi0_fast_libero/assets/",
+    "role": "openpi_released"
+   }
+  ]
+ },
+ "sampling_rule": {
+  "seed": "kinema-normverify-2026-11-23-v1",
+  "count": 8,
+  "byte_cap": 450000000,
+  "rule": "data files listed under data/ at the pinned revision: the lexically first file, then files in order of sha256(seed|case_id|path) until `count` distinct files; if the total exceeds byte_cap, drop the last-added files. Every row of every selected file is read for the flagged and control dims; every 25th row is kept at full width.",
+  "control_dim_rule": "within the flagged dim's slice [112, 140), the other dim whose stored std is the lower median (ties: lower index)",
+  "scope": "a disclosed sample of files; no statement about unsampled rows"
+ },
+ "synthetic_shift": {
+  "absolute_deltas": [
+   1e-09,
+   1e-06,
+   0.001
+  ],
+  "sibling_std_multiplier": 1.0,
+  "rule": "copies of the first full sampled row with the flagged dim set to stored mean +/- delta, for each absolute delta and for 1x the median stored std of the other dims in the same slice"
+ },
+ "lerobot_033_policies": [
+  {
+   "type": "act",
+   "overrides": {
+    "device": "cpu",
+    "pretrained_backbone_weights": null
+   }
+  },
+  {
+   "type": "diffusion",
+   "overrides": {
+    "device": "cpu"
+   }
+  }
+ ],
+ "lerobot_033_policy_rule": "policies whose construction needs no pretrained weights or tokenizer downloads and whose defaults normalize STATE and ACTION; ACT's torchvision backbone weights are disabled (config value, not data). pi0/pi0fast/smolvla need Hub VLM/tokenizer downloads; tdmpc uses IDENTITY for STATE; vqbet/sac are not run. make_policy passes ds_meta.stats identically to every policy (source pin lr033.make_policy_stats).",
+ "lerobot_040_state_modes": [
+  "IDENTITY",
+  "MEAN_STD",
+  "MIN_MAX",
+  "QUANTILES"
+ ],
+ "gr00t_behavior": {
+  "repo": "nvidia/GR00T-N1.6-BEHAVIOR1k",
+  "revision": "300db814db8ab5dd010026d5631f280048d06b91",
+  "embodiment_tag": "behavior_r1_pro"
+ },
+ "known_limits_before_running": [
+  "No training and no weights: openpi stats are computed on episode 0 only, through openpi's own RunningStats and transforms",
+  "No released checkpoint trained on LIBERO-90 or on exUMI was found; the released LIBERO checkpoints were trained on physical-intelligence/libero",
+  "The VLABench fork has no PI05 config, so the released pi05 VLABench checkpoints are provenance only",
+  "lerobot/behavior1k-task0045 names no state dims; its layout is inferred from the GR00T modality.json of a sibling BEHAVIOR R1Pro conversion plus a sin/cos structural check",
+  "LeRobot 0.4.0 rows for r393 are read with pyarrow and cast to float32 as hf_transform_to_torch does (checked on 4 rows), not through LeRobotDataset.__getitem__ (videos are not downloaded)"
+ ],
+ "cases": [
+  {
+   "case_id": "r15:c17:f0",
+   "kind": "missing-stats",
+   "finding": {
+    "key": "r15:c17:f0",
+    "check": "deployment-readiness",
+    "dataset": "VLABench/vlabench_primitive_pretrain_lerobot",
+    "revision": "aaa042a8ffb56c931ad738bd220c0c944d8479e7",
+    "engine": "f9a1edd38b66",
+    "format_version": "v2.0",
+    "severity": "FAIL",
+    "message": "observation.state: no normalization stats (meta/stats.json or per-episode stats) - the policy cannot normalize inputs/outputs at inference",
+    "details": {
+     "feature": "observation.state"
+    }
+   },
+   "prior": {
+    "phase1": {
+     "label": "unresolved",
+     "signal_exists": true,
+     "reason": "Complete pinned meta listing lacks stats, but raw feature is state rather than observation.state and the LeRobot loader/normalization path was not exercised."
+    },
+    "phase1_observation": {
+     "feature_declared": false,
+     "metadata_tree": [
+      "meta/episodes.jsonl",
+      "meta/info.json",
+      "meta/tasks.jsonl"
+     ],
+     "metadata_tree_complete": true,
+     "metadata_tree_count": 3,
+     "per_episode_stats_paths": [],
+     "stats_json_present": false
+    },
+    "phase2": {
+     "classification": "unresolved",
+     "tested_scope": "LeRobot 0.3.3 v2.0 episode-0 iteration",
+     "observation": "81/81 episode rows selected; first, middle and last item access succeeded. Source has no stats file; feature is state, not observation.state.",
+     "remaining_gap": "Test a specified policy/checkpoint and feature mapping."
+    }
+   },
+   "dataset_key": "state",
+   "source": {
+    "repo": "VLABench/vlabench_primitive_pretrain_lerobot",
+    "revision": "aaa042a8ffb56c931ad738bd220c0c944d8479e7",
+    "format": "v2.0"
+   },
+   "assertions": [
+    {
+     "id": "A1_stats_absent",
+     "stage": "metadata",
+     "text": "No meta/stats.json and no per-episode stats file exists at the pinned revision.",
+     "evidence": "fresh meta/ listing at the pinned revision (prepare.py) and phase-1 listing",
+     "confirm_if": "the listing at the revision is complete and contains neither meta/stats.json nor meta/episodes_stats.jsonl",
+     "refute_if": "either file is present at the revision"
+    },
+    {
+     "id": "A2_feature_binding",
+     "stage": "detector input mapping",
+     "text": "The finding's feature label names the dataset column the statement concerns.",
+     "evidence": "source pins kinema.alias.* at the board engine; pinned info.json / parquet schema",
+     "confirm_if": "the detector binds the label to an existing dataset column (directly or by its documented alias); the report names the actual column",
+     "refute_if": "no dataset column maps to the label"
+    },
+    {
+     "id": "A3_stats_source",
+     "stage": "stats selection, per configuration",
+     "text": "Implied premise: the policy's normalization statistics come from the dataset's meta/stats.json or per-episode stats.",
+     "evidence": "source pins + S1/S3/L1/G1 executions",
+     "confirm_if": "under the configuration, training normalizer stats are read from those dataset files",
+     "refute_if": "under the configuration, stats are computed from the data or loaded from checkpoint assets instead"
+    },
+    {
+     "id": "A4_inference_normalization",
+     "stage": "normalization of the named feature (training and inference loaders), per configuration",
+     "text": "The policy cannot normalize the named feature at inference.",
+     "outcomes": {
+      "normalizes_finite": "the configuration's own normalization path produced finite outputs for the dataset key mapped to the label, using stats not taken from dataset files (computed by the stack, or loaded by its inference loader)",
+      "fails_missing_stats": "the configuration reached normalization of that key and failed because no stats were supplied",
+      "not_consumed": "the configuration's feature selection never passes that key to a normalizer",
+      "not_reached": "an earlier stage (construction, schema, stats generation) failed; this never confirms the normalization claim"
+     }
+    }
+   ],
+   "configurations": {
+    "openpi_fork": {
+     "role": "primary",
+     "fork_repo_id": "vlabench/vlabench_pretrain_primitive",
+     "why": "dataset publisher (VLABench) trains with its openpi fork; card's directory name vlabench_pretrain_primitive equals the fork configs' repo_id",
+     "config_names": [
+      "pi0_posttrain_vlabench_primitive",
+      "pifast_posttrain_vlabench_primitive",
+      "pi0_pretrain_vlabench_primitive",
+      "pifast_pretrain_vlabench_primitive",
+      "pifast_posttrain_vlabench_primitive_aligned",
+      "pifast_pretrain_vlabench_primitive_aligned"
+     ],
+     "stats_config": "pi0_pretrain_vlabench_primitive",
+     "released": [
+      {
+       "source": "VLABench/pi0-pretrain-vlabench-primitive-aligned",
+       "asset_id": "vlabench/vlabench_pretrain_primitive",
+       "config": null,
+       "candidates": []
+      },
+      {
+       "source": "VLABench/pi05-posttrain-vlabench-primitive-aligned",
+       "asset_id": "vlabench/vlabench_pretrain_primitive",
+       "config": null,
+       "candidates": []
+      },
+      {
+       "source": "VLABench/pifast-pretrain-vlabench-primitive-aligned",
+       "asset_id": "vlabench/vlabench_pretrain_primitive",
+       "config": "pifast_pretrain_vlabench_primitive_aligned",
+       "candidates": [
+        "pifast_posttrain_vlabench_primitive_aligned",
+        "pifast_pretrain_vlabench_primitive_aligned"
+       ]
+      }
+     ]
+    },
+    "lerobot_0.3.3": {
+     "role": "secondary",
+     "why": "LeRobot dataset format; phase-2 loader for v2.0/v2.1"
+    },
+    "lerobot_0.4.0": {
+     "role": "secondary (compatibility gate only)",
+     "why": "first LeRobot release with v3.0 support; rejects v2.x without conversion"
+    }
+   }
+  },
+  {
+   "case_id": "r51:c17:f1",
+   "kind": "missing-stats",
+   "finding": {
+    "key": "r51:c17:f1",
+    "check": "deployment-readiness",
+    "dataset": "VLABench/vlabench_primitive_ft_lerobot",
+    "revision": "460a2a4dc0bf29bef92b3e195a0f4e87f2d026a6",
+    "engine": "f9a1edd38b66",
+    "format_version": "v2.0",
+    "severity": "FAIL",
+    "message": "action: no normalization stats (meta/stats.json or per-episode stats) - the policy cannot normalize inputs/outputs at inference",
+    "details": {
+     "feature": "action"
+    }
+   },
+   "prior": {
+    "phase1": {
+     "label": "unresolved",
+     "signal_exists": true,
+     "reason": "Complete pinned meta listing lacks stats, but raw feature is actions rather than action and the LeRobot loader/normalization path was not exercised."
+    },
+    "phase1_observation": {
+     "feature_declared": false,
+     "metadata_tree": [
+      "meta/episodes.jsonl",
+      "meta/info.json",
+      "meta/tasks.jsonl"
+     ],
+     "metadata_tree_complete": true,
+     "metadata_tree_count": 3,
+     "per_episode_stats_paths": [],
+     "stats_json_present": false
+    },
+    "phase2": {
+     "classification": "unresolved",
+     "tested_scope": "LeRobot 0.3.3 v2.0 episode-0 iteration",
+     "observation": "93/93 episode rows selected; first, middle and last item access succeeded. Source has no stats file; feature is actions, not action.",
+     "remaining_gap": "Test a specified policy/checkpoint and feature mapping."
+    }
+   },
+   "dataset_key": "actions",
+   "source": {
+    "repo": "VLABench/vlabench_primitive_ft_lerobot",
+    "revision": "460a2a4dc0bf29bef92b3e195a0f4e87f2d026a6",
+    "format": "v2.0"
+   },
+   "assertions": [
+    {
+     "id": "A1_stats_absent",
+     "stage": "metadata",
+     "text": "No meta/stats.json and no per-episode stats file exists at the pinned revision.",
+     "evidence": "fresh meta/ listing at the pinned revision (prepare.py) and phase-1 listing",
+     "confirm_if": "the listing at the revision is complete and contains neither meta/stats.json nor meta/episodes_stats.jsonl",
+     "refute_if": "either file is present at the revision"
+    },
+    {
+     "id": "A2_feature_binding",
+     "stage": "detector input mapping",
+     "text": "The finding's feature label names the dataset column the statement concerns.",
+     "evidence": "source pins kinema.alias.* at the board engine; pinned info.json / parquet schema",
+     "confirm_if": "the detector binds the label to an existing dataset column (directly or by its documented alias); the report names the actual column",
+     "refute_if": "no dataset column maps to the label"
+    },
+    {
+     "id": "A3_stats_source",
+     "stage": "stats selection, per configuration",
+     "text": "Implied premise: the policy's normalization statistics come from the dataset's meta/stats.json or per-episode stats.",
+     "evidence": "source pins + S1/S3/L1/G1 executions",
+     "confirm_if": "under the configuration, training normalizer stats are read from those dataset files",
+     "refute_if": "under the configuration, stats are computed from the data or loaded from checkpoint assets instead"
+    },
+    {
+     "id": "A4_inference_normalization",
+     "stage": "normalization of the named feature (training and inference loaders), per configuration",
+     "text": "The policy cannot normalize the named feature at inference.",
+     "outcomes": {
+      "normalizes_finite": "the configuration's own normalization path produced finite outputs for the dataset key mapped to the label, using stats not taken from dataset files (computed by the stack, or loaded by its inference loader)",
+      "fails_missing_stats": "the configuration reached normalization of that key and failed because no stats were supplied",
+      "not_consumed": "the configuration's feature selection never passes that key to a normalizer",
+      "not_reached": "an earlier stage (construction, schema, stats generation) failed; this never confirms the normalization claim"
+     }
+    }
+   ],
+   "configurations": {
+    "openpi_fork": {
+     "role": "primary",
+     "fork_repo_id": "vlabench/vlabench_ft_primitive",
+     "why": "dataset publisher trains with its openpi fork; 5000 episodes = VLABench README's 10 tasks x 500 fine-tuning set; name-based mapping to repo_id vlabench_ft_primitive (no card at this revision)",
+     "config_names": [
+      "pi0_ft_vlabench_primitive",
+      "pifast_ft_vlabench_primitive",
+      "pi0_scratch_vlabench_primitive",
+      "pifast_scratch_vlabench_primitive",
+      "pi0_ft_vlabench_primitive_aligned",
+      "pifast_ft_vlabench_primitive_aligned",
+      "pifast_ft_vlabench_primitive_aligned_q99",
+      "pifast_ft_scratch_vlabench_primitive_aligned"
+     ],
+     "stats_config": "pi0_ft_vlabench_primitive",
+     "released": [
+      {
+       "source": "VLABench/pi0-primitive-10task",
+       "asset_id": "vlabench/vlabench_ft_primitive",
+       "config": "pi0_ft_vlabench_primitive",
+       "candidates": [
+        "pi0_ft_vlabench_primitive",
+        "pi0_scratch_vlabench_primitive"
+       ]
+      },
+      {
+       "source": "VLABench/pi0-fast-primitive-10task",
+       "asset_id": "vlabench/vlabench_ft_primitive",
+       "config": "pifast_ft_vlabench_primitive",
+       "candidates": [
+        "pifast_ft_vlabench_primitive",
+        "pifast_scratch_vlabench_primitive"
+       ]
+      },
+      {
+       "source": "VLABench/pi05-primitive-10task",
+       "asset_id": "vlabench/vlabench_ft_primitive",
+       "config": null,
+       "candidates": []
+      }
+     ]
+    },
+    "lerobot_0.3.3": {
+     "role": "secondary",
+     "why": "LeRobot dataset format; phase-2 loader for v2.0/v2.1"
+    },
+    "lerobot_0.4.0": {
+     "role": "secondary (compatibility gate only)",
+     "why": "first LeRobot release with v3.0 support; rejects v2.x without conversion"
+    }
+   }
+  },
+  {
+   "case_id": "r67:c17:f0",
+   "kind": "missing-stats",
+   "finding": {
+    "key": "r67:c17:f0",
+    "check": "deployment-readiness",
+    "dataset": "jesbu1/libero_90_lerobot",
+    "revision": "fa5ab6b7cdcab51fdfd88c8f216c00426508ecde",
+    "engine": "f9a1edd38b66",
+    "format_version": "v2.0",
+    "severity": "FAIL",
+    "message": "observation.state: no normalization stats (meta/stats.json or per-episode stats) - the policy cannot normalize inputs/outputs at inference",
+    "details": {
+     "feature": "observation.state"
+    }
+   },
+   "prior": {
+    "phase1": {
+     "label": "unresolved",
+     "signal_exists": true,
+     "reason": "Complete pinned meta listing has no stats file, but raw feature names are state/actions rather than observation.state/action and the relevant LeRobot loader and normalization path were not exercised."
+    },
+    "phase1_observation": {
+     "feature_declared": false,
+     "metadata_tree": [
+      "meta/episodes.jsonl",
+      "meta/info.json",
+      "meta/tasks.jsonl"
+     ],
+     "metadata_tree_complete": true,
+     "metadata_tree_count": 3,
+     "per_episode_stats_paths": [],
+     "stats_json_present": false
+    },
+    "phase2": {
+     "classification": "unresolved",
+     "tested_scope": "LeRobot 0.3.3 v2.0 episode-0 iteration",
+     "observation": "98/98 episode rows selected; first, middle and last item access succeeded. Source has no stats file, but declares state/actions and no observation.state.",
+     "remaining_gap": "Test a specified policy/checkpoint and its feature mapping and normalization path."
+    }
+   },
+   "dataset_key": "state",
+   "source": {
+    "repo": "jesbu1/libero_90_lerobot",
+    "revision": "fa5ab6b7cdcab51fdfd88c8f216c00426508ecde",
+    "format": "v2.0"
+   },
+   "assertions": [
+    {
+     "id": "A1_stats_absent",
+     "stage": "metadata",
+     "text": "No meta/stats.json and no per-episode stats file exists at the pinned revision.",
+     "evidence": "fresh meta/ listing at the pinned revision (prepare.py) and phase-1 listing",
+     "confirm_if": "the listing at the revision is complete and contains neither meta/stats.json nor meta/episodes_stats.jsonl",
+     "refute_if": "either file is present at the revision"
+    },
+    {
+     "id": "A2_feature_binding",
+     "stage": "detector input mapping",
+     "text": "The finding's feature label names the dataset column the statement concerns.",
+     "evidence": "source pins kinema.alias.* at the board engine; pinned info.json / parquet schema",
+     "confirm_if": "the detector binds the label to an existing dataset column (directly or by its documented alias); the report names the actual column",
+     "refute_if": "no dataset column maps to the label"
+    },
+    {
+     "id": "A3_stats_source",
+     "stage": "stats selection, per configuration",
+     "text": "Implied premise: the policy's normalization statistics come from the dataset's meta/stats.json or per-episode stats.",
+     "evidence": "source pins + S1/S3/L1/G1 executions",
+     "confirm_if": "under the configuration, training normalizer stats are read from those dataset files",
+     "refute_if": "under the configuration, stats are computed from the data or loaded from checkpoint assets instead"
+    },
+    {
+     "id": "A4_inference_normalization",
+     "stage": "normalization of the named feature (training and inference loaders), per configuration",
+     "text": "The policy cannot normalize the named feature at inference.",
+     "outcomes": {
+      "normalizes_finite": "the configuration's own normalization path produced finite outputs for the dataset key mapped to the label, using stats not taken from dataset files (computed by the stack, or loaded by its inference loader)",
+      "fails_missing_stats": "the configuration reached normalization of that key and failed because no stats were supplied",
+      "not_consumed": "the configuration's feature selection never passes that key to a normalizer",
+      "not_reached": "an earlier stage (construction, schema, stats generation) failed; this never confirms the normalization claim"
+     }
+    }
+   ],
+   "configurations": {
+    "openpi_upstream": {
+     "role": "primary",
+     "why": "card: 'to be used for pi0 fine-tuning'; features equal openpi examples/libero/convert_libero_data_to_lerobot.py (image/wrist_image 256x256x3, state [8], actions [7])",
+     "config_names": [
+      "pi0_libero",
+      "pi05_libero",
+      "pi0_fast_libero"
+     ],
+     "stats_config": "pi0_libero",
+     "released": [
+      {
+       "source": "checkpoints/pi0_libero/assets/",
+       "asset_id": "physical-intelligence/libero",
+       "config": "pi0_libero",
+       "candidates": [
+        "pi0_libero"
+       ]
+      },
+      {
+       "source": "checkpoints/pi05_libero/assets/",
+       "asset_id": "physical-intelligence/libero",
+       "config": "pi05_libero",
+       "candidates": [
+        "pi05_libero"
+       ]
+      },
+      {
+       "source": "checkpoints/pi0_fast_libero/assets/",
+       "asset_id": "physical-intelligence/libero",
+       "config": "pi0_fast_libero",
+       "candidates": [
+        "pi0_fast_libero"
+       ]
+      }
+     ],
+     "released_scope": "released LIBERO checkpoints were trained on physical-intelligence/libero, not LIBERO-90: inference-loader mechanics and provenance only"
+    },
+    "lerobot_0.3.3": {
+     "role": "secondary",
+     "why": "LeRobot dataset format; phase-2 loader for v2.0/v2.1"
+    },
+    "lerobot_0.4.0": {
+     "role": "secondary (compatibility gate only)",
+     "why": "first LeRobot release with v3.0 support; rejects v2.x without conversion"
+    }
+   }
+  },
+  {
+   "case_id": "r79:c17:f0",
+   "kind": "missing-stats",
+   "finding": {
+    "key": "r79:c17:f0",
+    "check": "deployment-readiness",
+    "dataset": "easyminnn/exumi-lerobot",
+    "revision": "334bf5334477e613c7fef5774247257e86a7a95b",
+    "engine": "f9a1edd38b66",
+    "format_version": "v2.0",
+    "severity": "FAIL",
+    "message": "observation.state: no normalization stats (meta/stats.json or per-episode stats) - the policy cannot normalize inputs/outputs at inference",
+    "details": {
+     "feature": "observation.state"
+    }
+   },
+   "prior": {
+    "phase1": {
+     "label": "unresolved",
+     "signal_exists": true,
+     "reason": "Complete pinned meta listing has no stats file; info.json lacks a features map while parquet has observation.state. Loader behavior and whether inference can compute or supply stats were not tested."
+    },
+    "phase1_observation": {
+     "feature_declared": false,
+     "metadata_tree": [
+      "meta/episodes.jsonl",
+      "meta/episodes.shard00.jsonl",
+      "meta/episodes.shard01.jsonl",
+      "meta/episodes.shard02.jsonl",
+      "meta/episodes.shard03.jsonl",
+      "meta/episodes.shard04.jsonl",
+      "meta/episodes.shard05.jsonl",
+      "meta/info.json",
+      "meta/info.shard00.json",
+      "meta/info.shard01.json",
+      "meta/info.shard02.json",
+      "meta/info.shard03.json",
+      "meta/info.shard04.json",
+      "meta/info.shard05.json",
+      "meta/modality.json",
+      "meta/modality.shard00.json",
+      "meta/modality.shard01.json",
+      "meta/modality.shard02.json",
+      "meta/modality.shard03.json",
+      "meta/modality.shard04.json",
+      "meta/modality.shard05.json",
+      "meta/tasks.jsonl",
+      "meta/tasks.shard00.jsonl",
+      "meta/tasks.shard01.jsonl",
+      "meta/tasks.shard02.jsonl",
+      "meta/tasks.shard03.jsonl",
+      "meta/tasks.shard04.jsonl",
+      "meta/tasks.shard05.jsonl"
+     ],
+     "metadata_tree_complete": true,
+     "metadata_tree_count": 28,
+     "per_episode_stats_paths": [],
+     "stats_json_present": false
+    },
+    "phase2": {
+     "classification": "unresolved",
+     "tested_scope": "LeRobot 0.3.3 v2.0 dataset construction",
+     "observation": "Pinned info.json omits features; construction raises KeyError(features) before episode access. No stats file is present.",
+     "remaining_gap": "Identify a supported feature schema and specific policy/checkpoint before an inference test."
+    }
+   },
+   "dataset_key": "observation.state",
+   "source": {
+    "repo": "easyminnn/exumi-lerobot",
+    "revision": "334bf5334477e613c7fef5774247257e86a7a95b",
+    "format": "v2.0"
+   },
+   "assertions": [
+    {
+     "id": "A1_stats_absent",
+     "stage": "metadata",
+     "text": "No meta/stats.json and no per-episode stats file exists at the pinned revision.",
+     "evidence": "fresh meta/ listing at the pinned revision (prepare.py) and phase-1 listing",
+     "confirm_if": "the listing at the revision is complete and contains neither meta/stats.json nor meta/episodes_stats.jsonl",
+     "refute_if": "either file is present at the revision"
+    },
+    {
+     "id": "A2_feature_binding",
+     "stage": "detector input mapping",
+     "text": "The finding's feature label names the dataset column the statement concerns.",
+     "evidence": "source pins kinema.alias.* at the board engine; pinned info.json / parquet schema",
+     "confirm_if": "the detector binds the label to an existing dataset column (directly or by its documented alias); the report names the actual column",
+     "refute_if": "no dataset column maps to the label"
+    },
+    {
+     "id": "A3_stats_source",
+     "stage": "stats selection, per configuration",
+     "text": "Implied premise: the policy's normalization statistics come from the dataset's meta/stats.json or per-episode stats.",
+     "evidence": "source pins + S1/S3/L1/G1 executions",
+     "confirm_if": "under the configuration, training normalizer stats are read from those dataset files",
+     "refute_if": "under the configuration, stats are computed from the data or loaded from checkpoint assets instead"
+    },
+    {
+     "id": "A4_inference_normalization",
+     "stage": "normalization of the named feature (training and inference loaders), per configuration",
+     "text": "The policy cannot normalize the named feature at inference.",
+     "outcomes": {
+      "normalizes_finite": "the configuration's own normalization path produced finite outputs for the dataset key mapped to the label, using stats not taken from dataset files (computed by the stack, or loaded by its inference loader)",
+      "fails_missing_stats": "the configuration reached normalization of that key and failed because no stats were supplied",
+      "not_consumed": "the configuration's feature selection never passes that key to a normalizer",
+      "not_reached": "an earlier stage (construction, schema, stats generation) failed; this never confirms the normalization claim"
+     }
+    }
+   ],
+   "configurations": {
+    "gr00t": {
+     "role": "primary",
+     "why": "card: GR00T-flavoured LeRobot v2.0, loadable 'by an Isaac-GR00T style loader'; no released checkpoint for this dataset was found"
+    },
+    "lerobot_0.3.3": {
+     "role": "secondary",
+     "why": "LeRobot dataset format; phase-2 loader for v2.0/v2.1",
+     "note": "phase-2 construction result (KeyError 'features') is reused and re-run"
+    },
+    "lerobot_0.4.0": {
+     "role": "secondary (compatibility gate only)",
+     "why": "first LeRobot release with v3.0 support; rejects v2.x without conversion"
+    }
+   }
+  },
+  {
+   "case_id": "r390:c7:f8",
+   "kind": "near-constant",
+   "finding": {
+    "key": "r390:c7:f8",
+    "check": "nan-and-normalization",
+    "dataset": "nvidia/PhysicalAI-Robotics-GR00T-X-Embodiment-Sim//sim_behavior_r1_pro.task-0048_canning_food",
+    "revision": "ea7ac0b68f87da62f1e726771bba0fe74300802f",
+    "engine": "f9a1edd38b66",
+    "format_version": "v2.1",
+    "severity": "WARN",
+    "message": "observation.state dim 117: std 1.16e-12 - near-zero variance amplifies noise after normalization",
+    "details": {
+     "dim": 117,
+     "feature": "observation.state",
+     "std": 1.157392926747958e-12
+    }
+   },
+   "prior": {
+    "phase1": {
+     "label": "unresolved",
+     "signal_exists": true,
+     "reason": "Pinned source stats report dimension 117 near 1e-12 std, but raw frame distribution and actual normalization behavior were not checked; near constancy alone is not a defect."
+    },
+    "phase1_observation": {
+     "dim": 117,
+     "stats_path": "sim_behavior_r1_pro.task-0048_canning_food/meta/stats.json",
+     "stored_max": 1.681026706723543e-10,
+     "stored_min": -1.6609119635191405e-10,
+     "stored_std": 1.0237311215757772e-12
+    }
+   },
+   "slice": [
+    112,
+    140
+   ],
+   "source": {
+    "repo": "nvidia/PhysicalAI-Robotics-GR00T-X-Embodiment-Sim",
+    "revision": "ea7ac0b68f87da62f1e726771bba0fe74300802f",
+    "subdir": "sim_behavior_r1_pro.task-0048_canning_food/",
+    "format": "v2.1",
+    "meta_skip_prefixes": []
+   },
+   "assertions": [
+    {
+     "id": "B1_near_zero_std",
+     "stage": "stats and raw channel",
+     "text": "The flagged dim has near-zero variance (the board reports std ~1e-12).",
+     "confirm_if": "stored meta/stats.json std < 1e-9 AND the sampled raw std < 1e-9 in every sampled file",
+     "refute_if": "stored std >= 1e-6 OR pooled sampled std >= 1e-6",
+     "otherwise": "partially_resolved",
+     "note": "the board std is computed by the detector from its own loaded rows (source pin kinema.nan.std_from_loaded_rows); an exact match is not expected"
+    },
+    {
+     "id": "B2_amplification",
+     "stage": "feature selection and normalization, per configuration and mode",
+     "text": "Near-zero variance amplifies noise after normalization.",
+     "outcomes": {
+      "not_consumed": "the configuration does not pass the flagged dim to a normalizer",
+      "nonfinite": "any normalized output of the flagged dim, in sample, is NaN/Inf",
+      "amplified": "in-sample normalized std of the flagged dim >= 0.1 (raw variation of ~1e-10 brought to >= 10% of unit scale)",
+      "not_amplified": "finite, and in-sample normalized std of the flagged dim <= 0.01",
+      "intermediate": "finite, std between 0.01 and 0.1",
+      "not_reached": "construction or loading failed before normalization"
+     }
+    },
+    {
+     "id": "B3_synthetic_shift",
+     "stage": "normalization of labelled synthetic inputs",
+     "text": "Descriptive only: what each executed normalizer outputs if deployment values leave the training range.",
+     "verdict_role": "none - synthetic inputs never decide B1 or B2"
+    }
+   ],
+   "configurations": {
+    "gr00t_released": {
+     "role": "primary",
+     "why": "publisher's released policy nvidia/GR00T-N1.6-BEHAVIOR1k lists this dataset collection on its card and ships behavior_r1_pro processor config and statistics"
+    },
+    "lerobot_0.3.3": {
+     "role": "secondary",
+     "why": "dataset declares v2.1"
+    }
+   }
+  },
+  {
+   "case_id": "r393:c7:f14",
+   "kind": "near-constant",
+   "finding": {
+    "key": "r393:c7:f14",
+    "check": "nan-and-normalization",
+    "dataset": "lerobot/behavior1k-task0045",
+    "revision": "27458fab90baf767109b214c9b3fa4f82e9bc97f",
+    "engine": "f9a1edd38b66",
+    "format_version": "v3.0",
+    "severity": "WARN",
+    "message": "observation.state dim 123: std 8.57e-13 - near-zero variance amplifies noise after normalization",
+    "details": {
+     "dim": 123,
+     "feature": "observation.state",
+     "std": 8.569551003645408e-13
+    }
+   },
+   "prior": {
+    "phase1": {
+     "label": "unresolved",
+     "signal_exists": true,
+     "reason": "Pinned source stats report dimension 123 near 1e-12 std, but raw frame distribution and actual normalization behavior were not checked; near constancy alone is not a defect."
+    },
+    "phase1_observation": {
+     "dim": 123,
+     "stats_path": "meta/stats.json",
+     "stored_max": 2.473126148316851e-10,
+     "stored_min": -2.374502539037593e-10,
+     "stored_std": 1.6298212731652748e-12
+    }
+   },
+   "slice": [
+    112,
+    140
+   ],
+   "source": {
+    "repo": "lerobot/behavior1k-task0045",
+    "revision": "27458fab90baf767109b214c9b3fa4f82e9bc97f",
+    "subdir": "",
+    "format": "v3.0",
+    "meta_skip_prefixes": [
+     "meta/sim/"
+    ]
+   },
+   "assertions": [
+    {
+     "id": "B1_near_zero_std",
+     "stage": "stats and raw channel",
+     "text": "The flagged dim has near-zero variance (the board reports std ~1e-12).",
+     "confirm_if": "stored meta/stats.json std < 1e-9 AND the sampled raw std < 1e-9 in every sampled file",
+     "refute_if": "stored std >= 1e-6 OR pooled sampled std >= 1e-6",
+     "otherwise": "partially_resolved",
+     "note": "the board std is computed by the detector from its own loaded rows (source pin kinema.nan.std_from_loaded_rows); an exact match is not expected"
+    },
+    {
+     "id": "B2_amplification",
+     "stage": "feature selection and normalization, per configuration and mode",
+     "text": "Near-zero variance amplifies noise after normalization.",
+     "outcomes": {
+      "not_consumed": "the configuration does not pass the flagged dim to a normalizer",
+      "nonfinite": "any normalized output of the flagged dim, in sample, is NaN/Inf",
+      "amplified": "in-sample normalized std of the flagged dim >= 0.1 (raw variation of ~1e-10 brought to >= 10% of unit scale)",
+      "not_amplified": "finite, and in-sample normalized std of the flagged dim <= 0.01",
+      "intermediate": "finite, std between 0.01 and 0.1",
+      "not_reached": "construction or loading failed before normalization"
+     }
+    },
+    {
+     "id": "B3_synthetic_shift",
+     "stage": "normalization of labelled synthetic inputs",
+     "text": "Descriptive only: what each executed normalizer outputs if deployment values leave the training range.",
+     "verdict_role": "none - synthetic inputs never decide B1 or B2"
+    }
+   ],
+   "configurations": {
+    "lerobot_0.4.0": {
+     "role": "primary",
+     "why": "publisher is the LeRobot org; v3.0 support starts in 0.4.0; no first-party released policy trained on this dataset was found, so every STATE normalization mode used by a shipped 0.4.0 policy config is evaluated with the dataset stats lerobot-train selects (dataset.meta.stats)"
+    }
+   }
+  }
+ ],
+ "fork_config_inventory": {
+  "source": "get_config(name).data.create(<nonexistent assets>, model) for every fork TrainConfig whose name contains 'vlabench' (configuration inspection; no case data)",
+  "columns": [
+   "config",
+   "model_type",
+   "repo_id",
+   "use_quantile_norm"
+  ],
+  "rows": [
+   [
+    "pi0_ft_vlabench_primitive",
+    "PI0",
+    "vlabench/vlabench_ft_primitive",
+    false
+   ],
+   [
+    "pifast_ft_vlabench_primitive",
+    "PI0_FAST",
+    "vlabench/vlabench_ft_primitive",
+    false
+   ],
+   [
+    "pi0_scratch_vlabench_primitive",
+    "PI0",
+    "vlabench/vlabench_ft_primitive",
+    false
+   ],
+   [
+    "pifast_scratch_vlabench_primitive",
+    "PI0_FAST",
+    "vlabench/vlabench_ft_primitive",
+    false
+   ],
+   [
+    "pi0_posttrain_vlabench_primitive",
+    "PI0",
+    "vlabench/vlabench_pretrain_primitive",
+    false
+   ],
+   [
+    "pifast_posttrain_vlabench_primitive",
+    "PI0_FAST",
+    "vlabench/vlabench_pretrain_primitive",
+    false
+   ],
+   [
+    "pi0_pretrain_vlabench_primitive",
+    "PI0",
+    "vlabench/vlabench_pretrain_primitive",
+    false
+   ],
+   [
+    "pifast_pretrain_vlabench_primitive",
+    "PI0_FAST",
+    "vlabench/vlabench_pretrain_primitive",
+    false
+   ],
+   [
+    "pi0_ft_vlabench_primitive_aligned",
+    "PI0",
+    "vlabench/vlabench_ft_primitive",
+    false
+   ],
+   [
+    "pifast_ft_vlabench_primitive_aligned",
+    "PI0_FAST",
+    "vlabench/vlabench_ft_primitive",
+    false
+   ],
+   [
+    "pifast_ft_vlabench_primitive_aligned_q99",
+    "PI0_FAST",
+    "vlabench/vlabench_ft_primitive",
+    true
+   ],
+   [
+    "pifast_posttrain_vlabench_primitive_aligned",
+    "PI0_FAST",
+    "vlabench/vlabench_pretrain_primitive",
+    false
+   ],
+   [
+    "pifast_ft_scratch_vlabench_primitive_aligned",
+    "PI0_FAST",
+    "vlabench/vlabench_ft_primitive",
+    false
+   ],
+   [
+    "pifast_pretrain_vlabench_primitive_aligned",
+    "PI0_FAST",
+    "vlabench/vlabench_pretrain_primitive",
+    false
+   ]
+  ]
+ }
+}
