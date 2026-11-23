@@ -36,14 +36,14 @@
       "verdict": "FAIL",
       "weight": 10,
       "weight_basis": "placeholder",
-      "summary": "40/40 episodes flagged; worst spacing deviation 122% of a period (episode 100); 40 not starting at 0",
+      "summary": "40/40 episodes flagged; worst spacing deviation 122% of a period (episode 100); 40 not starting at 0; 40 collapsing in float32",
       "skipped": false,
       "skip_reason": "",
       "details": {},
       "findings": [
         {
           "severity": "WARN",
-          "message": "40 episode(s) off the 30 fps grid (episodes 0, 10, 20, 30, 40, 50, 60, 70, ...): frame spacing deviates up to 122% of a period, 65 dropped-frame gap(s) in total; LeRobot's default tolerance_s (1e-4 s) rejects these - needs tolerance_s >= 0.0405",
+          "message": "40 episode(s) off the 30 fps grid (episodes 0, 10, 20, 30, 40, 50, 60, 70, ...): frame spacing deviates up to 122% of a period, 65 dropped-frame gap(s) in total (0.0405 s). LeRobot takes temporal windows in rows, so windows across these deviations can span a different time than the policy config intends. LeRobot 0.3.3 rejects spacing beyond tolerance_s (1e-4 s) when the dataset is built (check_timestamps_sync); 0.4.0 and 0.5.1 do not check spacing, and video lookup depends on the video's own frame timestamps, which this check does not read",
           "episode_index": null,
           "details": {
             "episodes": [
@@ -94,7 +94,7 @@
         },
         {
           "severity": "FAIL",
-          "message": "40 episode(s) whose timestamps do not start at 0: 0 (1.784e+09s), 10 (1.784e+09s), 20 (1.784e+09s), 30 (1.784e+09s), 40 (1.784e+09s) - video frames are looked up by timestamp, so decoding will miss",
+          "message": "40 episode(s) whose distinct timestamps collapse in float32 (LeRobot 0.3.3-0.5.1 load timestamps as float32): 59606 consecutive pair(s) become equal or decreasing (episode (pairs/total): 0 (436/436), 10 (419/419), 20 (508/508), 30 (635/635), 40 (668/668), ...) - those rows lose their own time; video lookups query one value for several rows; LeRobot 0.3.3's construction check (check_timestamps_sync) rejects the resulting spacing",
           "episode_index": null,
           "details": {
             "episodes": [
@@ -138,7 +138,58 @@
               369,
               379,
               389
-            ]
+            ],
+            "pairs_lost": 59606
+          }
+        },
+        {
+          "severity": "WARN",
+          "message": "40 episode(s) whose timestamps do not start at 0: 0 (1.784e+09s), 10 (1.784e+09s), 20 (1.784e+09s), 30 (1.784e+09s), 40 (1.784e+09s) - LeRobot looks video frames up by these timestamps; lookup succeeds when the video timeline covers them (not read by this check), and timestamps alone cannot show whether frames and rows are aligned in time; risk: at this magnitude float32 (LeRobot's timestamp dtype) resolves only 128 s, coarser than tolerance_s (1e-4 s)",
+          "episode_index": null,
+          "details": {
+            "episodes": [
+              0,
+              10,
+              20,
+              30,
+              40,
+              50,
+              60,
+              70,
+              80,
+              90,
+              100,
+              110,
+              120,
+              130,
+              140,
+              150,
+              160,
+              170,
+              180,
+              190,
+              199,
+              209,
+              219,
+              229,
+              239,
+              249,
+              259,
+              269,
+              279,
+              289,
+              299,
+              309,
+              319,
+              329,
+              339,
+              349,
+              359,
+              369,
+              379,
+              389
+            ],
+            "float32_resolution_s": 128.0
           }
         }
       ],
@@ -180,7 +231,7 @@
             "offset_fraction": -0.0010864182282267953,
             "scale_error": -0.002951308116755881,
             "r2": 0.037168079163786505,
-            "line_vs_step": 0.9391830415756867,
+            "line_vs_step": 0.9391806460012692,
             "still_frames": 23856
           },
           "1": {
@@ -188,7 +239,7 @@
             "offset_fraction": -0.0006010161355633383,
             "scale_error": 0.005072827953108752,
             "r2": 0.11206328888508754,
-            "line_vs_step": 1.0113486572156167,
+            "line_vs_step": 1.0113456948616164,
             "still_frames": 23857
           },
           "2": {
@@ -196,7 +247,7 @@
             "offset_fraction": 0.0007779264816114184,
             "scale_error": 0.010165469006458367,
             "r2": 0.051177657202898574,
-            "line_vs_step": 0.9770635734905291,
+            "line_vs_step": 0.9770500550220234,
             "still_frames": 23857
           },
           "3": {
@@ -204,7 +255,7 @@
             "offset_fraction": 0.0004387530436713977,
             "scale_error": 0.013449952546609186,
             "r2": 0.1976762827111619,
-            "line_vs_step": 0.8863203192671918,
+            "line_vs_step": 0.886331923661621,
             "still_frames": 23860
           },
           "4": {
@@ -220,7 +271,7 @@
             "offset_fraction": -4.212319415416997e-05,
             "scale_error": 0.00208799985606667,
             "r2": 0.007807993803123137,
-            "line_vs_step": 0.9480026736975663,
+            "line_vs_step": 0.947995519942276,
             "still_frames": 23884
           },
           "6": {
@@ -228,7 +279,7 @@
             "offset_fraction": -0.0002309028324657581,
             "scale_error": -0.0017890308476143897,
             "r2": 0.005643305180281999,
-            "line_vs_step": 0.9593541804287957,
+            "line_vs_step": 0.959366637077669,
             "still_frames": 23856
           },
           "8": {
@@ -236,7 +287,7 @@
             "offset_fraction": 0.001217258181468356,
             "scale_error": -0.0003182465575820695,
             "r2": 0.0002141542945228725,
-            "line_vs_step": 0.9988659730394942,
+            "line_vs_step": 0.9988669978355132,
             "still_frames": 23856
           },
           "9": {
@@ -244,7 +295,7 @@
             "offset_fraction": 0.0012393262691332647,
             "scale_error": 0.004151311488250589,
             "r2": 0.01196430331668874,
-            "line_vs_step": 0.996101906306711,
+            "line_vs_step": 0.9961067849616576,
             "still_frames": 23857
           },
           "10": {
@@ -260,7 +311,7 @@
             "offset_fraction": 0.00013606293043442512,
             "scale_error": 0.009897582376549823,
             "r2": 0.05115509677493513,
-            "line_vs_step": 0.9899638423618952,
+            "line_vs_step": 0.9899313053972951,
             "still_frames": 23856
           },
           "12": {
@@ -268,7 +319,7 @@
             "offset_fraction": 0.002896929615074608,
             "scale_error": -0.011170110569583112,
             "r2": 0.02247136111362924,
-            "line_vs_step": 0.9706826167557197,
+            "line_vs_step": 0.9706907873196547,
             "still_frames": 23856
           },
           "13": {
@@ -276,7 +327,7 @@
             "offset_fraction": -0.0014831667731013696,
             "scale_error": -0.008780634423897345,
             "r2": 0.03823369728434767,
-            "line_vs_step": 1.0033924554045288,
+            "line_vs_step": 1.0033310761234346,
             "still_frames": 23856
           },
           "14": {
@@ -284,7 +335,7 @@
             "offset_fraction": -0.0011408402178442962,
             "scale_error": -0.018568482143140986,
             "r2": 0.10790430040431298,
-            "line_vs_step": 1.0280756120090628,
+            "line_vs_step": 1.0280278564321927,
             "still_frames": 23856
           },
           "7": {

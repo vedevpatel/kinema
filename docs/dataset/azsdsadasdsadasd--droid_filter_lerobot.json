@@ -6,9 +6,9 @@
   "fps": 15.0,
   "truncated": true,
   "video_audited": 5,
-  "score": 67,
+  "score": 82,
   "score_model": "tiered-v3",
-  "verdict": "FAIL",
+  "verdict": "WARN",
   "checks": [
     {
       "id": "stats-drift",
@@ -33,7 +33,7 @@
     {
       "id": "timestamp-grid",
       "title": "Timestamp grid (spacing, monotonic, start at 0)",
-      "verdict": "FAIL",
+      "verdict": "WARN",
       "weight": 10,
       "weight_basis": "placeholder",
       "summary": "4/40 episodes flagged; worst spacing deviation 3100% of a period (episode 11676); 23 not starting at 0",
@@ -43,7 +43,7 @@
       "findings": [
         {
           "severity": "WARN",
-          "message": "4 episode(s) off the 15 fps grid (episodes 11676, 42032, 86399, 91069): frame spacing deviates up to 3100% of a period, 8 dropped-frame gap(s) in total; LeRobot's default tolerance_s (1e-4 s) rejects these - needs tolerance_s >= 2.0667",
+          "message": "4 episode(s) off the 15 fps grid (episodes 11676, 42032, 86399, 91069): frame spacing deviates up to 3100% of a period, 8 dropped-frame gap(s) in total (2.0667 s). LeRobot takes temporal windows in rows, so windows across these deviations can span a different time than the policy config intends. LeRobot 0.3.3 rejects spacing beyond tolerance_s (1e-4 s) when the dataset is built (check_timestamps_sync); 0.4.0 and 0.5.1 do not check spacing, and video lookup depends on the video's own frame timestamps, which this check does not read",
           "episode_index": null,
           "details": {
             "episodes": [
@@ -57,8 +57,8 @@
           }
         },
         {
-          "severity": "FAIL",
-          "message": "23 episode(s) whose timestamps do not start at 0: 0 (0.7333s), 2335 (1s), 11676 (1.067s), 14011 (0.5333s), 16346 (1.733s) - video frames are looked up by timestamp, so decoding will miss",
+          "severity": "WARN",
+          "message": "23 episode(s) whose timestamps do not start at 0: 0 (0.7333s), 2335 (1s), 11676 (1.067s), 14011 (0.5333s), 16346 (1.733s) - LeRobot looks video frames up by these timestamps; lookup succeeds when the video timeline covers them (not read by this check), and timestamps alone cannot show whether frames and rows are aligned in time",
           "episode_index": null,
           "details": {
             "episodes": [
@@ -85,11 +85,12 @@
               84064,
               86399,
               91069
-            ]
+            ],
+            "float32_resolution_s": 7.62939453125e-06
           }
         }
       ],
-      "charge": 25
+      "charge": 10
     },
     {
       "id": "dropped-frames",
