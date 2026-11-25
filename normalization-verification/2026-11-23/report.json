@@ -1,0 +1,1897 @@
+{
+ "cases": {
+  "r15:c17:f0": {
+   "A1_stats_absent": {
+    "kind": "provenance (Hub listing at the pinned revision)",
+    "label": "confirmed",
+    "observation": "3 files under meta/: ['meta/episodes.jsonl', 'meta/info.json', 'meta/tasks.jsonl']; stats files present: []"
+   },
+   "A2_feature_binding": {
+    "dataset_column": "state",
+    "kind": "source inspection + pinned schema",
+    "label": "confirmed",
+    "observation": "the label `observation.state` is bound to the dataset column `state` (kinema alias (source pin kinema.alias.*))"
+   },
+   "A3_stats_source": {
+    "lerobot_0.3.3": {
+     "kind": "source inspection + execution",
+     "label": "confirmed",
+     "observation": "make_policy passes ds_meta.stats (meta/stats.json for v2.0); it is None here"
+    },
+    "lerobot_0.4.0": {
+     "kind": "execution",
+     "label": "not_reached",
+     "observation": "NotImplementedError: Contact the maintainer on [Discord](https://discord.com/invite/s3KuuzsPFb)."
+    },
+    "openpi_fork": {
+     "kind": "source inspection + execution",
+     "label": "refuted",
+     "observation": "stats come from compute_norm_stats over transformed data into assets/<asset_id> (S5-S7) and from checkpoint assets at inference (S8); meta/stats.json is never read"
+    }
+   },
+   "A4_inference_normalization": {
+    "configurations": [
+     {
+      "configuration": "openpi_fork",
+      "dataset_key": "state",
+      "kind": "implementation execution (episode 0 only)",
+      "observation": "pinned metadata stats are None (S3); the training guard demands assets norm stats (S2: ValueError: Normalization stats not found. Make sure to run `scripts/compute_norm_stats.py --config-name=<your-config>`.); openpi RunningStats over 81 episode-0 frames gave stats (S5); Normalize after the inference loader (S7) was finite for `state` under 6/6 configs",
+      "openpi_key": "state",
+      "outcome": "normalizes_finite",
+      "per_config_finite": {
+       "pi0_posttrain_vlabench_primitive": true,
+       "pi0_pretrain_vlabench_primitive": true,
+       "pifast_posttrain_vlabench_primitive": true,
+       "pifast_posttrain_vlabench_primitive_aligned": true,
+       "pifast_pretrain_vlabench_primitive": true,
+       "pifast_pretrain_vlabench_primitive_aligned": true
+      },
+      "released": [
+       {
+        "added_by": "D5",
+        "finite": false,
+        "mapped_config": "pifast_posttrain_vlabench_primitive",
+        "note": "ValueError: operands could not be broadcast together with shapes (32,) (7,) ",
+        "outcome": "error",
+        "source": "VLABench/pi0-fast-primitive-deltachunk-w-two-bridge"
+       },
+       {
+        "added_by": null,
+        "finite": false,
+        "mapped_config": null,
+        "note": "no pinned executable config mapped to this checkpoint",
+        "outcome": "not_run",
+        "source": "VLABench/pi0-pretrain-vlabench-primitive-aligned"
+       },
+       {
+        "added_by": null,
+        "finite": false,
+        "mapped_config": null,
+        "note": "no pinned executable config mapped to this checkpoint",
+        "outcome": "not_run",
+        "source": "VLABench/pi05-posttrain-vlabench-primitive-aligned"
+       },
+       {
+        "added_by": null,
+        "finite": false,
+        "mapped_config": "pifast_pretrain_vlabench_primitive_aligned",
+        "note": "ValueError: operands could not be broadcast together with shapes (32,) (7,) ",
+        "outcome": "error",
+        "source": "VLABench/pifast-pretrain-vlabench-primitive-aligned"
+       },
+       {
+        "added_by": "D6+D5",
+        "finite": true,
+        "mapped_config": "pifast_posttrain_vlabench_primitive",
+        "note": "7-dim FAST slice",
+        "outcome": "ok",
+        "source": "VLABench/pi0-fast-primitive-deltachunk-w-two-bridge"
+       },
+       {
+        "added_by": "D6",
+        "finite": true,
+        "mapped_config": "pifast_pretrain_vlabench_primitive_aligned",
+        "note": "7-dim FAST slice",
+        "outcome": "ok",
+        "source": "VLABench/pifast-pretrain-vlabench-primitive-aligned"
+       }
+      ],
+      "role": "primary"
+     },
+     {
+      "configuration": "lerobot_0.3.3",
+      "meta_stats_is_none": true,
+      "observation": "`state` is not typed STATE/ACTION (only observation* / action* keys are); policies: act: AttributeError: 'NoneType' object has no attribute 'shape'; diffusion: AttributeError: 'NoneType' object has no attribute 'shape'",
+      "outcome": "not_consumed",
+      "role": "secondary",
+      "stage": "feature selection (dataset_to_policy_features)"
+     },
+     {
+      "configuration": "lerobot_0.4.0",
+      "observation": "NotImplementedError: Contact the maintainer on [Discord](https://discord.com/invite/s3KuuzsPFb).",
+      "outcome": "not_reached",
+      "role": "secondary (compatibility gate)",
+      "stage": "metadata construction"
+     }
+    ],
+    "label": "refuted",
+    "rule": "primary configuration outcome: normalizes_finite"
+   },
+   "case_label": "refuted",
+   "original": {
+    "audit": "audits/2026-11-22 r15:c17:f0",
+    "dataset": "VLABench/vlabench_primitive_pretrain_lerobot",
+    "engine": "f9a1edd38b66",
+    "message": "observation.state: no normalization stats (meta/stats.json or per-episode stats) - the policy cannot normalize inputs/outputs at inference",
+    "phase1_label": "unresolved",
+    "phase2_label": "unresolved",
+    "revision": "aaa042a8ffb56c931ad738bd220c0c944d8479e7"
+   }
+  },
+  "r390:c7:f8": {
+   "B1_near_zero_std": {
+    "board_std": 1.157392926747958e-12,
+    "kind": "pinned stats + raw parquet sample",
+    "label": "confirmed",
+    "note": "near-zero, not constant; the board std comes from the detector's own loaded rows (source pin kinema.nan.std_from_loaded_rows)",
+    "observation": "8 files, 160402 rows, 8 episodes: 148622 exact zeros, 11781 distinct values, range [-9.22e-11, 4.15e-11], 186 rows with |x| > 1e-11; stored range [-1.66e-10, 1.68e-10]",
+    "sampled_std_per_file": [
+     9.594830851793543e-13,
+     8.785423535942079e-13,
+     6.875875357423476e-13,
+     5.758461503615595e-13,
+     1.0597613191526165e-12,
+     1.0218779616631058e-12,
+     6.165345553577925e-13,
+     5.058763759255556e-13
+    ],
+    "sampled_std_pooled": 8.087344529823639e-13,
+    "stored_std": 1.0237311215757772e-12
+   },
+   "B2_amplification": {
+    "configurations": [
+     {
+      "configuration": "gr00t_released (nvidia/GR00T-N1.6-BEHAVIOR1k)",
+      "kind": "provenance + implementation execution",
+      "observation": "released state keys select 82 dims; dim 117 is joint_qeffort[5], not selected; checkpoint statistics carry it: False; the GR00T loader on episode 0 returned 21 state groups without joint_qeffort; processor output width 82, finite True, range [-1.0, 1.0]",
+      "outcome": "not_consumed",
+      "role": "primary"
+     },
+     {
+      "configuration": "lerobot_0.3.3",
+      "observation": "FileNotFoundError: [Errno 2] No such file or directory: '/tmp/kinema-normverify/inputs/r390_c7_f8/meta/episodes_stats.jsonl'",
+      "outcome": "not_reached",
+      "role": "secondary",
+      "stage": "metadata construction"
+     }
+    ],
+    "hypothetical_control": {
+     "in_sample_abs_max": 0.0,
+     "isclose_masked": true,
+     "label": "hypothetical: the released config does not select this dim; dataset stats.json min/max used",
+     "synthetic_shift_outputs": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ]
+    },
+    "label": "refuted",
+    "rule": "primary configuration outcome: not_consumed"
+   },
+   "case_label": "refuted",
+   "layout": {
+    "basis": "pinned modality.json (joint_qeffort = state[112:140])",
+    "sincos_max_abs_err": 3.583387964134488e-08,
+    "slice": [
+     112,
+     140
+    ]
+   },
+   "original": {
+    "audit": "audits/2026-11-22 r390:c7:f8",
+    "dataset": "nvidia/PhysicalAI-Robotics-GR00T-X-Embodiment-Sim//sim_behavior_r1_pro.task-0048_canning_food",
+    "engine": "f9a1edd38b66",
+    "message": "observation.state dim 117: std 1.16e-12 - near-zero variance amplifies noise after normalization",
+    "phase1_label": "unresolved",
+    "phase2_label": null,
+    "revision": "ea7ac0b68f87da62f1e726771bba0fe74300802f"
+   }
+  },
+  "r393:c7:f14": {
+   "B1_near_zero_std": {
+    "board_std": 8.569551003645408e-13,
+    "kind": "pinned stats + raw parquet sample",
+    "label": "confirmed",
+    "note": "near-zero, not constant; the board std comes from the detector's own loaded rows (source pin kinema.nan.std_from_loaded_rows)",
+    "observation": "8 files, 331864 rows, 36 episodes: 318399 exact zeros, 11332 distinct values, range [-5.46e-11, 4.01e-11], 1338 rows with |x| > 1e-11; stored range [-2.37e-10, 2.47e-10]",
+    "sampled_std_per_file": [
+     3.0786147214608714e-13,
+     1.5709164398272176e-12,
+     9.855424225311523e-13,
+     1.6058485683064745e-12,
+     1.5789204782486708e-12,
+     5.535423232963211e-13,
+     1.5615316345052623e-12,
+     4.567929326207487e-13
+    ],
+    "sampled_std_pooled": 1.2114258772784998e-12,
+    "stored_std": 1.6298212731652748e-12
+   },
+   "B2_amplification": {
+    "configurations": [
+     {
+      "configuration": "lerobot_0.4.0",
+      "loader_dtype": {
+       "equal_to_float32_cast": true,
+       "torch_tensor_of_python_floats_dtype": "torch.float32"
+      },
+      "modes": [
+       {
+        "control_abs_max_out": 2.082925476543096e-08,
+        "control_dim": 132,
+        "control_std_out": 3.6172313805353346e-11,
+        "flagged_abs_max_out": 5.4644948288551376e-11,
+        "flagged_std_out": 1.2114258772784998e-12,
+        "full_rows_abs_max_all_dims": 8.891829490661621,
+        "full_rows_nonfinite": 0,
+        "gain_median": 1.0,
+        "mode": "IDENTITY",
+        "nonfinite": 0,
+        "outcome": "not_consumed",
+        "policies": [
+         "tdmpc"
+        ],
+        "synthetic_shift": [
+         {
+          "delta": 1e-09,
+          "flagged_out": 1.000000304784976e-09
+         },
+         {
+          "delta": 1e-06,
+          "flagged_out": 9.999999974752427e-07
+         },
+         {
+          "delta": 0.001,
+          "flagged_out": 0.0010000000474974513
+         },
+         {
+          "delta": 3.369330994403185e-11,
+          "flagged_out": 3.369362774896523e-11
+         },
+         {
+          "delta": -1e-09,
+          "flagged_out": -9.999996386511611e-10
+         },
+         {
+          "delta": -1e-06,
+          "flagged_out": -9.999999974752427e-07
+         },
+         {
+          "delta": -0.001,
+          "flagged_out": -0.0010000000474974513
+         },
+         {
+          "delta": -3.369330994403185e-11,
+          "flagged_out": -3.369299284017302e-11
+         }
+        ]
+       },
+       {
+        "control_abs_max_out": 2.075925827026367,
+        "control_dim": 132,
+        "control_std_out": 0.003605084920820778,
+        "flagged_abs_max_out": 0.005463636014610529,
+        "flagged_std_out": 0.0001211228476580608,
+        "full_rows_abs_max_all_dims": 255.55728149414062,
+        "full_rows_nonfinite": 0,
+        "gain_median": 99983705.19655032,
+        "mode": "MEAN_STD",
+        "nonfinite": 0,
+        "outcome": "not_amplified",
+        "policies": [
+         "act",
+         "groot",
+         "pi0",
+         "smolvla"
+        ],
+        "synthetic_shift": [
+         {
+          "delta": 1e-09,
+          "flagged_out": 0.09998369961977005
+         },
+         {
+          "delta": 1e-06,
+          "flagged_out": 99.98370361328125
+         },
+         {
+          "delta": 0.001,
+          "flagged_out": 99983.7109375
+         },
+         {
+          "delta": 3.369330994403185e-11,
+          "flagged_out": 0.0033687821123749018
+         },
+         {
+          "delta": -1e-09,
+          "flagged_out": -0.09998369961977005
+         },
+         {
+          "delta": -1e-06,
+          "flagged_out": -99.98370361328125
+         },
+         {
+          "delta": -0.001,
+          "flagged_out": -99983.7109375
+         },
+         {
+          "delta": -3.369330994403185e-11,
+          "flagged_out": -0.003368781879544258
+         }
+        ]
+       },
+       {
+        "control_abs_max_out": 0.999634325504303,
+        "control_dim": 132,
+        "control_std_out": 0.002438414277131278,
+        "flagged_abs_max_out": 0.24579501152038574,
+        "flagged_std_out": 0.004998013874431247,
+        "full_rows_abs_max_all_dims": 1.0,
+        "full_rows_nonfinite": 0,
+        "gain_median": 4125713213.808613,
+        "mode": "MIN_MAX",
+        "nonfinite": 0,
+        "outcome": "not_amplified",
+        "policies": [
+         "diffusion",
+         "sac",
+         "vqbet"
+        ],
+        "synthetic_shift": [
+         {
+          "delta": 1e-09,
+          "flagged_out": 4.105384826660156
+         },
+         {
+          "delta": 1e-06,
+          "flagged_out": 4125.7080078125
+         },
+         {
+          "delta": 0.001,
+          "flagged_out": 4125728.5
+         },
+         {
+          "delta": 3.369330994403185e-11,
+          "flagged_out": 0.11866605281829834
+         },
+         {
+          "delta": -1e-09,
+          "flagged_out": -4.146071434020996
+         },
+         {
+          "delta": -1e-06,
+          "flagged_out": -4125.74853515625
+         },
+         {
+          "delta": -0.001,
+          "flagged_out": -4125728.5
+         },
+         {
+          "delta": -3.369330994403185e-11,
+          "flagged_out": -0.15935289859771729
+         }
+        ]
+       },
+       {
+        "control_abs_max_out": 59001.171875,
+        "control_dim": 132,
+        "control_std_out": 102.46215212829361,
+        "flagged_abs_max_out": 30.6688175201416,
+        "flagged_std_out": 0.6797664275518114,
+        "full_rows_abs_max_all_dims": 2272564480.0,
+        "full_rows_nonfinite": 0,
+        "gain_median": 561129184673.4724,
+        "mode": "QUANTILES",
+        "nonfinite": 0,
+        "outcome": "amplified",
+        "policies": [
+         "pi05"
+        ],
+        "synthetic_shift": [
+         {
+          "delta": 1e-09,
+          "flagged_out": 561.1234741210938
+         },
+         {
+          "delta": 1e-06,
+          "flagged_out": 561129.1875
+         },
+         {
+          "delta": 0.001,
+          "flagged_out": 561129216.0
+         },
+         {
+          "delta": 3.369330994403185e-11,
+          "flagged_out": 18.900535583496094
+         },
+         {
+          "delta": -1e-09,
+          "flagged_out": -561.1348876953125
+         },
+         {
+          "delta": -1e-06,
+          "flagged_out": -561129.1875
+         },
+         {
+          "delta": -0.001,
+          "flagged_out": -561129216.0
+         },
+         {
+          "delta": -3.369330994403185e-11,
+          "flagged_out": -18.912063598632812
+         }
+        ]
+       }
+      ],
+      "role": "primary",
+      "stats_for_dim": {
+       "max": 2.473126148316851e-10,
+       "mean": 3.169942337243788e-16,
+       "min": -2.374502539037593e-10,
+       "q01": -1.7715294961127616e-12,
+       "q99": 1.7927120141011774e-12,
+       "std": 1.6298212731652748e-12
+      },
+      "stats_selected": "dataset.meta.stats (lerobot-train; source pin lr040.train_stats)"
+     }
+    ],
+    "label": "partially_resolved",
+    "rule": "primary configuration evaluated per shipped STATE mode; mixed decisive outcomes give partially_resolved"
+   },
+   "case_label": "partially_resolved",
+   "layout": {
+    "basis": "inferred: GR00T modality.json of the sibling R1Pro conversion + sin/cos structure of dims 0:84",
+    "sincos_max_abs_err": 3.583761676306807e-08,
+    "slice": [
+     112,
+     140
+    ]
+   },
+   "original": {
+    "audit": "audits/2026-11-22 r393:c7:f14",
+    "dataset": "lerobot/behavior1k-task0045",
+    "engine": "f9a1edd38b66",
+    "message": "observation.state dim 123: std 8.57e-13 - near-zero variance amplifies noise after normalization",
+    "phase1_label": "unresolved",
+    "phase2_label": null,
+    "revision": "27458fab90baf767109b214c9b3fa4f82e9bc97f"
+   }
+  },
+  "r51:c17:f1": {
+   "A1_stats_absent": {
+    "kind": "provenance (Hub listing at the pinned revision)",
+    "label": "confirmed",
+    "observation": "3 files under meta/: ['meta/episodes.jsonl', 'meta/info.json', 'meta/tasks.jsonl']; stats files present: []"
+   },
+   "A2_feature_binding": {
+    "dataset_column": "actions",
+    "kind": "source inspection + pinned schema",
+    "label": "confirmed",
+    "observation": "the label `action` is bound to the dataset column `actions` (kinema alias (source pin kinema.alias.*))"
+   },
+   "A3_stats_source": {
+    "lerobot_0.3.3": {
+     "kind": "source inspection + execution",
+     "label": "confirmed",
+     "observation": "make_policy passes ds_meta.stats (meta/stats.json for v2.0); it is None here"
+    },
+    "lerobot_0.4.0": {
+     "kind": "execution",
+     "label": "not_reached",
+     "observation": "NotImplementedError: Contact the maintainer on [Discord](https://discord.com/invite/s3KuuzsPFb)."
+    },
+    "openpi_fork": {
+     "kind": "source inspection + execution",
+     "label": "refuted",
+     "observation": "stats come from compute_norm_stats over transformed data into assets/<asset_id> (S5-S7) and from checkpoint assets at inference (S8); meta/stats.json is never read"
+    }
+   },
+   "A4_inference_normalization": {
+    "configurations": [
+     {
+      "configuration": "openpi_fork",
+      "dataset_key": "actions",
+      "kind": "implementation execution (episode 0 only)",
+      "observation": "pinned metadata stats are None (S3); the training guard demands assets norm stats (S2: ValueError: Normalization stats not found. Make sure to run `scripts/compute_norm_stats.py --config-name=<your-config>`.); openpi RunningStats over 93 episode-0 frames gave stats (S5); Normalize after the inference loader (S7) was finite for `actions` under 8/8 configs",
+      "openpi_key": "actions",
+      "outcome": "normalizes_finite",
+      "per_config_finite": {
+       "pi0_ft_vlabench_primitive": true,
+       "pi0_ft_vlabench_primitive_aligned": true,
+       "pi0_scratch_vlabench_primitive": true,
+       "pifast_ft_scratch_vlabench_primitive_aligned": true,
+       "pifast_ft_vlabench_primitive": true,
+       "pifast_ft_vlabench_primitive_aligned": true,
+       "pifast_ft_vlabench_primitive_aligned_q99": true,
+       "pifast_scratch_vlabench_primitive": true
+      },
+      "released": [
+       {
+        "added_by": null,
+        "finite": true,
+        "mapped_config": "pi0_ft_vlabench_primitive",
+        "note": null,
+        "outcome": "ok",
+        "source": "VLABench/pi0-primitive-10task"
+       },
+       {
+        "added_by": null,
+        "finite": false,
+        "mapped_config": "pifast_ft_vlabench_primitive",
+        "note": "ValueError: operands could not be broadcast together with shapes (32,) (7,) ",
+        "outcome": "error",
+        "source": "VLABench/pi0-fast-primitive-10task"
+       },
+       {
+        "added_by": null,
+        "finite": false,
+        "mapped_config": null,
+        "note": "no pinned executable config mapped to this checkpoint",
+        "outcome": "not_run",
+        "source": "VLABench/pi05-primitive-10task"
+       },
+       {
+        "added_by": "D5",
+        "finite": false,
+        "mapped_config": "pifast_ft_vlabench_primitive",
+        "note": "ValueError: operands could not be broadcast together with shapes (32,) (7,) ",
+        "outcome": "error",
+        "source": "VLABench/pi0-fast-ft-primitive-10task-deltachunk"
+       },
+       {
+        "added_by": "D6",
+        "finite": true,
+        "mapped_config": "pifast_ft_vlabench_primitive",
+        "note": "7-dim FAST slice",
+        "outcome": "ok",
+        "source": "VLABench/pi0-fast-primitive-10task"
+       },
+       {
+        "added_by": "D6+D5",
+        "finite": true,
+        "mapped_config": "pifast_ft_vlabench_primitive",
+        "note": "7-dim FAST slice",
+        "outcome": "ok",
+        "source": "VLABench/pi0-fast-ft-primitive-10task-deltachunk"
+       }
+      ],
+      "role": "primary"
+     },
+     {
+      "configuration": "lerobot_0.3.3",
+      "meta_stats_is_none": true,
+      "observation": "`actions` is typed ACTION but every policy failed construction: act: AttributeError: 'NoneType' object has no attribute 'shape'; diffusion: AttributeError: 'NoneType' object has no attribute 'shape'",
+      "outcome": "not_reached",
+      "role": "secondary",
+      "stage": "policy construction (feature selection by exact name)"
+     },
+     {
+      "configuration": "lerobot_0.4.0",
+      "observation": "NotImplementedError: Contact the maintainer on [Discord](https://discord.com/invite/s3KuuzsPFb).",
+      "outcome": "not_reached",
+      "role": "secondary (compatibility gate)",
+      "stage": "metadata construction"
+     }
+    ],
+    "label": "refuted",
+    "rule": "primary configuration outcome: normalizes_finite"
+   },
+   "case_label": "refuted",
+   "original": {
+    "audit": "audits/2026-11-22 r51:c17:f1",
+    "dataset": "VLABench/vlabench_primitive_ft_lerobot",
+    "engine": "f9a1edd38b66",
+    "message": "action: no normalization stats (meta/stats.json or per-episode stats) - the policy cannot normalize inputs/outputs at inference",
+    "phase1_label": "unresolved",
+    "phase2_label": "unresolved",
+    "revision": "460a2a4dc0bf29bef92b3e195a0f4e87f2d026a6"
+   }
+  },
+  "r67:c17:f0": {
+   "A1_stats_absent": {
+    "kind": "provenance (Hub listing at the pinned revision)",
+    "label": "confirmed",
+    "observation": "3 files under meta/: ['meta/episodes.jsonl', 'meta/info.json', 'meta/tasks.jsonl']; stats files present: []"
+   },
+   "A2_feature_binding": {
+    "dataset_column": "state",
+    "kind": "source inspection + pinned schema",
+    "label": "confirmed",
+    "observation": "the label `observation.state` is bound to the dataset column `state` (kinema alias (source pin kinema.alias.*))"
+   },
+   "A3_stats_source": {
+    "lerobot_0.3.3": {
+     "kind": "source inspection + execution",
+     "label": "confirmed",
+     "observation": "make_policy passes ds_meta.stats (meta/stats.json for v2.0); it is None here"
+    },
+    "lerobot_0.4.0": {
+     "kind": "execution",
+     "label": "not_reached",
+     "observation": "NotImplementedError: Contact the maintainer on [Discord](https://discord.com/invite/s3KuuzsPFb)."
+    },
+    "openpi_upstream": {
+     "kind": "source inspection + execution",
+     "label": "refuted",
+     "observation": "stats come from compute_norm_stats over transformed data into assets/<asset_id> (S5-S7) and from checkpoint assets at inference (S8); meta/stats.json is never read"
+    }
+   },
+   "A4_inference_normalization": {
+    "configurations": [
+     {
+      "configuration": "openpi_upstream",
+      "dataset_key": "state",
+      "kind": "implementation execution (episode 0 only)",
+      "observation": "pinned metadata stats are None (S3); the training guard demands assets norm stats (S2: ValueError: Normalization stats not found. Make sure to run `scripts/compute_norm_stats.py --config-name=<your-config>`.); openpi RunningStats over 98 episode-0 frames gave stats (S5); Normalize after the inference loader (S7) was finite for `state` under 3/3 configs",
+      "openpi_key": "state",
+      "outcome": "normalizes_finite",
+      "per_config_finite": {
+       "pi05_libero": true,
+       "pi0_fast_libero": true,
+       "pi0_libero": true
+      },
+      "released": [
+       {
+        "added_by": null,
+        "finite": true,
+        "mapped_config": "pi0_libero",
+        "note": null,
+        "outcome": "ok",
+        "source": "checkpoints/pi0_libero/assets/"
+       },
+       {
+        "added_by": null,
+        "finite": true,
+        "mapped_config": "pi05_libero",
+        "note": null,
+        "outcome": "ok",
+        "source": "checkpoints/pi05_libero/assets/"
+       },
+       {
+        "added_by": null,
+        "finite": true,
+        "mapped_config": "pi0_fast_libero",
+        "note": null,
+        "outcome": "ok",
+        "source": "checkpoints/pi0_fast_libero/assets/"
+       }
+      ],
+      "role": "primary"
+     },
+     {
+      "configuration": "lerobot_0.3.3",
+      "meta_stats_is_none": true,
+      "observation": "`state` is not typed STATE/ACTION (only observation* / action* keys are); policies: act: AttributeError: 'NoneType' object has no attribute 'shape'; diffusion: AttributeError: 'NoneType' object has no attribute 'shape'",
+      "outcome": "not_consumed",
+      "role": "secondary",
+      "stage": "feature selection (dataset_to_policy_features)"
+     },
+     {
+      "configuration": "lerobot_0.4.0",
+      "observation": "NotImplementedError: Contact the maintainer on [Discord](https://discord.com/invite/s3KuuzsPFb).",
+      "outcome": "not_reached",
+      "role": "secondary (compatibility gate)",
+      "stage": "metadata construction"
+     }
+    ],
+    "label": "refuted",
+    "rule": "primary configuration outcome: normalizes_finite"
+   },
+   "case_label": "refuted",
+   "original": {
+    "audit": "audits/2026-11-22 r67:c17:f0",
+    "dataset": "jesbu1/libero_90_lerobot",
+    "engine": "f9a1edd38b66",
+    "message": "observation.state: no normalization stats (meta/stats.json or per-episode stats) - the policy cannot normalize inputs/outputs at inference",
+    "phase1_label": "unresolved",
+    "phase2_label": "unresolved",
+    "revision": "fa5ab6b7cdcab51fdfd88c8f216c00426508ecde"
+   }
+  },
+  "r79:c17:f0": {
+   "A1_stats_absent": {
+    "kind": "provenance (Hub listing at the pinned revision)",
+    "label": "confirmed",
+    "observation": "28 files under meta/: ['meta/episodes.jsonl', 'meta/episodes.shard00.jsonl', 'meta/episodes.shard01.jsonl', 'meta/episodes.shard02.jsonl', 'meta/episodes.shard03.jsonl', 'meta/episodes.shard04.jsonl', 'meta/episodes.shard05.jsonl', 'meta/info.json', 'meta/info.shard00.json', 'meta/info.shard01.json', 'meta/info.shard02.json', 'meta/info.shard03.json', 'meta/info.shard04.json', 'meta/info.shard05.json', 'meta/modality.json', 'meta/modality.shard00.json', 'meta/modality.shard01.json', 'meta/modality.shard02.json', 'meta/modality.shard03.json', 'meta/modality.shard04.json', 'meta/modality.shard05.json', 'meta/tasks.jsonl', 'meta/tasks.shard00.jsonl', 'meta/tasks.shard01.jsonl', 'meta/tasks.shard02.jsonl', 'meta/tasks.shard03.jsonl', 'meta/tasks.shard04.jsonl', 'meta/tasks.shard05.jsonl']; stats files present: []"
+   },
+   "A2_feature_binding": {
+    "dataset_column": "observation.state",
+    "kind": "source inspection + pinned schema",
+    "label": "confirmed",
+    "observation": "the label `observation.state` is bound to the dataset column `observation.state` (literal column name)"
+   },
+   "A3_stats_source": {
+    "gr00t": {
+     "kind": "source inspection (execution not reached)",
+     "label": "refuted",
+     "observation": "GR00T training generates meta/stats.json from the parquet data when absent (factory -> generate_stats); here generation failed on the missing info.json features"
+    },
+    "lerobot_0.3.3": {
+     "kind": "source inspection + execution",
+     "label": "not_reached",
+     "observation": "KeyError: 'features'"
+    },
+    "lerobot_0.4.0": {
+     "kind": "execution",
+     "label": "not_reached",
+     "observation": "KeyError: 'features'"
+    }
+   },
+   "A4_inference_normalization": {
+    "configurations": [
+     {
+      "configuration": "gr00t",
+      "observation": "generate_stats: KeyError: 'features' (files written: []); LeRobotEpisodeLoader: AssertionError: /tmp/kinema-normverify/scratch/gr00t/r79_loader/meta/stats.json does not exist for /tmp/kinema-normverify/scratch/gr00t/r79_loader, please use gr00t/data/stats.py to generate it; modality.json keys ['action', 'video'] (state modality: False); info.json has features: False",
+      "outcome": "not_reached",
+      "role": "primary",
+      "stage": "stats generation / loader construction"
+     },
+     {
+      "configuration": "lerobot_0.3.3",
+      "observation": "KeyError: 'features'",
+      "outcome": "not_reached",
+      "role": "secondary",
+      "stage": "metadata construction"
+     },
+     {
+      "configuration": "lerobot_0.4.0",
+      "observation": "KeyError: 'features'",
+      "outcome": "not_reached",
+      "role": "secondary (compatibility gate)",
+      "stage": "metadata construction"
+     }
+    ],
+    "label": "unresolved",
+    "rule": "no tested configuration reached normalization of the named feature"
+   },
+   "case_label": "unresolved",
+   "original": {
+    "audit": "audits/2026-11-22 r79:c17:f0",
+    "dataset": "easyminnn/exumi-lerobot",
+    "engine": "f9a1edd38b66",
+    "message": "observation.state: no normalization stats (meta/stats.json or per-episode stats) - the policy cannot normalize inputs/outputs at inference",
+    "phase1_label": "unresolved",
+    "phase2_label": "unresolved",
+    "revision": "334bf5334477e613c7fef5774247257e86a7a95b"
+   }
+  }
+ },
+ "counts": {
+  "confirmed": 0,
+  "partially_resolved": 1,
+  "refuted": 4,
+  "unresolved": 1
+ },
+ "date_utc": "2026-11-23",
+ "deviations": [
+  {
+   "file": "probe_openpi.py",
+   "id": "D1"
+  },
+  {
+   "file": "common.py",
+   "id": "D2"
+  },
+  {
+   "file": "probe_openpi.py",
+   "id": "D3-D5"
+  },
+  {
+   "file": "probe_openpi_fast_supplement.py",
+   "id": "D6"
+  },
+  {
+   "file": null,
+   "id": "D7"
+  },
+  {
+   "file": null,
+   "id": "D8"
+  },
+  {
+   "file": "posthoc_feature_scan.py",
+   "id": "D9"
+  }
+ ],
+ "evidence_files": [
+  "channels.json",
+  "env_gr00t.txt",
+  "env_lerobot033.txt",
+  "env_lerobot040.txt",
+  "env_openpi-vlabench.txt",
+  "env_openpi.txt",
+  "gr00t.json",
+  "inputs.json",
+  "lerobot_0.3.3.json",
+  "lerobot_0.4.0.json",
+  "openpi_fork.json",
+  "openpi_fork_fast_supplement.json",
+  "openpi_upstream.json",
+  "posthoc_feature_scan.json",
+  "source_pins.json",
+  "source_pins_posthoc.json"
+ ],
+ "lerobot_checkpoint_provenance": [
+  {
+   "has_state_quantiles": true,
+   "license": "apache-2.0",
+   "norm_map": {
+    "ACTION": "MEAN_STD",
+    "STATE": "MEAN_STD",
+    "VISUAL": "IDENTITY"
+   },
+   "normalizer_features": [
+    "action",
+    "observation.images.camera1",
+    "observation.images.camera2",
+    "observation.images.camera3",
+    "observation.state"
+   ],
+   "normalizer_tensors": {
+    "action.count": [
+     1
+    ],
+    "action.max": [
+     7
+    ],
+    "action.mean": [
+     7
+    ],
+    "action.min": [
+     7
+    ],
+    "action.q01": [
+     7
+    ],
+    "action.q10": [
+     7
+    ],
+    "action.q50": [
+     7
+    ],
+    "action.q90": [
+     7
+    ],
+    "action.q99": [
+     7
+    ],
+    "action.std": [
+     7
+    ],
+    "episode_index.count": [
+     1
+    ],
+    "episode_index.max": [
+     1
+    ],
+    "episode_index.mean": [
+     1
+    ],
+    "episode_index.min": [
+     1
+    ],
+    "episode_index.q01": [
+     1
+    ],
+    "episode_index.q10": [
+     1
+    ],
+    "episode_index.q50": [
+     1
+    ],
+    "episode_index.q90": [
+     1
+    ],
+    "episode_index.q99": [
+     1
+    ],
+    "episode_index.std": [
+     1
+    ],
+    "frame_index.count": [
+     1
+    ],
+    "frame_index.max": [
+     1
+    ],
+    "frame_index.mean": [
+     1
+    ],
+    "frame_index.min": [
+     1
+    ],
+    "frame_index.q01": [
+     1
+    ],
+    "frame_index.q10": [
+     1
+    ],
+    "frame_index.q50": [
+     1
+    ],
+    "frame_index.q90": [
+     1
+    ],
+    "frame_index.q99": [
+     1
+    ],
+    "frame_index.std": [
+     1
+    ],
+    "index.count": [
+     1
+    ],
+    "index.max": [
+     1
+    ],
+    "index.mean": [
+     1
+    ],
+    "index.min": [
+     1
+    ],
+    "index.q01": [
+     1
+    ],
+    "index.q10": [
+     1
+    ],
+    "index.q50": [
+     1
+    ],
+    "index.q90": [
+     1
+    ],
+    "index.q99": [
+     1
+    ],
+    "index.std": [
+     1
+    ],
+    "observation.images.image.count": [
+     1
+    ],
+    "observation.images.image.max": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image.mean": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image.min": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image.q01": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image.q10": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image.q50": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image.q90": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image.q99": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image.std": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.second_image.count": [
+     1
+    ],
+    "observation.images.second_image.max": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.second_image.mean": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.second_image.min": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.second_image.q01": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.second_image.q10": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.second_image.q50": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.second_image.q90": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.second_image.q99": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.second_image.std": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.wrist_image.count": [
+     1
+    ],
+    "observation.images.wrist_image.max": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.wrist_image.mean": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.wrist_image.min": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.wrist_image.q01": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.wrist_image.q10": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.wrist_image.q50": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.wrist_image.q90": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.wrist_image.q99": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.wrist_image.std": [
+     3,
+     1,
+     1
+    ],
+    "observation.state.count": [
+     1
+    ],
+    "observation.state.max": [
+     7
+    ],
+    "observation.state.mean": [
+     7
+    ],
+    "observation.state.min": [
+     7
+    ],
+    "observation.state.q01": [
+     7
+    ],
+    "observation.state.q10": [
+     7
+    ],
+    "observation.state.q50": [
+     7
+    ],
+    "observation.state.q90": [
+     7
+    ],
+    "observation.state.q99": [
+     7
+    ],
+    "observation.state.std": [
+     7
+    ],
+    "task_index.count": [
+     1
+    ],
+    "task_index.max": [
+     1
+    ],
+    "task_index.mean": [
+     1
+    ],
+    "task_index.min": [
+     1
+    ],
+    "task_index.q01": [
+     1
+    ],
+    "task_index.q10": [
+     1
+    ],
+    "task_index.q50": [
+     1
+    ],
+    "task_index.q90": [
+     1
+    ],
+    "task_index.q99": [
+     1
+    ],
+    "task_index.std": [
+     1
+    ],
+    "timestamp.count": [
+     1
+    ],
+    "timestamp.max": [
+     1
+    ],
+    "timestamp.mean": [
+     1
+    ],
+    "timestamp.min": [
+     1
+    ],
+    "timestamp.q01": [
+     1
+    ],
+    "timestamp.q10": [
+     1
+    ],
+    "timestamp.q50": [
+     1
+    ],
+    "timestamp.q90": [
+     1
+    ],
+    "timestamp.q99": [
+     1
+    ],
+    "timestamp.std": [
+     1
+    ]
+   },
+   "preprocessor_steps": [
+    "rename_observations_processor",
+    "to_batch_processor",
+    "smolvla_new_line_processor",
+    "tokenizer_processor",
+    "device_processor",
+    "normalizer_processor"
+   ],
+   "repo": "lerobot/smolvla_vlabench",
+   "revision": "7ef370813eb35823caa94088b50f5389a51e4c47",
+   "train_dataset": "lerobot/vlabench_unified"
+  },
+  {
+   "has_state_quantiles": true,
+   "license": "gemma",
+   "norm_map": {
+    "ACTION": "MEAN_STD",
+    "STATE": "MEAN_STD",
+    "VISUAL": "IDENTITY"
+   },
+   "normalizer_features": [
+    "action",
+    "observation.images.empty_camera_0",
+    "observation.images.image",
+    "observation.images.image2",
+    "observation.state"
+   ],
+   "normalizer_tensors": {
+    "action.count": [
+     1
+    ],
+    "action.max": [
+     7
+    ],
+    "action.mean": [
+     7
+    ],
+    "action.min": [
+     7
+    ],
+    "action.q01": [
+     7
+    ],
+    "action.q10": [
+     7
+    ],
+    "action.q50": [
+     7
+    ],
+    "action.q90": [
+     7
+    ],
+    "action.q99": [
+     7
+    ],
+    "action.std": [
+     7
+    ],
+    "episode_index.count": [
+     1
+    ],
+    "episode_index.max": [
+     1
+    ],
+    "episode_index.mean": [
+     1
+    ],
+    "episode_index.min": [
+     1
+    ],
+    "episode_index.q01": [
+     1
+    ],
+    "episode_index.q10": [
+     1
+    ],
+    "episode_index.q50": [
+     1
+    ],
+    "episode_index.q90": [
+     1
+    ],
+    "episode_index.q99": [
+     1
+    ],
+    "episode_index.std": [
+     1
+    ],
+    "frame_index.count": [
+     1
+    ],
+    "frame_index.max": [
+     1
+    ],
+    "frame_index.mean": [
+     1
+    ],
+    "frame_index.min": [
+     1
+    ],
+    "frame_index.q01": [
+     1
+    ],
+    "frame_index.q10": [
+     1
+    ],
+    "frame_index.q50": [
+     1
+    ],
+    "frame_index.q90": [
+     1
+    ],
+    "frame_index.q99": [
+     1
+    ],
+    "frame_index.std": [
+     1
+    ],
+    "index.count": [
+     1
+    ],
+    "index.max": [
+     1
+    ],
+    "index.mean": [
+     1
+    ],
+    "index.min": [
+     1
+    ],
+    "index.q01": [
+     1
+    ],
+    "index.q10": [
+     1
+    ],
+    "index.q50": [
+     1
+    ],
+    "index.q90": [
+     1
+    ],
+    "index.q99": [
+     1
+    ],
+    "index.std": [
+     1
+    ],
+    "observation.images.image.count": [
+     1
+    ],
+    "observation.images.image.max": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image.mean": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image.min": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image.q01": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image.q10": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image.q50": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image.q90": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image.q99": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image.std": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image2.count": [
+     1
+    ],
+    "observation.images.image2.max": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image2.mean": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image2.min": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image2.q01": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image2.q10": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image2.q50": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image2.q90": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image2.q99": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image2.std": [
+     3,
+     1,
+     1
+    ],
+    "observation.state.count": [
+     1
+    ],
+    "observation.state.max": [
+     8
+    ],
+    "observation.state.mean": [
+     8
+    ],
+    "observation.state.min": [
+     8
+    ],
+    "observation.state.q01": [
+     8
+    ],
+    "observation.state.q10": [
+     8
+    ],
+    "observation.state.q50": [
+     8
+    ],
+    "observation.state.q90": [
+     8
+    ],
+    "observation.state.q99": [
+     8
+    ],
+    "observation.state.std": [
+     8
+    ],
+    "task_index.count": [
+     1
+    ],
+    "task_index.max": [
+     1
+    ],
+    "task_index.mean": [
+     1
+    ],
+    "task_index.min": [
+     1
+    ],
+    "task_index.q01": [
+     1
+    ],
+    "task_index.q10": [
+     1
+    ],
+    "task_index.q50": [
+     1
+    ],
+    "task_index.q90": [
+     1
+    ],
+    "task_index.q99": [
+     1
+    ],
+    "task_index.std": [
+     1
+    ],
+    "timestamp.count": [
+     1
+    ],
+    "timestamp.max": [
+     1
+    ],
+    "timestamp.mean": [
+     1
+    ],
+    "timestamp.min": [
+     1
+    ],
+    "timestamp.q01": [
+     1
+    ],
+    "timestamp.q10": [
+     1
+    ],
+    "timestamp.q50": [
+     1
+    ],
+    "timestamp.q90": [
+     1
+    ],
+    "timestamp.q99": [
+     1
+    ],
+    "timestamp.std": [
+     1
+    ]
+   },
+   "preprocessor_steps": [
+    "rename_observations_processor",
+    "to_batch_processor",
+    "pi0_new_line_processor",
+    "tokenizer_processor",
+    "device_processor",
+    "normalizer_processor"
+   ],
+   "repo": "lerobot/pi0_libero_finetuned_v044",
+   "revision": "45dcc8fc0e02601c8ccf0554fbd1d26a55070c1f",
+   "train_dataset": "HuggingFaceVLA/libero"
+  },
+  {
+   "has_state_quantiles": true,
+   "license": "gemma",
+   "norm_map": {
+    "ACTION": "MEAN_STD",
+    "STATE": "MEAN_STD",
+    "VISUAL": "IDENTITY"
+   },
+   "normalizer_features": [
+    "action",
+    "observation.images.empty_camera_0",
+    "observation.images.image",
+    "observation.images.image2",
+    "observation.state"
+   ],
+   "normalizer_tensors": {
+    "action.count": [
+     1
+    ],
+    "action.max": [
+     7
+    ],
+    "action.mean": [
+     7
+    ],
+    "action.min": [
+     7
+    ],
+    "action.q01": [
+     7
+    ],
+    "action.q10": [
+     7
+    ],
+    "action.q50": [
+     7
+    ],
+    "action.q90": [
+     7
+    ],
+    "action.q99": [
+     7
+    ],
+    "action.std": [
+     7
+    ],
+    "episode_index.count": [
+     1
+    ],
+    "episode_index.max": [
+     1
+    ],
+    "episode_index.mean": [
+     1
+    ],
+    "episode_index.min": [
+     1
+    ],
+    "episode_index.q01": [
+     1
+    ],
+    "episode_index.q10": [
+     1
+    ],
+    "episode_index.q50": [
+     1
+    ],
+    "episode_index.q90": [
+     1
+    ],
+    "episode_index.q99": [
+     1
+    ],
+    "episode_index.std": [
+     1
+    ],
+    "frame_index.count": [
+     1
+    ],
+    "frame_index.max": [
+     1
+    ],
+    "frame_index.mean": [
+     1
+    ],
+    "frame_index.min": [
+     1
+    ],
+    "frame_index.q01": [
+     1
+    ],
+    "frame_index.q10": [
+     1
+    ],
+    "frame_index.q50": [
+     1
+    ],
+    "frame_index.q90": [
+     1
+    ],
+    "frame_index.q99": [
+     1
+    ],
+    "frame_index.std": [
+     1
+    ],
+    "index.count": [
+     1
+    ],
+    "index.max": [
+     1
+    ],
+    "index.mean": [
+     1
+    ],
+    "index.min": [
+     1
+    ],
+    "index.q01": [
+     1
+    ],
+    "index.q10": [
+     1
+    ],
+    "index.q50": [
+     1
+    ],
+    "index.q90": [
+     1
+    ],
+    "index.q99": [
+     1
+    ],
+    "index.std": [
+     1
+    ],
+    "observation.images.image.count": [
+     1
+    ],
+    "observation.images.image.max": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image.mean": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image.min": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image.q01": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image.q10": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image.q50": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image.q90": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image.q99": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image.std": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image2.count": [
+     1
+    ],
+    "observation.images.image2.max": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image2.mean": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image2.min": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image2.q01": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image2.q10": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image2.q50": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image2.q90": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image2.q99": [
+     3,
+     1,
+     1
+    ],
+    "observation.images.image2.std": [
+     3,
+     1,
+     1
+    ],
+    "observation.state.count": [
+     1
+    ],
+    "observation.state.max": [
+     8
+    ],
+    "observation.state.mean": [
+     8
+    ],
+    "observation.state.min": [
+     8
+    ],
+    "observation.state.q01": [
+     8
+    ],
+    "observation.state.q10": [
+     8
+    ],
+    "observation.state.q50": [
+     8
+    ],
+    "observation.state.q90": [
+     8
+    ],
+    "observation.state.q99": [
+     8
+    ],
+    "observation.state.std": [
+     8
+    ],
+    "task_index.count": [
+     1
+    ],
+    "task_index.max": [
+     1
+    ],
+    "task_index.mean": [
+     1
+    ],
+    "task_index.min": [
+     1
+    ],
+    "task_index.q01": [
+     1
+    ],
+    "task_index.q10": [
+     1
+    ],
+    "task_index.q50": [
+     1
+    ],
+    "task_index.q90": [
+     1
+    ],
+    "task_index.q99": [
+     1
+    ],
+    "task_index.std": [
+     1
+    ],
+    "timestamp.count": [
+     1
+    ],
+    "timestamp.max": [
+     1
+    ],
+    "timestamp.mean": [
+     1
+    ],
+    "timestamp.min": [
+     1
+    ],
+    "timestamp.q01": [
+     1
+    ],
+    "timestamp.q10": [
+     1
+    ],
+    "timestamp.q50": [
+     1
+    ],
+    "timestamp.q90": [
+     1
+    ],
+    "timestamp.q99": [
+     1
+    ],
+    "timestamp.std": [
+     1
+    ]
+   },
+   "preprocessor_steps": [
+    "rename_observations_processor",
+    "to_batch_processor",
+    "normalizer_processor",
+    "pi05_prepare_state_tokenizer_processor_step",
+    "tokenizer_processor",
+    "device_processor"
+   ],
+   "repo": "lerobot/pi05_libero_finetuned_v044",
+   "revision": "7152f13e34c6c115d808aea0e5d08aca74eac14b",
+   "train_dataset": "HuggingFaceVLA/libero"
+  }
+ ],
+ "preregistration": {
+  "common.py": "77bc94930819006aeba1a430bf9afc2f293c87bbd5ac99b2b835620cdd307bdf",
+  "evidence/env_gr00t.txt": "219fd47d9d879294187bd5d30b1887b35393fb8d626353bcef88e11e4c6f2304",
+  "evidence/env_openpi-vlabench.txt": "5cb6ecf7b9adc45576ba96c658e05e465b2cf6d7977ed451cc615315bddae47f",
+  "evidence/env_openpi.txt": "238b21eeca75aa0e5ca7df8b35e1abeee7e630dc5dc7ef4fd5ed8bb6ff447685",
+  "expectations.json": "0a346aa0708b0f8817d7c8ae1cb8842e1d9d7669b4674c8a2b01f06d81185f9d",
+  "prepare.py": "0968f2c5701860cec398772f831c9404029a09b6ff4b30f2b62f04ffb3a5bf41",
+  "probe_channels.py": "e3cad7d926de149324ebd66f425c35e40e61257c54a3365bcc8de667f6fcf7c6",
+  "probe_gr00t.py": "ed717678dfb6899c4e3b85aea09969368ef70ca6b6db351fa30eae11f06e5853",
+  "probe_lerobot.py": "dda05ff7bd40eb8a7eb83bf658f604fb5baaec050e5becb771e1e8ced1e10583",
+  "probe_openpi.py": "0e157fa4ecae3d34bd370aa62c691b2bdf43a2f4f142d6c3e43b9e2fbb3c729f",
+  "source_pins.py": "0b6b8a612ced020ece71e7eb0536c2370eb57a5433128d3cffb3b88950de14ba"
+ },
+ "schema": "kinema.normverify.report/1"
+}
